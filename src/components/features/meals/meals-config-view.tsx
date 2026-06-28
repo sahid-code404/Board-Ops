@@ -12,7 +12,7 @@ import {
   Plus,
   Search,
   Pencil,
-  Archive,
+  Trash2,
   Clock,
   ShieldCheck,
   AlertCircle,
@@ -615,12 +615,12 @@ function MealConfigCard({
   meal,
   isAdmin,
   onEdit,
-  onArchive,
+  onDelete,
 }: {
   meal: MealConfiguration;
   isAdmin: boolean;
   onEdit: () => void;
-  onArchive: () => void;
+  onDelete: () => void;
 }) {
   const cutoffPreview = computeCutoffPreview(
     meal.cutoffStrategy,
@@ -679,7 +679,7 @@ function MealConfigCard({
         <div className="flex items-center gap-1.5 flex-wrap mb-3">
           {archived ? (
             <Badge variant="secondary" className="text-[10px]">
-              <Archive className="h-2.5 w-2.5" /> Archived
+              <Trash2 className="h-2.5 w-2.5" /> Deleted
             </Badge>
           ) : inactive ? (
             <Badge variant="secondary" className="text-[10px]">
@@ -743,10 +743,10 @@ function MealConfigCard({
             <GlassButton
               variant="ghost"
               size="sm"
-              onClick={onArchive}
+              onClick={onDelete}
               className="text-destructive hover:text-destructive hover:bg-destructive/10"
             >
-              <Archive className="h-3.5 w-3.5" />
+              <Trash2 className="h-3.5 w-3.5" />
             </GlassButton>
           </div>
         )}
@@ -786,7 +786,7 @@ export function MealsConfigView() {
 
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<MealConfiguration | null>(null);
-  const [archiveTarget, setArchiveTarget] =
+  const [deleteTarget, setDeleteTarget] =
     React.useState<MealConfiguration | null>(null);
 
   const queryKey = React.useMemo(() => ["meals", "config"] as const, []);
@@ -840,20 +840,20 @@ export function MealsConfigView() {
     },
   });
 
-  const archiveMutation = useMutation({
+  const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       await api.delete(`/meals/config/${id}`);
     },
     onSuccess: () => {
-      toast.success("Meal archived");
+      toast.success("Meal deleted");
       qc.invalidateQueries({ queryKey });
-      setArchiveTarget(null);
+      setDeleteTarget(null);
     },
     onError: (e) => {
       toast.error(
         e instanceof ApiError
           ? e.message
-          : "Failed to archive meal. Please try again."
+          : "Failed to delete meal. Please try again."
       );
     },
   });
@@ -1064,7 +1064,7 @@ export function MealsConfigView() {
                       meal={m}
                       isAdmin={!!isAdmin}
                       onEdit={() => openEdit(m)}
-                      onArchive={() => setArchiveTarget(m)}
+                      onDelete={() => setDeleteTarget(m)}
                     />
                   </StaggerItem>
                 ))}
@@ -1194,24 +1194,24 @@ export function MealsConfigView() {
         }
       </AnimatePresence>
 
-      {/* Archive confirmation */}
+      {/* Delete confirmation */}
       <AlertDialog
-        open={!!archiveTarget}
-        onOpenChange={(o) => !o && setArchiveTarget(null)}
+        open={!!deleteTarget}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
       >
         <AlertDialogContent className="glass-strong">
           <AlertDialogHeader>
-            <AlertDialogTitle>Archive this meal?</AlertDialogTitle>
+            <AlertDialogTitle>Delete this meal?</AlertDialogTitle>
             <AlertDialogDescription>
               <span className="block">
                 <span className="font-medium text-foreground">
-                  {archiveTarget?.displayName}
+                  {deleteTarget?.displayName}
                 </span>{" "}
-                will be archived and hidden from resident calendars. Existing
+                will be permanently deleted along with all related meal entries, history, and overrides. This cannot be undone.
                 meal entries will remain accessible.
               </span>
               <span className="block mt-2 text-warning">
-                This action can be reversed by an administrator.
+                This action is irreversible.
               </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1220,10 +1220,10 @@ export function MealsConfigView() {
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() =>
-                archiveTarget && archiveMutation.mutate(archiveTarget.id)
+                deleteTarget && deleteMutation.mutate(deleteTarget.id)
               }
             >
-              {archiveMutation.isPending ? "Archiving..." : "Archive meal"}
+              {deleteMutation.isPending ? "Deleting..." : "Delete meal"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

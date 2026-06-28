@@ -78,13 +78,12 @@ export async function DELETE(
     const existing = await db.mealConfiguration.findUnique({ where: { id } });
     if (!existing) return err("Meal not found", 404);
 
-    await db.mealConfiguration.update({
-      where: { id },
-      data: { status: "ARCHIVED" },
-    });
+    // Hard delete — cascade removes related meal entries, history, overrides, guest meals, preset items
+    await db.mealConfiguration.delete({ where: { id } });
+
     await logAudit({
       actorId: user.id,
-      action: "ARCHIVE",
+      action: "DELETE",
       entity: "MealConfiguration",
       entityId: id,
       oldValue: existing,

@@ -94,10 +94,10 @@ export function DashboardView() {
         { label: "Net Balance", value: data.kpis.netBalance, icon: TrendingUp, color: "warning", change: "vs expenses", prefix: "₹", route: "expenses" as const },
       ]
     : [
-        { label: "Meals ON Today", value: data.todayMeals.filter((m) => m.status === "ON").length, icon: Utensils, color: "success", change: `${data.todayMeals.filter((m) => m.status === "OFF").length} OFF`, route: "meals" as const },
+        { label: "Meals ON Today", value: data.todayMeals.filter((m) => m.status === "ON").length, icon: Utensils, color: "success", change: `${data.todayMeals.filter((m) => m.status === "OFF").length} OFF`, route: "billing" as const },
         { label: "Pending Bills", value: data.kpis.pendingBills, icon: Receipt, color: "warning", change: "view billing", route: "billing" as const },
         { label: "Notifications", value: data.unreadNotifications, icon: Bell, color: "primary", change: "unread", route: "notifications" as const },
-        { label: "Meals This Week", value: data.trend.reduce((s, t) => s + t.on, 0), icon: Activity, color: "info", change: "7-day total", route: "meals" as const },
+        { label: "Meals This Week", value: data.trend.reduce((s, t) => s + t.on, 0), icon: Activity, color: "info", change: "7-day total", route: "billing" as const },
       ];
 
   return (
@@ -159,15 +159,17 @@ export function DashboardView() {
         </div>
       </StaggerItem>
 
-      {/* Today's meals — tap any card to open calendar */}
+      {/* Today's meals — tap any card to open meals (admin) */}
       <StaggerItem>
         <GlassCard className="p-4 md:p-6" hover={false}>
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold">Today's Meals</h3>
-            <GlassButton variant="ghost" size="sm" onClick={() => setView("meals")}>
-              View all
-              <ArrowUpRight className="h-3.5 w-3.5" />
-            </GlassButton>
+            {data.isAdmin && (
+              <GlassButton variant="ghost" size="sm" onClick={() => setView("meals")}>
+                View all
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </GlassButton>
+            )}
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             {data.todayMeals.map((meal, i) => {
@@ -181,7 +183,7 @@ export function DashboardView() {
                   transition={{ delay: i * 0.05 }}
                   whileHover={{ scale: 1.03, y: -2 }}
                   whileTap={{ scale: 0.97 }}
-                  onClick={() => setView("meals")}
+                  onClick={() => data.isAdmin && setView("meals")}
                   className="glass-soft rounded-2xl p-3 relative overflow-hidden text-left w-full"
                   style={{
                     opacity: isOn ? 1 : 0.5,

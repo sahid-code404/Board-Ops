@@ -39,7 +39,7 @@ type PaletteItem = {
 
 const ITEMS: PaletteItem[] = [
   { view: "dashboard", label: "Dashboard", icon: LayoutDashboard, keywords: ["home", "overview"], roles: ["ADMIN", "USER"], group: "Workspace" },
-  { view: "meals", label: "Meal Configuration", icon: UtensilsCrossed, keywords: ["meals", "config", "menu"], roles: ["ADMIN", "USER"], group: "Workspace" },
+  { view: "meals", label: "Meal Configuration", icon: UtensilsCrossed, keywords: ["meals", "config", "menu"], roles: ["ADMIN"], group: "Workspace" },
   { view: "kitchen", label: "Kitchen Dashboard", icon: ChefHat, keywords: ["kitchen", "chef", "counts"], roles: ["ADMIN"], group: "Workspace" },
   { view: "billing", label: "Billing & Invoices", icon: Wallet, keywords: ["billing", "invoice", "bills"], roles: ["ADMIN", "USER"], group: "Finance" },
   { view: "payments", label: "Payments & Wallet", icon: Wallet, keywords: ["payment", "wallet", "pay"], roles: ["ADMIN", "USER"], group: "Finance" },
