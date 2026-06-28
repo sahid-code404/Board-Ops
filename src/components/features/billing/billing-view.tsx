@@ -933,27 +933,22 @@ function BillRow({
                   </>
                 )}
               </div>
-              {/* Transaction strip — big total, smaller paid/due + due date */}
+              {/* Transaction strip — Total / Paid / Due all the same size + dates */}
               <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 mt-2">
-                <div className="flex items-baseline gap-1.5">
+                <div className="flex items-baseline gap-1">
                   <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</span>
-                  <span className="text-2xl font-bold tabular-nums leading-none">{formatINR(bill.totalAmount)}</span>
+                  <span className="text-base font-bold tabular-nums">{formatINR(bill.totalAmount)}</span>
                 </div>
                 {!isDeleted && (
                   <>
                     <div className="flex items-baseline gap-1">
                       <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Paid</span>
-                      <span className="text-sm font-semibold text-success tabular-nums">{formatINR(bill.paidAmount)}</span>
+                      <span className="text-base font-bold text-success tabular-nums">{formatINR(bill.paidAmount)}</span>
                     </div>
                     <div className="flex items-baseline gap-1">
                       <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Due</span>
-                      <span className="text-sm font-semibold text-warning tabular-nums">{formatINR(bill.dueAmount)}</span>
+                      <span className="text-base font-bold text-warning tabular-nums">{formatINR(bill.dueAmount)}</span>
                     </div>
-                    {bill.dueDate && (
-                      <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                        <Clock className="h-3 w-3" /> {formatDate(bill.dueDate)}
-                      </span>
-                    )}
                   </>
                 )}
                 {bill.deletedAt && bill.deletionReason && (
@@ -963,6 +958,21 @@ function BillRow({
                   </span>
                 )}
               </div>
+              {/* Dates — generated + due */}
+              {!isDeleted && (bill.generatedAt || bill.dueDate) && (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-muted-foreground">
+                  {bill.generatedAt && (
+                    <span className="inline-flex items-center gap-1">
+                      <Calendar className="h-3 w-3" /> Generated {formatDate(bill.generatedAt)}
+                    </span>
+                  )}
+                  {bill.dueDate && (
+                    <span className="inline-flex items-center gap-1">
+                      <Clock className="h-3 w-3" /> Due {formatDate(bill.dueDate)}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Dropdown — only render if there are actions */}
