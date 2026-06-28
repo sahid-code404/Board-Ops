@@ -33,6 +33,8 @@ export async function GET(req: Request) {
         role: true,
         status: true,
         room: true,
+        gender: true,
+        emergencyContact: true,
         avatarUrl: true,
         createdAt: true,
         lastLoginAt: true,

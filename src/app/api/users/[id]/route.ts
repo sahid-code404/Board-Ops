@@ -3,12 +3,23 @@ import { requireRole } from "@/lib/session";
 import { ok, err, handleApiError } from "@/lib/api-response";
 import { logAudit } from "@/lib/audit";
 import { createNotification } from "@/lib/notify";
+import { hashPassword } from "@/lib/auth";
 import { z } from "zod";
 
 const actionSchema = z.object({
   action: z.enum(["APPROVE", "SUSPEND", "ACTIVATE", "DEACTIVATE", "ARCHIVE", "RESTORE", "ASSIGN_ROLE"]),
   role: z.string().optional(),
   reason: z.string().optional(),
+});
+
+const editSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters").optional(),
+  email: z.string().email("Invalid email").optional(),
+  phone: z.string().min(8, "Invalid phone").optional().nullable(),
+  room: z.string().max(20).optional().nullable(),
+  gender: z.enum(["MALE", "FEMALE", "OTHER"]).optional().nullable(),
+  emergencyContact: z.string().max(30).optional().nullable(),
+  password: z.string().min(8, "Password must be at least 8 characters").optional(),
 });
 
 export async function PATCH(
@@ -109,6 +120,101 @@ export async function PATCH(
       role: updated.role,
       status: updated.status,
     });
+  } catch (e) {
+    return handleApiError(e);
+  }
+}
+
+/** PUT /api/users/[id] — admin edits a user's credentials */
+export async function PUT(
+  req: Request,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  try {
+    const admin = await requireRole("ADMIN");
+    const { id } = await ctx.params;
+    const body = await req.json();
+    const data = editSchema.parse(body);
+
+    const existing = await db.user.findUnique({ where: { id } });
+    if (!existing) return err("User not found", 404);
+
+    // Check email uniqueness if being changed
+    if (data.email && data.email !== existing.email) {
+      const emailExists = await db.user.findUnique({ where: { email: data.email } });
+      if (emailExists) return err("This email is already in use", 409);
+    }
+
+    // Check phone uniqueness if being changed
+    if (data.phone && data.phone !== existing.phone) {
+      const phoneExists = await db.user.findFirst({
+        where: { phone: data.phone, NOT: { id } },
+      });
+      if (phoneExists) return err("This phone number is already in use", 409);
+    }
+
+    // Build update data — only include provided fields
+    const updateData: Record<string, unknown> = {};
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.email !== undefined) updateData.email = data.email;
+    if (data.phone !== undefined) updateData.phone = data.phone || null;
+    if (data.room !== undefined) updateData.room = data.room || null;
+    if (data.gender !== undefined) updateData.gender = data.gender || null;
+    if (data.emergencyContact !== undefined) updateData.emergencyContact = data.emergencyContact || null;
+    if (data.password) updateData.passwordHash = hashPassword(data.password);
+
+    const updated = await db.user.update({
+      where: { id },
+      data: updateData,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        status: true,
+        room: true,
+        gender: true,
+        emergencyContact: true,
+        avatarUrl: true,
+        createdAt: true,
+        lastLoginAt: true,
+      },
+    });
+
+    // Notify the user that their account was updated
+    await createNotification({
+      userId: id,
+      title: "Account Updated",
+      description: data.password
+        ? "Your account credentials have been updated by an administrator, including a new password."
+        : "Your account details have been updated by an administrator.",
+      type: "INFO",
+      priority: "HIGH",
+      route: "profile",
+    });
+
+    await logAudit({
+      actorId: admin.id,
+      action: "USER_EDIT",
+      entity: "User",
+      entityId: id,
+      oldValue: {
+        name: existing.name,
+        email: existing.email,
+        phone: existing.phone,
+        room: existing.room,
+      },
+      newValue: {
+        name: updated.name,
+        email: updated.email,
+        phone: updated.phone,
+        room: updated.room,
+        passwordChanged: !!data.password,
+      },
+    });
+
+    return ok(updated);
   } catch (e) {
     return handleApiError(e);
   }

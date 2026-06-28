@@ -17,11 +17,16 @@ import {
   Archive,
   RotateCcw,
   ShieldCheck,
+  Shield,
   Trash2,
   X,
   Mail,
   Phone,
   DoorOpen,
+  Pencil,
+  KeyRound,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { GlassCard } from "@/components/glass/glass-card";
@@ -70,6 +75,8 @@ type ManagedUser = {
   role: Role;
   status: UserStatus;
   room?: string | null;
+  gender?: string | null;
+  emergencyContact?: string | null;
   avatarUrl?: string | null;
   createdAt: string;
   lastLoginAt?: string | null;
@@ -82,7 +89,8 @@ type Action =
   | "DEACTIVATE"
   | "ARCHIVE"
   | "RESTORE"
-  | "ASSIGN_ROLE";
+  | "ASSIGN_ROLE"
+  | "EDIT_USER";
 
 const STATUS_META: Record<UserStatus, { label: string; className: string }> = {
   PENDING: { label: "Pending", className: "bg-warning/15 text-warning" },
@@ -150,6 +158,17 @@ export function UsersView() {
   const [assignRole, setAssignRole] = useState<ManagedUser | null>(null);
   const [newRole, setNewRole] = useState<Role>("USER");
   const [assignReason, setAssignReason] = useState("");
+  const [editUser, setEditUser] = useState<ManagedUser | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    room: "",
+    gender: "",
+    emergencyContact: "",
+    password: "",
+  });
+  const [showPassword, setShowPassword] = useState(false);
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["users", { search, status }],
@@ -198,10 +217,27 @@ export function UsersView() {
         ARCHIVE: "archived",
         RESTORE: "restored",
         ASSIGN_ROLE: "role updated",
+        EDIT_USER: "updated",
       };
       toast.success(`User ${labels[vars.action]}`);
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ["users"] }),
+  });
+
+  const editMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Record<string, unknown> }) => {
+      const res = await api.put<{ success: boolean; data: ManagedUser }>(`/users/${id}`, data);
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.success("User updated successfully");
+      setEditUser(null);
+      setEditForm({ name: "", email: "", phone: "", room: "", gender: "", emergencyContact: "", password: "" });
+      qc.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (e: Error) => {
+      toast.error(e.message || "Failed to update user");
+    },
   });
 
   const kpis = useMemo(() => {
@@ -225,6 +261,20 @@ export function UsersView() {
   }
 
   const handleAction = (user: ManagedUser, action: Action) => {
+    if (action === "EDIT_USER") {
+      setEditForm({
+        name: user.name,
+        email: user.email,
+        phone: user.phone || "",
+        room: user.room || "",
+        gender: user.gender || "",
+        emergencyContact: user.emergencyContact || "",
+        password: "",
+      });
+      setShowPassword(false);
+      setEditUser(user);
+      return;
+    }
     if (action === "ASSIGN_ROLE") {
       setNewRole(user.role);
       setAssignReason("");
@@ -237,6 +287,28 @@ export function UsersView() {
       return;
     }
     actionMutation.mutate({ id: user.id, action });
+  };
+
+  const submitEdit = () => {
+    if (!editUser) return;
+    if (editForm.name.trim().length < 2) {
+      toast.error("Name must be at least 2 characters");
+      return;
+    }
+    if (editForm.password && editForm.password.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+    const data: Record<string, unknown> = {
+      name: editForm.name,
+      email: editForm.email,
+      phone: editForm.phone || null,
+      room: editForm.room || null,
+      gender: editForm.gender || null,
+      emergencyContact: editForm.emergencyContact || null,
+    };
+    if (editForm.password) data.password = editForm.password;
+    editMutation.mutate({ id: editUser.id, data });
   };
 
   const submitConfirm = () => {
@@ -414,8 +486,107 @@ export function UsersView() {
               Cancel
             </GlassButton>
             <GlassButton variant="primary" size="md" onClick={submitAssignRole} loading={actionMutation.isPending}>
-              <ShieldCheck className="h-4 w-4" />
+              <Shield className="h-4 w-4" />
               Assign Role
+            </GlassButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit user dialog */}
+      <Dialog open={!!editUser} onOpenChange={(v) => !v && setEditUser(null)}>
+        <DialogContent className="glass-strong border-border/60 rounded-3xl max-w-lg max-h-[90vh] overflow-y-auto no-scrollbar">
+          <DialogHeader>
+            <DialogTitle>Edit User</DialogTitle>
+            <DialogDescription>
+              Update credentials for{" "}
+              <span className="font-medium text-foreground">{editUser?.name}</span>.
+              The user will be notified of the changes.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            <GlassInput
+              label="Full Name"
+              value={editForm.name}
+              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              icon={<Pencil className="h-4 w-4" />}
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <GlassInput
+                label="Email"
+                type="email"
+                value={editForm.email}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                icon={<Mail className="h-4 w-4" />}
+              />
+              <GlassInput
+                label="Phone"
+                value={editForm.phone}
+                onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                icon={<Phone className="h-4 w-4" />}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <GlassInput
+                label="Room"
+                value={editForm.room}
+                onChange={(e) => setEditForm({ ...editForm, room: e.target.value })}
+                icon={<DoorOpen className="h-4 w-4" />}
+              />
+              <div>
+                <label className="mb-1.5 ml-1 block text-xs font-medium text-muted-foreground">Gender</label>
+                <Select
+                  value={editForm.gender}
+                  onValueChange={(v) => setEditForm({ ...editForm, gender: v })}
+                >
+                  <SelectTrigger className="glass-soft rounded-2xl h-12 border-0">
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MALE">Male</SelectItem>
+                    <SelectItem value="FEMALE">Female</SelectItem>
+                    <SelectItem value="OTHER">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <GlassInput
+              label="Emergency Contact"
+              value={editForm.emergencyContact}
+              onChange={(e) => setEditForm({ ...editForm, emergencyContact: e.target.value })}
+              icon={<Shield className="h-4 w-4" />}
+              placeholder="Phone number"
+            />
+            <div className="glass-soft rounded-2xl p-3 border border-warning/20">
+              <p className="text-xs font-medium text-warning flex items-center gap-1.5 mb-2">
+                <KeyRound className="h-3.5 w-3.5" />
+                Reset Password (optional)
+              </p>
+              <GlassInput
+                type={showPassword ? "text" : "password"}
+                placeholder="Enter new password (min 8 chars)"
+                value={editForm.password}
+                onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                trailing={
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                }
+                hint="Leave blank to keep the current password"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 mt-4">
+            <GlassButton variant="ghost" size="md" onClick={() => setEditUser(null)}>
+              Cancel
+            </GlassButton>
+            <GlassButton variant="primary" size="md" onClick={submitEdit} loading={editMutation.isPending}>
+              <CheckCircle2 className="h-4 w-4" />
+              Save Changes
             </GlassButton>
           </DialogFooter>
         </DialogContent>
@@ -484,6 +655,8 @@ function UserRow({
   const rMeta = ROLE_META[user.role];
 
   const actions: { action: Action; label: string; icon: typeof CheckCircle2; variant?: "destructive" }[] = [];
+  // Edit User is always available for all statuses
+  actions.push({ action: "EDIT_USER", label: "Edit User", icon: Pencil });
   switch (user.status) {
     case "PENDING":
       actions.push({ action: "APPROVE", label: "Approve", icon: CheckCircle2 });
@@ -493,7 +666,7 @@ function UserRow({
       actions.push({ action: "SUSPEND", label: "Suspend", icon: Ban, variant: "destructive" });
       actions.push({ action: "DEACTIVATE", label: "Deactivate", icon: Power });
       actions.push({ action: "ARCHIVE", label: "Archive", icon: Archive });
-      if (canEditRole) actions.push({ action: "ASSIGN_ROLE", label: "Assign Role", icon: ShieldCheck });
+      if (canEditRole) actions.push({ action: "ASSIGN_ROLE", label: "Assign Role", icon: Shield });
       break;
     case "SUSPENDED":
       actions.push({ action: "ACTIVATE", label: "Activate", icon: Power });
