@@ -940,27 +940,19 @@ export function MealsConfigView() {
 
   return (
     <StaggerGroup className="space-y-4 md:space-y-5 pb-6">
-      {/* Header */}
-      <StaggerItem>
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
-              <Utensils className="h-6 w-6 text-primary" />
-              Meal Configuration
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              {isAdmin
-                ? "Create, edit and manage meal types for your residents."
-                : "Browse the meal types configured for your institution."}
+      {/* Action bar */}
+      {isAdmin && (
+        <StaggerItem>
+          <div className="flex items-center justify-end gap-3">
+            <p className="text-sm text-muted-foreground hidden sm:block">
+              Create & manage meal types
             </p>
-          </div>
-          {isAdmin && (
-            <GlassButton onClick={openCreate} size="md">
+            <GlassButton onClick={openCreate} size="md" className="shrink-0">
               <Plus className="h-4 w-4" /> Create Meal
             </GlassButton>
-          )}
-        </div>
-      </StaggerItem>
+          </div>
+        </StaggerItem>
+      )}
 
       {/* Filters */}
       <StaggerItem>

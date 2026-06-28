@@ -5,7 +5,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatDistanceToNow } from "date-fns";
 import {
-  Bell,
   CheckCheck,
   Info,
   CheckCircle2,
@@ -156,74 +155,62 @@ export function NotificationsView() {
 
   return (
     <StaggerGroup className="space-y-4 md:space-y-6 pb-6">
-      {/* Header */}
+      {/* Action bar */}
       <StaggerItem>
-        <GlassCard className="p-5 md:p-7" hover={false} glow="primary">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div className="grid place-items-center h-12 w-12 rounded-2xl bg-primary/15 text-primary shrink-0">
-                <Bell className="h-6 w-6" />
-              </div>
-              <div>
-                <h2 className="text-2xl md:text-3xl font-bold">Notifications</h2>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  {unreadCount > 0
-                    ? `You have ${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}`
-                    : "You're all caught up"}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <GlassButton
-                variant="secondary"
-                size="sm"
-                onClick={() => refetch()}
-                loading={isFetching}
-                aria-label="Refresh"
-              >
-                <RefreshCw className="h-4 w-4" />
-                <span className="hidden sm:inline">Refresh</span>
-              </GlassButton>
-              <GlassButton
-                variant="primary"
-                size="sm"
-                onClick={() => markAllRead.mutate()}
-                loading={markAllRead.isPending}
-                disabled={unreadCount === 0}
-              >
-                <CheckCheck className="h-4 w-4" />
-                Mark all read
-              </GlassButton>
-            </div>
-          </div>
-        </GlassCard>
+        <div className="flex items-center justify-end gap-3">
+          <p className="text-sm text-muted-foreground hidden sm:block">
+            {unreadCount > 0
+              ? `${unreadCount} unread`
+              : "You're all caught up"}
+          </p>
+          <GlassButton
+            variant="secondary"
+            size="sm"
+            onClick={() => refetch()}
+            loading={isFetching}
+            aria-label="Refresh"
+            className="shrink-0"
+          >
+            <RefreshCw className="h-4 w-4" />
+            <span className="hidden sm:inline">Refresh</span>
+          </GlassButton>
+          <GlassButton
+            variant="primary"
+            size="sm"
+            onClick={() => markAllRead.mutate()}
+            loading={markAllRead.isPending}
+            disabled={unreadCount === 0}
+            className="shrink-0"
+          >
+            <CheckCheck className="h-4 w-4" />
+            Mark all read
+          </GlassButton>
+        </div>
       </StaggerItem>
 
       {/* Filters */}
       <StaggerItem>
-        <GlassCard className="p-3 md:p-4" hover={false}>
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-            <Filter className="h-4 w-4 text-muted-foreground shrink-0 ml-1" />
-            <Tabs value={filter} onValueChange={(v) => setFilter(v as Filter)}>
-              <TabsList className="bg-muted/50 h-9 p-1 overflow-x-auto no-scrollbar">
-                {FILTERS.map((f) => (
-                  <TabsTrigger
-                    key={f.key}
-                    value={f.key}
-                    className="rounded-xl text-xs px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                  >
-                    {f.label}
-                    {f.key === "UNREAD" && unreadCount > 0 && (
-                      <span className="ml-1.5 text-[10px] bg-destructive text-white rounded-full px-1.5 py-0.5 leading-none">
-                        {unreadCount}
-                      </span>
-                    )}
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-1 px-1">
+          <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
+          <Tabs value={filter} onValueChange={(v) => setFilter(v as Filter)}>
+            <TabsList className="bg-muted/50 h-9 p-1">
+              {FILTERS.map((f) => (
+                <TabsTrigger
+                  key={f.key}
+                  value={f.key}
+                  className="rounded-xl text-xs px-2.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground whitespace-nowrap"
+                >
+                  {f.label}
+                  {f.key === "UNREAD" && unreadCount > 0 && (
+                    <span className="ml-1.5 text-[10px] bg-destructive text-white rounded-full px-1.5 py-0.5 leading-none">
+                      {unreadCount}
+                    </span>
+                  )}
                   </TabsTrigger>
                 ))}
               </TabsList>
             </Tabs>
           </div>
-        </GlassCard>
       </StaggerItem>
 
       {/* List */}

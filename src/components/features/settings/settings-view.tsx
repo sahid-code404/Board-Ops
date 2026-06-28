@@ -189,27 +189,17 @@ export function SettingsView() {
 
   return (
     <StaggerGroup className="space-y-4 md:space-y-6 pb-6">
-      {/* Header */}
+      {/* Action bar */}
       <StaggerItem>
-        <GlassCard className="p-5 md:p-7" hover={false} glow="primary">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div className="grid place-items-center h-12 w-12 rounded-2xl bg-primary/15 text-primary shrink-0">
-                <SettingsIcon className="h-6 w-6" />
-              </div>
-              <div>
-                <h2 className="text-2xl md:text-3xl font-bold">System Settings</h2>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  Manage configuration, feature flags and system behavior.
-                </p>
-              </div>
-            </div>
-            <GlassButton variant="primary" size="md" onClick={() => setAddOpen(true)}>
-              <Plus className="h-4 w-4" />
-              Add Setting
-            </GlassButton>
-          </div>
-        </GlassCard>
+        <div className="flex items-center justify-end gap-3">
+          <p className="text-sm text-muted-foreground hidden sm:block">
+            Manage configuration & feature flags
+          </p>
+          <GlassButton variant="primary" size="md" onClick={() => setAddOpen(true)} className="shrink-0">
+            <Plus className="h-4 w-4" />
+            Add Setting
+          </GlassButton>
+        </div>
       </StaggerItem>
 
       {/* Body */}
@@ -250,12 +240,6 @@ export function SettingsView() {
               const items = grouped(cat);
               return (
                 <TabsContent key={cat} value={cat} className="mt-4 space-y-3">
-                  <div className="flex items-center gap-2 px-1">
-                    <Icon className="h-4 w-4 text-primary" />
-                    <h3 className="text-sm font-semibold">{meta.label}</h3>
-                    <span className="text-xs text-muted-foreground">— {meta.description}</span>
-                  </div>
-
                   {items.length === 0 ? (
                     <GlassCard className="p-8 text-center" hover={false}>
                       <Sparkles className="h-6 w-6 mx-auto text-muted-foreground mb-2" />

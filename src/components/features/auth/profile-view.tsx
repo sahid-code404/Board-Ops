@@ -324,21 +324,19 @@ export function ProfileView() {
         </div>
       </StaggerItem>
 
-      {/* Info Cards */}
+      {/* Info Cards — no duplicates with header (email, role, status, 2FA, member-since already in header) */}
       <div className="grid md:grid-cols-2 gap-4">
         <StaggerItem>
           <InfoCard
             title="Contact"
-            subtitle="How to reach you"
             icon={Mail}
             color="primary"
             rows={[
-              { icon: Mail, label: "Email", value: me.email },
-              { icon: Phone, label: "Phone", value: me.phone || "—" },
-              { icon: DoorOpen, label: "Room", value: me.room || "—" },
+              { icon: Phone, label: "Phone", value: me.phone || "Not set" },
+              { icon: DoorOpen, label: "Room", value: me.room || "Not set" },
               {
                 icon: ShieldCheck,
-                label: "Emergency Contact",
+                label: "Emergency",
                 value: me.emergencyContact || "Not configured",
               },
             ]}
@@ -348,7 +346,6 @@ export function ProfileView() {
         <StaggerItem>
           <InfoCard
             title="Preferences"
-            subtitle="Display & localization"
             icon={Palette}
             color="success"
             rows={[
@@ -359,27 +356,11 @@ export function ProfileView() {
               },
               { icon: Languages, label: "Language", value: LANGUAGES.find((l) => l.value === (me.language || "en"))?.label || "English" },
               { icon: Globe, label: "Timezone", value: me.timezone || "UTC" },
-              { icon: Activity, label: "Status", value: sMeta.label },
+              { icon: Clock, label: "Last Login", value: lastLogin },
             ]}
           />
         </StaggerItem>
       </div>
-
-      <StaggerItem>
-        <InfoCard
-          title="Account"
-          subtitle="Account & session details"
-          icon={User}
-          color="warning"
-          rows={[
-            { icon: ShieldCheck, label: "Role", value: rMeta.label },
-            { icon: CheckCircle2, label: "Status", value: sMeta.label },
-            { icon: Lock, label: "Two-Factor Auth", value: me.twoFactorEnabled ? "Enabled" : "Disabled" },
-            { icon: CalendarDays, label: "Member Since", value: joined },
-            { icon: Clock, label: "Last Login", value: lastLogin },
-          ]}
-        />
-      </StaggerItem>
 
       {/* Sign out */}
       <StaggerItem>
@@ -585,13 +566,11 @@ function QuickActionCard({
 // ─────────────────────────────────────────────────────────────
 function InfoCard({
   title,
-  subtitle,
   icon: Icon,
   color,
   rows,
 }: {
   title: string;
-  subtitle: string;
   icon: typeof Mail;
   color: "primary" | "success" | "warning";
   rows: { icon: typeof Mail; label: string; value: string }[];
@@ -602,15 +581,12 @@ function InfoCard({
     warning: "bg-warning/15 text-warning",
   }[color];
   return (
-    <GlassCard className="p-5 md:p-6" hover={false}>
+    <GlassCard className="p-4 md:p-6" hover={false}>
       <div className="flex items-center gap-3 mb-4">
-        <div className={cn("grid place-items-center h-10 w-10 rounded-2xl", colorClass)}>
-          <Icon className="h-5 w-5" />
+        <div className={cn("grid place-items-center h-9 w-9 rounded-xl", colorClass)}>
+          <Icon className="h-4 w-4" />
         </div>
-        <div>
-          <h3 className="font-semibold">{title}</h3>
-          <p className="text-xs text-muted-foreground">{subtitle}</p>
-        </div>
+        <h3 className="font-semibold text-sm">{title}</h3>
       </div>
       <div className="space-y-2.5">
         {rows.map((row) => {

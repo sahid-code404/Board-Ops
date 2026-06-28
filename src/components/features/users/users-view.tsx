@@ -264,23 +264,6 @@ export function UsersView() {
 
   return (
     <StaggerGroup className="space-y-4 md:space-y-6 pb-6">
-      {/* Header */}
-      <StaggerItem>
-        <GlassCard className="p-5 md:p-7" hover={false} glow="primary">
-          <div className="flex items-start gap-3">
-            <div className="grid place-items-center h-12 w-12 rounded-2xl bg-primary/15 text-primary shrink-0">
-              <UsersIcon className="h-6 w-6" />
-            </div>
-            <div>
-              <h2 className="text-2xl md:text-3xl font-bold">User Management</h2>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Approve, suspend, and manage member accounts and roles.
-              </p>
-            </div>
-          </div>
-        </GlassCard>
-      </StaggerItem>
-
       {/* KPIs */}
       <StaggerItem>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">

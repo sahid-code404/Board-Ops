@@ -17,7 +17,6 @@ import {
 import {
   ChevronLeft,
   ChevronRight,
-  Flame,
   Printer,
   RefreshCw,
   Utensils,
@@ -121,71 +120,62 @@ export function KitchenView() {
 
   return (
     <StaggerGroup className="space-y-4 md:space-y-6">
-      {/* Header + Date picker */}
+      {/* Action bar: date picker + print */}
       <StaggerItem>
-        <GlassCard className="p-4 md:p-6" hover={false} glow="primary">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
-                Kitchen Dashboard
-              </p>
-              <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2">
-                <Flame className="h-5 w-5 text-primary" />
-                Live Meal Counts
-              </h2>
-              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
-                <RefreshCw
-                  className={cn("h-3 w-3", isFetching && "animate-spin")}
-                />
-                Auto-refreshes every 15s
-              </p>
+        <div className="flex items-center justify-end gap-2 flex-wrap">
+          <p className="text-sm text-muted-foreground hidden sm:flex items-center gap-1.5 mr-auto">
+            <RefreshCw
+              className={cn("h-3 w-3", isFetching && "animate-spin")}
+            />
+            Auto-refreshes every 15s
+          </p>
+          <GlassButton
+            variant="secondary"
+            size="icon"
+            onClick={() => setDate((d) => addDays(d, -1))}
+            aria-label="Previous day"
+            className="shrink-0"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </GlassButton>
+          <div className="glass-soft rounded-2xl px-4 py-2 min-w-[150px] text-center">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center justify-center gap-1">
+              <CalendarDays className="h-3 w-3" />
+              {format(date, "EEEE")}
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <GlassButton
-                variant="secondary"
-                size="icon"
-                onClick={() => setDate((d) => addDays(d, -1))}
-                aria-label="Previous day"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </GlassButton>
-              <div className="glass-soft rounded-2xl px-4 py-2 min-w-[150px] text-center">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center justify-center gap-1">
-                  <CalendarDays className="h-3 w-3" />
-                  {format(date, "EEEE")}
-                </div>
-                <div className="text-sm font-semibold">
-                  {format(date, "d MMM yyyy")}
-                </div>
-              </div>
-              <GlassButton
-                variant="secondary"
-                size="icon"
-                onClick={() => setDate((d) => addDays(d, 1))}
-                aria-label="Next day"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </GlassButton>
-              {!isSameDay(date, new Date()) && (
-                <GlassButton
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setDate(new Date())}
-                >
-                  Today
-                </GlassButton>
-              )}
-              <GlassButton
-                variant="primary"
-                size="md"
-                onClick={() => toast.success("Printing...")}
-              >
-                <Printer className="h-4 w-4" />
-                Print
-              </GlassButton>
+            <div className="text-sm font-semibold">
+              {format(date, "d MMM yyyy")}
             </div>
           </div>
-        </GlassCard>
+          <GlassButton
+            variant="secondary"
+            size="icon"
+            onClick={() => setDate((d) => addDays(d, 1))}
+            aria-label="Next day"
+            className="shrink-0"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </GlassButton>
+          {!isSameDay(date, new Date()) && (
+            <GlassButton
+              variant="ghost"
+              size="sm"
+              onClick={() => setDate(new Date())}
+              className="shrink-0"
+            >
+              Today
+            </GlassButton>
+          )}
+          <GlassButton
+            variant="primary"
+            size="md"
+            onClick={() => toast.success("Printing...")}
+            className="shrink-0"
+          >
+            <Printer className="h-4 w-4" />
+            Print
+          </GlassButton>
+        </div>
       </StaggerItem>
 
       {/* KPI cards */}

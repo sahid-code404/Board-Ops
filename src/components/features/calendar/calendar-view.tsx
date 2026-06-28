@@ -989,18 +989,9 @@ export function CalendarView() {
 
   return (
     <StaggerGroup className="space-y-4 md:space-y-5 pb-6">
-      {/* Header */}
+      {/* View toggle */}
       <StaggerItem>
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
-              <CalendarIcon className="h-6 w-6 text-primary" />
-              Meal Calendar
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Toggle your meals on or off before the cutoff time.
-            </p>
-          </div>
+        <div className="flex items-center justify-end">
           <GlassNav<ViewMode>
             value={mode}
             onChange={setMode}

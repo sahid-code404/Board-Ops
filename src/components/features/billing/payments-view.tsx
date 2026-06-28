@@ -299,31 +299,23 @@ export function PaymentsView() {
 
   return (
     <StaggerGroup className="space-y-4 md:space-y-6">
-      {/* Header */}
+      {/* Action bar */}
       <StaggerItem>
-        <GlassCard className="p-5 md:p-7" hover={false} glow="primary">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
-                Payments & Wallet
-              </p>
-              <h2 className="text-2xl md:text-3xl font-bold">Payment Center</h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                {isAdmin
-                  ? "Approve resident payments and track all transactions."
-                  : "Submit payments and track your transaction history."}
-              </p>
-            </div>
-            <GlassButton
-              size="lg"
-              onClick={() => setSubmitOpen(true)}
-              className="shrink-0"
-            >
-              <Plus className="h-4 w-4" />
-              Submit Payment
-            </GlassButton>
-          </div>
-        </GlassCard>
+        <div className="flex items-center justify-end gap-3">
+          <p className="text-sm text-muted-foreground hidden sm:block">
+            {isAdmin
+              ? "Approve payments & track transactions"
+              : "Submit payments & track history"}
+          </p>
+          <GlassButton
+            size="lg"
+            onClick={() => setSubmitOpen(true)}
+            className="shrink-0"
+          >
+            <Plus className="h-4 w-4" />
+            Submit Payment
+          </GlassButton>
+        </div>
       </StaggerItem>
 
       {/* KPIs */}

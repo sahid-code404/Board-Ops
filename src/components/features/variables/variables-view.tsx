@@ -23,7 +23,6 @@ import {
   Type,
   ToggleLeft,
   Pencil,
-  Variable as VariableIcon,
   Save,
   AlertCircle,
   Tag,
@@ -262,36 +261,20 @@ export function VariablesView() {
 
   return (
     <StaggerGroup className="space-y-4 md:space-y-6">
-      {/* Header */}
-      <StaggerItem>
-        <GlassCard className="p-4 md:p-6" hover={false} glow="primary">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
-                Variable Engine
-              </p>
-              <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2">
-                <VariableIcon className="h-5 w-5 text-primary" />
-                System Variables
-              </h2>
-              <p className="text-xs text-muted-foreground mt-1">
-                Manage configurable values used by the formula engine
-                {!isAdmin && (
-                  <span className="ml-1 text-warning">
-                    · Read-only view (admin role required to edit)
-                  </span>
-                )}
-              </p>
-            </div>
-            {isAdmin && (
-              <GlassButton onClick={() => setCreateOpen(true)}>
-                <Plus className="h-4 w-4" />
-                Create Variable
-              </GlassButton>
-            )}
+      {/* Action bar */}
+      {isAdmin && (
+        <StaggerItem>
+          <div className="flex items-center justify-end gap-3">
+            <p className="text-sm text-muted-foreground hidden sm:block">
+              Manage configurable values for the formula engine
+            </p>
+            <GlassButton onClick={() => setCreateOpen(true)} className="shrink-0">
+              <Plus className="h-4 w-4" />
+              Create Variable
+            </GlassButton>
           </div>
-        </GlassCard>
-      </StaggerItem>
+        </StaggerItem>
+      )}
 
       {/* Stats bar */}
       <StaggerItem>

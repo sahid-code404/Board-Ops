@@ -294,36 +294,24 @@ export function ExpensesView() {
 
   return (
     <StaggerGroup className="space-y-4 md:space-y-6">
-      {/* Header */}
-      <StaggerItem>
-        <GlassCard className="p-5 md:p-7" hover={false} glow="primary">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
-                Expenses & Procurement
-              </p>
-              <h2 className="text-2xl md:text-3xl font-bold">
-                Spending Overview
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                {isAdmin
-                  ? "Track, categorize, and manage all operational expenses."
-                  : "View expenses and procurement spending."}
-              </p>
-            </div>
-            {isAdmin && (
-              <GlassButton
-                size="lg"
-                onClick={() => setAddOpen(true)}
-                className="shrink-0"
-              >
-                <Plus className="h-4 w-4" />
-                Add Expense
-              </GlassButton>
-            )}
+      {/* Action bar */}
+      {isAdmin && (
+        <StaggerItem>
+          <div className="flex items-center justify-end gap-3">
+            <p className="text-sm text-muted-foreground hidden sm:block">
+              Track & manage operational expenses
+            </p>
+            <GlassButton
+              size="lg"
+              onClick={() => setAddOpen(true)}
+              className="shrink-0"
+            >
+              <Plus className="h-4 w-4" />
+              Add Expense
+            </GlassButton>
           </div>
-        </GlassCard>
-      </StaggerItem>
+        </StaggerItem>
+      )}
 
       {/* KPIs */}
       <StaggerItem>

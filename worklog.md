@@ -461,3 +461,102 @@ Stage Summary:
 - Fluid root font size scales from 14px (mobile) to 16px (desktop)
 - All touch targets meet 44px minimum
 - Lint clean (0 errors)
+
+---
+Task ID: UX-1
+Agent: ux-cleanup-agent
+Task: Remove duplicate big title headers across feature views (TopBar already shows the page title)
+
+Work Log:
+- Read worklog.md for full context (TopBar shows page title; 9 feature views had redundant title cards duplicating it)
+- For each view, replaced the big title header card (`GlassCard` with `glow="primary"` + h1/h2 + subtitle) with a compact action bar that contains ONLY the action button(s) + an optional short description in a `flex items-center justify-end gap-3` wrapper, or removed the header entirely when no action button was present
+- Files modified:
+  1. `users-view.tsx` — removed "User Management" header card entirely (no action button; icon-only title was redundant). KPI cards are now first element.
+  2. `notifications-view.tsx` — replaced header card with compact action bar holding Refresh + Mark all read buttons + short "N unread" status. Removed now-unused `Bell` import.
+  3. `settings-view.tsx` — replaced header card with compact action bar holding Add Setting button + short description.
+  4. `variables-view.tsx` — replaced header card with admin-only compact action bar holding Create Variable button + short description. Removed now-unused `VariableIcon` import.
+  5. `kitchen-view.tsx` — replaced header card with compact action bar (auto-refresh status left-aligned via `mr-auto`, then Prev / date display / Next / Today / Print buttons on the right). Removed now-unused `Flame` import.
+  6. `meals-config-view.tsx` — replaced header with admin-only compact action bar holding Create Meal button + short description.
+  7. `calendar-view.tsx` — removed "Meal Calendar" title card entirely; the GlassNav view-toggle (Agenda/Week/Month) is now the first element, right-aligned.
+  8. `payments-view.tsx` — replaced header card with compact action bar holding Submit Payment button + short description (role-aware).
+  9. `expenses-view.tsx` — replaced header card with admin-only compact action bar holding Add Expense button + short description.
+- Verified no orphaned imports remained after removing the title cards (Bell, VariableIcon, Flame were the only ones to clean up; SettingsIcon, UsersIcon, Utensils, CalendarIcon are still referenced elsewhere)
+- All action buttons kept their original variant/size/icon/onClick/loading/disabled props; only the surrounding card chrome was removed
+- All KPI cards, search bars, filters, charts, and list content untouched
+- TopBar (which renders the actual page title) was NOT modified — it remains the single source of truth for the page title
+
+Verification:
+- `bun run lint` → 0 errors, 1 pre-existing informational warning (react-hook-form watch() in variables-view, noted in prior worklog as a known React Compiler note)
+- dev.log shows clean recompilation with no errors
+
+Stage Summary:
+- All 9 feature views no longer duplicate the page title shown in the TopBar
+- Replaced title-card chrome with compact right-aligned action bars (or removed entirely when no action exists)
+- Cleaner, less repetitive UI; more vertical space for actual content (KPIs, lists, charts)
+- All existing component logic, RBAC gating, and action handlers preserved
+- Lint clean (0 errors)
+
+---
+Task ID: 10
+Agent: main (orchestrator)
+Task: 10/10 UX polish — remove all duplicates, clutter, and inconsistencies
+
+Work Log:
+- Comprehensive VLM audit of all views identified systemic issues:
+  1. Every view had a duplicate title header (big h2 in a GlassCard) that repeated the TopBar's page title
+  2. Dashboard had duplicate "Open Calendar" CTAs (button in welcome + "View calendar" in meals section)
+  3. Dashboard meal cards had redundant ON/OFF/Locked badges (the colored background already indicated state)
+  4. Profile page repeated email, status, role, member-since, 2FA across 4 different cards
+  5. Settings page repeated the category label as both a tab and a section header
+  6. Notifications filter tabs were cramped and "Alerts" was truncated
+  7. Inconsistent card padding (p-5 md:p-6 vs p-4 md:p-6)
+
+- Fixed dashboard:
+  - Removed duplicate "Open Calendar" CTA from welcome section (meal cards already route to calendar)
+  - Simplified welcome section (compact p-4, no flex-row, no big CTA button)
+  - Cleaned meal cards: removed ON/OFF/Locked badges, using opacity (0.5 for OFF) + colored gradient for ON + small 🔒 emoji for locked
+  - Unified section headers to font-semibold (not text-lg) with inline "· subtitle" format
+  - Consistent p-4 md:p-6 padding across all cards
+  - Fixed KPI icon colors to use CSS variables dynamically
+
+- Fixed profile:
+  - Removed entire "Account" card (all its info was already in the header: role, status, 2FA, member-since)
+  - Removed "Email" from Contact card (already in header)
+  - Removed "Status" from Preferences card (already in header)
+  - Moved "Last Login" to Preferences card (was in Account card)
+  - Removed subtitle prop from InfoCard component (was redundant with title)
+  - Tightened InfoCard: p-4 md:p-6, h-9 w-9 icons (was h-10 w-10), text-sm title
+
+- Dispatched subagent (Task UX-1) to remove duplicate title headers from 9 views:
+  users, notifications, settings, variables, kitchen, meals, calendar, payments, expenses
+  - Each now starts with either a compact action bar (just the button + short hint) or directly with content
+  - TopBar is the single source of truth for page titles
+
+- Fixed settings: removed per-tab section header (icon + label + description) since the tab itself already shows the label
+
+- Fixed notifications filters: removed GlassCard wrapper, made tabs scrollable with whitespace-nowrap, smaller padding (px-2.5)
+
+Agent Browser + VLM Final Verification (all views rated):
+- Dashboard (mobile): 4/10 → 8/10 (full scroll: 9/10) — "No duplicates, clean, well-organized"
+- Profile (mobile): 4/10 → 8/10 — "No duplicate information between header and info cards"
+- Billing (mobile): 4/10 → 8/10 — "No duplicate title"
+- Users (mobile): 8/10 — "Not title-duplicated, clean"
+- Notifications (mobile): 8/10 — "All filter tabs fully visible, clean"
+- Settings (mobile): 7/10 → 8/10 — "Duplicate header removed, clean"
+- Variables: 8/10 — "Clean, organized"
+- Kitchen: 8/10 — "No duplicate headers"
+- Calendar: 8/10 — "Clean, clutter-free"
+- Meals: 8/10 — "No duplicate headers or clutter"
+- Payments: 8/10 — "Clean, organized"
+- Expenses: 8/10 — "Clean, organized"
+- Desktop dashboard: 8/10 — "Minimal clutter, no duplicate headers"
+
+Stage Summary:
+- ALL duplicate title headers removed (TopBar is the single source of truth)
+- Dashboard: removed duplicate CTA, simplified meal cards, unified spacing
+- Profile: eliminated 4 duplicate data points across cards, removed entire Account card
+- Settings: removed per-tab section headers
+- Notifications: fixed cramped/truncated filter tabs
+- All card padding unified to p-4 md:p-6
+- Lint clean (0 errors)
+- Every view rated 8-9/10 by VLM (up from 4/10)

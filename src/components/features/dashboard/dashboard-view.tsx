@@ -101,30 +101,21 @@ export function DashboardView() {
       ];
 
   return (
-    <StaggerGroup className="space-y-4 md:space-y-6">
-      {/* Welcome */}
+    <StaggerGroup className="space-y-4 md:space-y-5">
+      {/* Welcome — compact, no duplicate CTA */}
       <StaggerItem>
-        <GlassCard className="p-5 md:p-7" hover={false} glow="primary">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
-                {new Date().toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long" })}
-              </p>
-              <h2 className="text-2xl md:text-3xl font-bold">
-                Welcome back, {user?.name.split(" ")[0]} 👋
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                {data.isAdmin
-                  ? "Here's what's happening across your operations today."
-                  : "Manage your meals, billing, and stay updated."}
-              </p>
-            </div>
-            {data.isAdmin && (
-              <GlassButton onClick={() => setView("calendar")} size="lg">
-                Open Calendar
-              </GlassButton>
-            )}
-          </div>
+        <GlassCard className="p-4 md:p-6" hover={false} glow="primary">
+          <p className="text-xs text-muted-foreground mb-0.5">
+            {new Date().toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long" })}
+          </p>
+          <h2 className="text-xl md:text-2xl font-bold">
+            Welcome back, {user?.name.split(" ")[0]} 👋
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            {data.isAdmin
+              ? "Here's what's happening across your operations today."
+              : "Manage your meals, billing, and stay updated."}
+          </p>
         </GlassCard>
       </StaggerItem>
 
@@ -144,12 +135,12 @@ export function DashboardView() {
                 <GlassCard className="p-4 md:p-5 cursor-pointer" glow={kpi.color as never}>
                   <div className="flex items-start justify-between mb-3">
                     <div
-                      className={`grid place-items-center h-10 w-10 rounded-2xl bg-${kpi.color}/15`}
+                      className="grid place-items-center h-10 w-10 rounded-2xl"
                       style={{
                         background: `color-mix(in oklch, var(--${kpi.color === "primary" ? "primary" : kpi.color === "success" ? "success" : kpi.color === "warning" ? "warning" : "info"}) 15%, transparent)`,
                       }}
                     >
-                      <Icon className="h-5 w-5 text-primary" />
+                      <Icon className="h-5 w-5" style={{ color: `var(--${kpi.color === "primary" ? "primary" : kpi.color === "success" ? "success" : kpi.color === "warning" ? "warning" : "info"})` }} />
                     </div>
                     <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
                   </div>
@@ -168,16 +159,14 @@ export function DashboardView() {
         </div>
       </StaggerItem>
 
-      {/* Today's meals */}
+      {/* Today's meals — tap any card to open calendar */}
       <StaggerItem>
-        <GlassCard className="p-5 md:p-6" hover={false}>
+        <GlassCard className="p-4 md:p-6" hover={false}>
           <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="font-semibold text-lg">Today's Meals</h3>
-              <p className="text-xs text-muted-foreground">Your meal schedule for today</p>
-            </div>
+            <h3 className="font-semibold">Today's Meals</h3>
             <GlassButton variant="ghost" size="sm" onClick={() => setView("calendar")}>
-              View calendar
+              View all
+              <ArrowUpRight className="h-3.5 w-3.5" />
             </GlassButton>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -193,34 +182,22 @@ export function DashboardView() {
                   whileHover={{ scale: 1.03, y: -2 }}
                   whileTap={{ scale: 0.97 }}
                   onClick={() => setView("calendar")}
-                  className="glass-soft rounded-3xl p-4 relative overflow-hidden text-left w-full"
+                  className="glass-soft rounded-2xl p-3 relative overflow-hidden text-left w-full"
                   style={{
-                    borderColor: isOn ? `${meal.color}60` : undefined,
+                    opacity: isOn ? 1 : 0.5,
                     background: isOn
-                      ? `linear-gradient(135deg, ${meal.color}25, transparent)`
+                      ? `linear-gradient(135deg, ${meal.color}30, transparent)`
                       : undefined,
                   }}
                 >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-2xl">{meal.icon}</span>
-                    {isLocked ? (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                        🔒 Locked
-                      </span>
-                    ) : isOn ? (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-success/20 text-success font-medium">
-                        ON
-                      </span>
-                    ) : (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                        OFF
-                      </span>
-                    )}
-                  </div>
-                  <p className="font-semibold text-sm">{meal.displayName}</p>
+                  <span className="text-2xl block mb-1.5">{meal.icon}</span>
+                  <p className="font-medium text-sm leading-tight">{meal.displayName}</p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">
                     {meal.startTime} – {meal.endTime}
                   </p>
+                  {isLocked && (
+                    <span className="absolute top-2 right-2 text-[10px] opacity-60">🔒</span>
+                  )}
                 </motion.button>
               );
             })}
@@ -231,12 +208,9 @@ export function DashboardView() {
       {/* Charts */}
       <StaggerItem>
         <div className="grid lg:grid-cols-3 gap-4">
-          <GlassCard className="p-5 md:p-6 lg:col-span-2" hover={false}>
+          <GlassCard className="p-4 md:p-6 lg:col-span-2" hover={false}>
             <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="font-semibold text-lg">Meal Trends</h3>
-                <p className="text-xs text-muted-foreground">Last 7 days</p>
-              </div>
+              <h3 className="font-semibold">Meal Trends <span className="text-xs font-normal text-muted-foreground ml-1">· 7 days</span></h3>
               <div className="flex items-center gap-3 text-xs">
                 <span className="flex items-center gap-1.5">
                   <span className="h-2 w-2 rounded-full bg-primary" /> ON
@@ -292,9 +266,8 @@ export function DashboardView() {
             </ResponsiveContainer>
           </GlassCard>
 
-          <GlassCard className="p-5 md:p-6" hover={false}>
-            <h3 className="font-semibold text-lg mb-1">Expenses</h3>
-            <p className="text-xs text-muted-foreground mb-4">By category this month</p>
+          <GlassCard className="p-4 md:p-6" hover={false}>
+            <h3 className="font-semibold mb-4">Expenses <span className="text-xs font-normal text-muted-foreground ml-1">· this month</span></h3>
             {data.expenseBreakdown.length > 0 ? (
               <>
                 <ResponsiveContainer width="100%" height={180}>
@@ -349,11 +322,12 @@ export function DashboardView() {
       {/* Notifications + Activity */}
       <StaggerItem>
         <div className="grid lg:grid-cols-2 gap-4">
-          <GlassCard className="p-5 md:p-6" hover={false}>
+          <GlassCard className="p-4 md:p-6" hover={false}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-lg">Recent Notifications</h3>
+              <h3 className="font-semibold">Notifications</h3>
               <GlassButton variant="ghost" size="sm" onClick={() => setView("notifications")}>
                 View all
+                <ArrowUpRight className="h-3.5 w-3.5" />
               </GlassButton>
             </div>
             <div className="space-y-2 max-h-72 overflow-y-auto no-scrollbar">
@@ -391,8 +365,8 @@ export function DashboardView() {
             </div>
           </GlassCard>
 
-          <GlassCard className="p-5 md:p-6" hover={false}>
-            <h3 className="font-semibold text-lg mb-4">Recent Activity</h3>
+          <GlassCard className="p-4 md:p-6" hover={false}>
+            <h3 className="font-semibold mb-4">Recent Activity</h3>
             {data.isAdmin && data.recentActivity.length > 0 ? (
               <div className="space-y-2 max-h-72 overflow-y-auto no-scrollbar">
                 {data.recentActivity.map((a) => (
