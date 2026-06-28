@@ -65,8 +65,10 @@ function toDateString(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-/** Returns a relative day label: "Today", "Yesterday", "Tomorrow", or the full day name. */
-function getRelativeDayLabel(d: Date): string {
+/** Returns { top, bottom } for the date picker.
+ *  - Today/Yesterday/Tomorrow: top = relative label, bottom = "EEE, d MMM"
+ *  - Other dates: top = "d MMM" (date only), bottom = "EEE" (day name only, no duplicate) */
+function getDatePickerLabels(d: Date): { top: string; bottom: string } {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const target = new Date(d);
@@ -74,10 +76,11 @@ function getRelativeDayLabel(d: Date): string {
   const diffMs = target.getTime() - today.getTime();
   const diffDays = Math.round(diffMs / (24 * 60 * 60 * 1000));
 
-  if (diffDays === 0) return "Today";
-  if (diffDays === -1) return "Yesterday";
-  if (diffDays === 1) return "Tomorrow";
-  return format(target, "EEEE"); // e.g., "Tuesday"
+  if (diffDays === 0) return { top: "Today", bottom: format(target, "EEE, d MMM") };
+  if (diffDays === -1) return { top: "Yesterday", bottom: format(target, "EEE, d MMM") };
+  if (diffDays === 1) return { top: "Tomorrow", bottom: format(target, "EEE, d MMM") };
+  // Far dates: top = date only, bottom = day name only (no duplicate)
+  return { top: format(target, "d MMM"), bottom: format(target, "EEE") };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -90,6 +93,7 @@ export function KitchenView() {
   const [date, setDate] = useState<Date>(new Date());
 
   const dateStr = toDateString(date);
+  const datePickerLabels = getDatePickerLabels(date);
   const isUser = user?.role === "USER";
 
   const { data: resp, isLoading } = useQuery({
@@ -143,10 +147,10 @@ export function KitchenView() {
             <CalendarDays className="h-4 w-4 text-primary shrink-0" />
             <div className="leading-tight text-center">
               <p className="text-sm font-bold text-primary">
-                {getRelativeDayLabel(date)}
+                {datePickerLabels.top}
               </p>
               <p className="text-[11px] text-muted-foreground">
-                {format(date, "EEE, d MMM")}
+                {datePickerLabels.bottom}
               </p>
             </div>
           </button>
