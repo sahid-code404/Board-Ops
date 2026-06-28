@@ -552,7 +552,7 @@ export function ExpensesView() {
         </GlassCard>
       </StaggerItem>
 
-      {/* Search + Filters */}
+      {/* Search + Filters — all pills in a single horizontal scrollable line */}
       <StaggerItem>
         <div className="space-y-3">
           <GlassInput
@@ -561,7 +561,7 @@ export function ExpensesView() {
             onChange={(e) => setSearch(e.target.value)}
             icon={<Search />}
           />
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-1">
             {(() => {
               // Build list: ALL + predefined categories (except CUSTOM) + any custom categories from expenses
               const predefined = CATEGORY_ORDER.filter((c) => c !== "CUSTOM");
@@ -582,32 +582,30 @@ export function ExpensesView() {
                     setCategoryFilter(c);
                   }}
                   className={cn(
-                    "inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium rounded-full whitespace-nowrap transition-all",
+                    "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-xl text-[11px] font-medium whitespace-nowrap shrink-0 transition-all",
                     active
                       ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
                       : "glass-soft text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {meta?.icon}
-                  {c === "ALL" ? "All Categories" : meta!.label}
+                  {c === "ALL" ? "All" : meta!.label}
                 </button>
               );
               });
             })()}
-          </div>
-          {/* Deletion Queue pill — admin only */}
-          {isAdmin && (
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+            {/* Deletion Queue pill — admin only, in the same row */}
+            {isAdmin && (
               <button
                 onClick={() => setShowDeleted(!showDeleted)}
                 className={cn(
-                  "inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium rounded-full whitespace-nowrap transition-all",
+                  "inline-flex items-center gap-1 h-8 px-2.5 rounded-xl text-[11px] font-medium whitespace-nowrap shrink-0 transition-all",
                   showDeleted
                     ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
                     : "glass-soft text-muted-foreground hover:text-foreground"
                 )}
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <Trash2 className="h-3 w-3" />
                 Deletion Queue
                 {deletedExpenses.length > 0 && (
                   <span
@@ -622,8 +620,8 @@ export function ExpensesView() {
                   </span>
                 )}
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </StaggerItem>
 

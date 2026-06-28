@@ -646,7 +646,7 @@ export function PaymentsView() {
                   key={s}
                   onClick={() => setStatusFilter(s)}
                   className={cn(
-                    "inline-flex items-center h-8 px-2.5 rounded-xl text-[11px] gap-1.5 font-medium whitespace-nowrap transition-all",
+                    "inline-flex items-center h-8 px-2.5 rounded-xl text-[11px] gap-1.5 font-medium whitespace-nowrap shrink-0 transition-all",
                     active
                       ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
                       : "glass-soft text-muted-foreground hover:text-foreground"

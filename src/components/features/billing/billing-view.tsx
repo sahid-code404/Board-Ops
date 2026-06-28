@@ -479,7 +479,7 @@ export function BillingView() {
         </div>
       </StaggerItem>
 
-      {/* Search + Filter pills (expenses-style design) */}
+      {/* Search + Filter pills — all in a single horizontal scrollable line */}
       <StaggerItem>
         <div className="space-y-3">
           <GlassInput
@@ -488,7 +488,7 @@ export function BillingView() {
             onChange={(e) => setSearch(e.target.value)}
             icon={<Search />}
           />
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-1">
             {(
               [
                 "ALL",
@@ -508,7 +508,7 @@ export function BillingView() {
                   key={s}
                   onClick={() => setStatusFilter(s)}
                   className={cn(
-                    "inline-flex items-center gap-1 h-8 px-2.5 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all",
+                    "inline-flex items-center gap-1 h-8 px-2.5 rounded-xl text-[11px] font-medium whitespace-nowrap shrink-0 transition-all",
                     active
                       ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
                       : "glass-soft text-muted-foreground hover:text-foreground"
@@ -530,32 +530,28 @@ export function BillingView() {
                 </button>
               );
             })}
-          </div>
-          {/* Action buttons below sorting bar */}
-          {isAdmin && statusFilter !== "DELETED" && bills.length > 0 && (
-            <div className="flex justify-end pt-1">
+            {/* Delete All — inline at the end of the same scrollable row */}
+            {isAdmin && statusFilter !== "DELETED" && bills.length > 0 && (
               <button
                 onClick={() => setDeleteAllOpen(true)}
-                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-destructive/70 hover:text-destructive transition-colors"
+                className="inline-flex items-center gap-1 h-8 px-2.5 rounded-xl text-[11px] font-medium whitespace-nowrap shrink-0 text-destructive/70 hover:text-destructive transition-colors"
               >
                 <Trash2 className="h-3 w-3" />
                 Delete All ({bills.length})
               </button>
-            </div>
-          )}
-          {/* Restore All — only in deletion queue */}
-          {isAdmin && statusFilter === "DELETED" && deletedBills.length > 0 && (
-            <div className="flex justify-end pt-1">
+            )}
+            {/* Restore All — inline at the end of the same scrollable row (deletion queue only) */}
+            {isAdmin && statusFilter === "DELETED" && deletedBills.length > 0 && (
               <button
                 onClick={() => restoreAllMutation.mutate()}
                 disabled={restoreAllMutation.isPending}
-                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-success/70 hover:text-success transition-colors"
+                className="inline-flex items-center gap-1 h-8 px-2.5 rounded-xl text-[11px] font-medium whitespace-nowrap shrink-0 text-success/70 hover:text-success transition-colors"
               >
                 <RotateCcw className="h-3 w-3" />
                 {restoreAllMutation.isPending ? "Restoring…" : `Restore All (${deletedBills.length})`}
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </StaggerItem>
 
