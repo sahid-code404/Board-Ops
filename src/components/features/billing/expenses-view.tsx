@@ -18,6 +18,7 @@ import {
   Receipt,
   User,
   PencilLine,
+  Search,
 } from "lucide-react";
 
 import { api } from "@/lib/api-client";
@@ -181,6 +182,7 @@ export function ExpensesView() {
   const [categoryFilter, setCategoryFilter] = useState<ExpenseCategory | "ALL">(
     "ALL"
   );
+  const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Expense | null>(null);
 
@@ -249,9 +251,22 @@ export function ExpensesView() {
   }, [expenses]);
 
   const filtered = useMemo(() => {
-    if (categoryFilter === "ALL") return expenses;
-    return expenses.filter((e) => e.category === categoryFilter);
-  }, [expenses, categoryFilter]);
+    let result = expenses;
+    if (categoryFilter !== "ALL") {
+      result = result.filter((e) => e.category === categoryFilter);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase().trim();
+      result = result.filter(
+        (e) =>
+          e.title.toLowerCase().includes(q) ||
+          e.category.toLowerCase().includes(q) ||
+          (e.paidTo || "").toLowerCase().includes(q) ||
+          (e.description || "").toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [expenses, categoryFilter, search]);
 
   if (isLoading) {
     return (
@@ -296,14 +311,14 @@ export function ExpensesView() {
       <StaggerItem>
         <div className="grid grid-cols-2 gap-3 md:gap-4">
           <KpiCard
-            label="Total This Month"
+            label="Total Expenses This Month"
             value={totalThisMonth}
             icon={<Wallet className="h-5 w-5" />}
             color="primary"
             prefix="₹"
           />
           <KpiCard
-            label="Transactions"
+            label="Total Entries"
             value={count}
             icon={<Receipt className="h-5 w-5" />}
             color="info"
@@ -357,9 +372,15 @@ export function ExpensesView() {
         </GlassCard>
       </StaggerItem>
 
-      {/* Filters */}
+      {/* Search + Filters */}
       <StaggerItem>
-        <GlassCard className="p-3 md:p-4" hover={false}>
+        <div className="space-y-3">
+          <GlassInput
+            placeholder="Search by title, category, vendor, or description…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            icon={<Search />}
+          />
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
             {(["ALL", ...CATEGORY_ORDER] as const).map((c) => {
               const active = categoryFilter === c;
@@ -382,7 +403,7 @@ export function ExpensesView() {
               );
             })}
           </div>
-        </GlassCard>
+        </div>
       </StaggerItem>
 
       {/* List */}
