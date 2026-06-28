@@ -8,13 +8,21 @@ export async function GET(req: Request) {
   try {
     const user = await requireAuth();
     const url = new URL(req.url);
-    const limit = Number(url.searchParams.get("limit") || 50);
+    const limit = Number(url.searchParams.get("limit") || 200);
     const category = url.searchParams.get("category");
+    const month = url.searchParams.get("month"); // 0-11
+    const year = url.searchParams.get("year");
 
-    const where = {
-      ...(category ? { category } : {}),
-      ...(user.role === "USER" ? { status: "APPROVED" } : {}),
-    };
+    const where: Record<string, unknown> = {};
+    if (category) where.category = category;
+    if (user.role === "USER") where.status = "APPROVED";
+    if (month !== null && month !== undefined && year) {
+      const m = Number(month);
+      const y = Number(year);
+      const start = new Date(y, m, 1);
+      const end = new Date(y, m + 1, 0, 23, 59, 59, 999);
+      where.expenseDate = { gte: start, lte: end };
+    }
 
     const expenses = await db.expense.findMany({
       where,

@@ -19,6 +19,8 @@ import {
   User,
   PencilLine,
   Search,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 import { api } from "@/lib/api-client";
@@ -203,11 +205,16 @@ export function ExpensesView() {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Expense | null>(null);
+  const now = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
 
   const { data: expenses = [], isLoading } = useQuery({
-    queryKey: ["expenses"],
+    queryKey: ["expenses", { month: selectedMonth, year: selectedYear }],
     queryFn: async () => {
-      const r = await api.get<ApiResponse<Expense[]>>("/expenses");
+      const r = await api.get<ApiResponse<Expense[]>>("/expenses", {
+        params: { month: selectedMonth, year: selectedYear, limit: 500 },
+      });
       return r.data;
     },
   });
@@ -240,25 +247,17 @@ export function ExpensesView() {
     onError: (e: Error) => toast.error(e.message || "Failed to delete expense"),
   });
 
-  // KPIs + breakdown
+  // KPIs + breakdown — data is already filtered by selected month from the API
   const { totalThisMonth, byCategory, count } = useMemo(() => {
-    const now = new Date();
-    const thisMonth = expenses.filter((e) => {
-      const d = new Date(e.expenseDate);
-      return (
-        d.getMonth() === now.getMonth() &&
-        d.getFullYear() === now.getFullYear()
-      );
-    });
-    const total = thisMonth.reduce((s, e) => s + e.amount, 0);
+    const total = expenses.reduce((s, e) => s + e.amount, 0);
     const byCat: Record<string, number> = {};
-    thisMonth.forEach((e) => {
+    expenses.forEach((e) => {
       byCat[e.category] = (byCat[e.category] || 0) + e.amount;
     });
     return {
       totalThisMonth: total,
       byCategory: byCat,
-      count: thisMonth.length,
+      count: expenses.length,
     };
   }, [expenses]);
 
@@ -319,11 +318,54 @@ export function ExpensesView() {
         </StaggerItem>
       )}
 
+      {/* Month picker — centered, spreaded */}
+      <StaggerItem>
+        <div className="flex items-center justify-center gap-4">
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => {
+              const d = new Date(selectedYear, selectedMonth - 1, 1);
+              setSelectedMonth(d.getMonth());
+              setSelectedYear(d.getFullYear());
+            }}
+            aria-label="Previous month"
+            className="grid place-items-center h-10 w-10 rounded-full glass-strong shrink-0 ring-1 ring-border/40 hover:ring-primary/40 transition-all"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </motion.button>
+
+          <div className="flex-1 max-w-[280px] flex items-center justify-center gap-2.5 glass-soft rounded-full px-6 py-2.5">
+            <Calendar className="h-4 w-4 text-primary shrink-0" />
+            <div className="leading-tight text-center">
+              <p className="text-sm font-bold text-primary">
+                {new Date(selectedYear, selectedMonth).toLocaleDateString("en-US", { month: "long" })}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {selectedYear}
+              </p>
+            </div>
+          </div>
+
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => {
+              const d = new Date(selectedYear, selectedMonth + 1, 1);
+              setSelectedMonth(d.getMonth());
+              setSelectedYear(d.getFullYear());
+            }}
+            aria-label="Next month"
+            className="grid place-items-center h-10 w-10 rounded-full glass-strong shrink-0 ring-1 ring-border/40 hover:ring-primary/40 transition-all"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </motion.button>
+        </div>
+      </StaggerItem>
+
       {/* KPIs */}
       <StaggerItem>
         <div className="grid grid-cols-2 gap-3 md:gap-4">
           <KpiCard
-            label="Total Expenses This Month"
+            label={`Total Expenses · ${new Date(selectedYear, selectedMonth).toLocaleDateString("en-US", { month: "short" })}`}
             value={totalThisMonth}
             icon={<Wallet className="h-5 w-5" />}
             color="primary"
@@ -341,7 +383,7 @@ export function ExpensesView() {
       {/* Top Categories — horizontal bars sorted high to low */}
       <StaggerItem>
         <GlassCard className="p-4 md:p-6" hover={false}>
-          <h3 className="font-semibold mb-4">Top Categories <span className="text-xs font-normal text-muted-foreground ml-1">· this month</span></h3>
+          <h3 className="font-semibold mb-4">Top Categories <span className="text-xs font-normal text-muted-foreground ml-1">· {new Date(selectedYear, selectedMonth).toLocaleDateString("en-US", { month: "long", year: "numeric" })}</span></h3>
           <div className="space-y-3">
             {(() => {
               const sorted = Object.entries(byCategory)
