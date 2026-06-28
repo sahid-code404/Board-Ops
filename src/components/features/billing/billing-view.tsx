@@ -17,8 +17,6 @@ import {
   Calendar,
   CheckCircle2,
   Clock,
-  Mail,
-  DoorOpen,
   MoreVertical,
   IndianRupee,
   ChevronLeft,
@@ -906,9 +904,9 @@ function BillRow({
   return (
     <GlassCard className="p-4" hover={false}>
       <div className="flex items-start gap-3">
-        <Avatar className="h-12 w-12 rounded-2xl shrink-0">
+        <Avatar className="h-10 w-10 rounded-xl shrink-0">
           {bill.user.avatarUrl && <AvatarImage src={bill.user.avatarUrl} alt={bill.user.name} />}
-          <AvatarFallback className={cn("rounded-2xl bg-gradient-to-br text-white font-semibold", gradientFor(bill.user.name))}>
+          <AvatarFallback className={cn("rounded-xl bg-gradient-to-br text-white font-semibold text-xs", gradientFor(bill.user.name))}>
             {initials(bill.user.name) || "U"}
           </AvatarFallback>
         </Avatar>
@@ -917,7 +915,7 @@ function BillRow({
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className={cn("font-semibold truncate", isDeleted && "text-muted-foreground line-through")}>
+                <h3 className={cn("font-medium text-sm truncate", isDeleted && "text-muted-foreground line-through")}>
                   {bill.user.name}
                 </h3>
                 {isDeleted ? (
@@ -935,34 +933,31 @@ function BillRow({
                   </>
                 )}
               </div>
-              <div className="flex flex-col gap-x-3 gap-y-0.5 mt-1.5 text-xs text-muted-foreground">
-                <span className="inline-flex items-center gap-1 truncate">
-                  <Mail className="h-3 w-3" /> {bill.user.email}
-                </span>
-                {bill.user.room && (
-                  <span className="inline-flex items-center gap-1">
-                    <DoorOpen className="h-3 w-3" /> Room {bill.user.room}
-                  </span>
-                )}
+              {/* Transaction strip — big total, smaller paid/due + due date */}
+              <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 mt-2">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</span>
+                  <span className="text-2xl font-bold tabular-nums leading-none">{formatINR(bill.totalAmount)}</span>
+                </div>
                 {!isDeleted && (
-                  <span className="inline-flex items-center gap-1">
-                    <Clock className="h-3 w-3" /> Due {formatDate(bill.dueDate)}
-                  </span>
+                  <>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Paid</span>
+                      <span className="text-sm font-semibold text-success tabular-nums">{formatINR(bill.paidAmount)}</span>
+                    </div>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Due</span>
+                      <span className="text-sm font-semibold text-warning tabular-nums">{formatINR(bill.dueAmount)}</span>
+                    </div>
+                    {bill.dueDate && (
+                      <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <Clock className="h-3 w-3" /> {formatDate(bill.dueDate)}
+                      </span>
+                    )}
+                  </>
                 )}
-              </div>
-              {/* Total / Paid / Due inline — like the KPI strip */}
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-muted-foreground">
-                <span>
-                  Total <span className="font-semibold text-foreground tabular-nums">{formatINR(bill.totalAmount)}</span>
-                </span>
-                <span>
-                  Paid <span className="font-semibold text-success tabular-nums">{formatINR(bill.paidAmount)}</span>
-                </span>
-                <span>
-                  Due <span className="font-semibold text-warning tabular-nums">{formatINR(bill.dueAmount)}</span>
-                </span>
                 {bill.deletedAt && bill.deletionReason && (
-                  <span className="inline-flex items-start gap-1 text-destructive/80">
+                  <span className="inline-flex items-start gap-1 text-[11px] text-destructive/80">
                     <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
                     Reason: {bill.deletionReason}
                   </span>

@@ -838,15 +838,15 @@ function ExpenseRow({
   return (
     <GlassCard className="p-4" hover={false}>
       <div className="flex items-start gap-3">
-        {/* Category icon tile (replaces avatar) */}
+        {/* Category icon tile */}
         <div
-          className="grid place-items-center h-12 w-12 rounded-2xl shrink-0"
+          className="grid place-items-center h-10 w-10 rounded-xl shrink-0"
           style={{
             background: `color-mix(in oklch, ${meta.colorVar} 15%, transparent)`,
             color: meta.colorVar,
           }}
         >
-          <CatIcon className="h-5 w-5" />
+          <CatIcon className="h-4 w-4" />
         </div>
 
         <div className="flex-1 min-w-0">
@@ -855,7 +855,7 @@ function ExpenseRow({
               <div className="flex items-center gap-2 flex-wrap">
                 <h3
                   className={cn(
-                    "font-semibold truncate",
+                    "font-medium text-sm truncate",
                     (locked || isDeleted) && "text-muted-foreground",
                     isDeleted && "line-through"
                   )}
@@ -889,41 +889,29 @@ function ExpenseRow({
                   </>
                 )}
               </div>
-              <div className="flex flex-col gap-x-3 gap-y-0.5 mt-1.5 text-xs text-muted-foreground">
-                <span className="inline-flex items-center gap-1 truncate">
+              {/* Transaction strip — big cost + date + qty */}
+              <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 mt-2">
+                <span className="text-2xl font-bold tabular-nums leading-none">{formatINR(expense.amount)}</span>
+                <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
                   <Calendar className="h-3 w-3" /> {formatDate(expense.expenseDate)}
                 </span>
                 {qty && (
-                  <span className="inline-flex items-center gap-1">
+                  <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
                     <Boxes className="h-3 w-3" /> {qty}
                   </span>
                 )}
-                {expense.user?.name && (
-                  <span className="inline-flex items-center gap-1">
-                    <Users className="h-3 w-3" /> {expense.user.name}
+                {expense.description && (
+                  <span className="text-[11px] text-muted-foreground truncate max-w-[200px]">
+                    · {expense.description}
+                  </span>
+                )}
+                {isDeleted && expense.deletionReason && (
+                  <span className="inline-flex items-start gap-1 text-[11px] text-destructive/80">
+                    <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                    Reason: {expense.deletionReason}
                   </span>
                 )}
               </div>
-              {expense.description && (
-                <p className="text-[11px] text-muted-foreground mt-1.5 line-clamp-1">
-                  {expense.description}
-                </p>
-              )}
-              {/* Cost inline */}
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-muted-foreground">
-                <span>
-                  Cost{" "}
-                  <span className="font-semibold text-foreground tabular-nums">
-                    {formatINR(expense.amount)}
-                  </span>
-                </span>
-              </div>
-              {isDeleted && expense.deletionReason && (
-                <div className="mt-1.5 text-[11px] text-destructive/80 flex items-start gap-1">
-                  <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
-                  <span>Reason: {expense.deletionReason}</span>
-                </div>
-              )}
             </div>
 
             {/* Dropdown — only render if there are actions */}

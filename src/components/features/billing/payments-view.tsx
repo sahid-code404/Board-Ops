@@ -25,7 +25,6 @@ import {
   Calendar,
   RotateCcw,
   MoreVertical,
-  Mail,
   PencilLine,
   Trash2,
   AlertTriangle,
@@ -1097,10 +1096,10 @@ function PaymentRow({
   return (
     <GlassCard className="p-4" hover={false}>
       <div className="flex items-start gap-3">
-        <Avatar className="h-12 w-12 rounded-2xl shrink-0">
+        <Avatar className="h-10 w-10 rounded-xl shrink-0">
           <AvatarFallback
             className={cn(
-              "rounded-2xl bg-gradient-to-br text-white font-semibold",
+              "rounded-xl bg-gradient-to-br text-white font-semibold text-xs",
               gradientFor(payment.user.name)
             )}
           >
@@ -1114,7 +1113,7 @@ function PaymentRow({
               <div className="flex items-center gap-2 flex-wrap">
                 <h3
                   className={cn(
-                    "font-semibold truncate",
+                    "font-medium text-sm truncate",
                     isDeleted && "text-muted-foreground line-through"
                   )}
                 >
@@ -1145,37 +1144,26 @@ function PaymentRow({
                   </>
                 )}
               </div>
-              <div className="flex flex-col gap-x-3 gap-y-0.5 mt-1.5 text-xs text-muted-foreground">
-                {isAdmin && (
-                  <span className="inline-flex items-center gap-1 truncate">
-                    <Mail className="h-3 w-3" /> {payment.user.email}
-                  </span>
-                )}
-                <span className="inline-flex items-center gap-1">
+              {/* Transaction strip — big amount + date + reference */}
+              <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 mt-2">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-bold tabular-nums leading-none">{formatINR(payment.amount)}</span>
+                </div>
+                <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
                   <Clock className="h-3 w-3" /> {formatDateTime(payment.createdAt)}
                 </span>
                 {payment.reference && (
-                  <span className="inline-flex items-center gap-1 truncate">
+                  <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground truncate">
                     <ArrowUpRight className="h-3 w-3" /> Ref {payment.reference}
                   </span>
                 )}
-              </div>
-              {/* Amount inline */}
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-muted-foreground">
-                <span>
-                  Amount{" "}
-                  <span className="font-semibold text-foreground tabular-nums">
-                    {formatINR(payment.amount)}
-                  </span>
-                </span>
                 {payment.notes && (
-                  <span className="inline-flex items-start gap-1 truncate max-w-[280px]">
-                    <span className="text-muted-foreground/70">·</span>
-                    <span className="truncate">{payment.notes}</span>
+                  <span className="text-[11px] text-muted-foreground truncate max-w-[200px]">
+                    · {payment.notes}
                   </span>
                 )}
                 {isDeleted && payment.deletionReason && (
-                  <span className="inline-flex items-start gap-1 text-destructive/80">
+                  <span className="inline-flex items-start gap-1 text-[11px] text-destructive/80">
                     <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
                     Reason: {payment.deletionReason}
                   </span>
