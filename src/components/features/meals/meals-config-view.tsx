@@ -15,9 +15,8 @@ import {
   Trash2,
   Archive,
   Clock,
-  ShieldCheck,
+  Shield,
   AlertCircle,
-  Eye,
   EyeOff,
   Sparkles,
   Filter,
@@ -692,22 +691,11 @@ function MealConfigCard({
             </Badge>
           ) : (
             <Badge className="bg-success/15 text-success border-success/30 text-[10px]">
-              <ShieldCheck className="h-2.5 w-2.5" /> Active
+              <Shield className="h-2.5 w-2.5" /> Active
             </Badge>
           )}
           <Badge variant="outline" className="text-[10px]">
             Order: {meal.displayOrder}
-          </Badge>
-          <Badge variant="outline" className="text-[10px]">
-            {meal.defaultState === "ON" ? (
-              <span className="inline-flex items-center gap-1">
-                <Eye className="h-2.5 w-2.5" /> ON
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1">
-                <EyeOff className="h-2.5 w-2.5" /> OFF
-              </span>
-            )}
           </Badge>
         </div>
 
@@ -745,7 +733,7 @@ function MealConfigCard({
             >
               <SelectTrigger className="h-9 rounded-xl glass-soft border-0 text-xs w-full">
                 <div className="flex items-center gap-1.5">
-                  {meal.status === "ACTIVE" && <ShieldCheck className="h-3 w-3 text-success" />}
+                  {meal.status === "ACTIVE" && <Shield className="h-3 w-3 text-success" />}
                   {meal.status === "INACTIVE" && <EyeOff className="h-3 w-3 text-muted-foreground" />}
                   {meal.status === "ARCHIVED" && <Archive className="h-3 w-3 text-muted-foreground" />}
                   <SelectValue />
@@ -754,7 +742,7 @@ function MealConfigCard({
               <SelectContent>
                 <SelectItem value="ACTIVE">
                   <span className="flex items-center gap-2">
-                    <ShieldCheck className="h-3.5 w-3.5 text-success" /> Active
+                    <Shield className="h-3.5 w-3.5 text-success" /> Active
                   </span>
                 </SelectItem>
                 <SelectItem value="INACTIVE">
