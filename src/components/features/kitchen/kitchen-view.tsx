@@ -107,46 +107,44 @@ export function KitchenView() {
 
   return (
     <StaggerGroup className="space-y-4 md:space-y-6">
-      {/* Action bar: centered date picker */}
+      {/* Date picker — capsule container with circular arrow buttons */}
       <StaggerItem>
-        <div className="flex items-center justify-center gap-2 flex-wrap">
-          <GlassButton
-            variant="secondary"
-            size="icon"
+        <div className="flex items-center justify-center gap-3">
+          {/* Left arrow — circular */}
+          <motion.button
+            whileTap={{ scale: 0.9 }}
             onClick={() => setDate((d) => addDays(d, -1))}
             aria-label="Previous day"
-            className="shrink-0"
+            className="grid place-items-center h-10 w-10 rounded-full glass-strong shrink-0 ring-1 ring-border/40 hover:ring-primary/40 transition-all"
           >
             <ChevronLeft className="h-5 w-5" />
-          </GlassButton>
-          <div className="glass-soft rounded-2xl px-4 py-2 min-w-[150px] text-center">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center justify-center gap-1">
-              <CalendarDays className="h-3 w-3" />
-              {format(date, "EEEE")}
+          </motion.button>
+
+          {/* Date capsule — icon + two-line text */}
+          <button
+            onClick={() => !isSameDay(date, new Date()) && setDate(new Date())}
+            className="flex items-center gap-2.5 glass-soft rounded-full px-5 py-2 min-w-[180px] text-left transition-all hover:ring-1 hover:ring-primary/30"
+          >
+            <CalendarDays className="h-5 w-5 text-primary shrink-0" />
+            <div className="leading-tight">
+              <p className="text-sm font-bold text-primary">
+                {isSameDay(date, new Date()) ? "Today" : format(date, "EEEE")}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {format(date, "EEE, d MMM")}
+              </p>
             </div>
-            <div className="text-sm font-semibold">
-              {format(date, "d MMM yyyy")}
-            </div>
-          </div>
-          <GlassButton
-            variant="secondary"
-            size="icon"
+          </button>
+
+          {/* Right arrow — circular */}
+          <motion.button
+            whileTap={{ scale: 0.9 }}
             onClick={() => setDate((d) => addDays(d, 1))}
             aria-label="Next day"
-            className="shrink-0"
+            className="grid place-items-center h-10 w-10 rounded-full glass-strong shrink-0 ring-1 ring-border/40 hover:ring-primary/40 transition-all"
           >
             <ChevronRight className="h-5 w-5" />
-          </GlassButton>
-          {!isSameDay(date, new Date()) && (
-            <GlassButton
-              variant="ghost"
-              size="sm"
-              onClick={() => setDate(new Date())}
-              className="shrink-0"
-            >
-              Today
-            </GlassButton>
-          )}
+          </motion.button>
         </div>
       </StaggerItem>
 

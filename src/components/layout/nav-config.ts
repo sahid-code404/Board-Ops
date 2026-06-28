@@ -3,7 +3,7 @@
 import {
   LayoutDashboard,
   UtensilsCrossed,
-  ChefHat,
+  BarChart3,
   Sigma,
   Wallet,
   Receipt,
@@ -30,7 +30,7 @@ export type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   { view: "dashboard", label: "Home", icon: LayoutDashboard, roles: ["ADMIN", "USER"], primary: true, rail: true },
   { view: "meals", label: "Meal Configuration", icon: UtensilsCrossed, roles: ["ADMIN"], rail: true },
-  { view: "kitchen", label: "Kitchen", icon: ChefHat, roles: ["ADMIN"], primary: true, rail: true },
+  { view: "kitchen", label: "Counts", icon: BarChart3, roles: ["ADMIN"], primary: true, rail: true },
   { view: "billing", label: "Billing", icon: Wallet, roles: ["ADMIN", "USER"], primary: true, rail: true },
   { view: "payments", label: "Payments", icon: Wallet, roles: ["ADMIN", "USER"], rail: true },
   { view: "expenses", label: "Expenses", icon: Receipt, roles: ["ADMIN"], rail: true },
@@ -44,7 +44,7 @@ export const NAV_ITEMS: NavItem[] = [
 export const NAV_LABELS: Record<ViewKey, string> = {
   dashboard: "Dashboard",
   meals: "Meal Configuration",
-  kitchen: "Kitchen Dashboard",
+  kitchen: "Meal Counts",
   variables: "Variable Engine",
   billing: "Billing & Invoices",
   payments: "Payments & Wallet",

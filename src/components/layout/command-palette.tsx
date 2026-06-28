@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import {
   LayoutDashboard,
   UtensilsCrossed,
-  ChefHat,
+  BarChart3,
   Sigma,
   Wallet,
   Receipt,
@@ -40,7 +40,7 @@ type PaletteItem = {
 const ITEMS: PaletteItem[] = [
   { view: "dashboard", label: "Dashboard", icon: LayoutDashboard, keywords: ["home", "overview"], roles: ["ADMIN", "USER"], group: "Workspace" },
   { view: "meals", label: "Meal Configuration", icon: UtensilsCrossed, keywords: ["meals", "config", "menu"], roles: ["ADMIN"], group: "Workspace" },
-  { view: "kitchen", label: "Kitchen Dashboard", icon: ChefHat, keywords: ["kitchen", "chef", "counts"], roles: ["ADMIN"], group: "Workspace" },
+  { view: "kitchen", label: "Meal Counts", icon: BarChart3, keywords: ["kitchen", "counts", "meals", "chart"], roles: ["ADMIN"], group: "Workspace" },
   { view: "billing", label: "Billing & Invoices", icon: Wallet, keywords: ["billing", "invoice", "bills"], roles: ["ADMIN", "USER"], group: "Finance" },
   { view: "payments", label: "Payments & Wallet", icon: Wallet, keywords: ["payment", "wallet", "pay"], roles: ["ADMIN", "USER"], group: "Finance" },
   { view: "expenses", label: "Expenses & Procurement", icon: Receipt, keywords: ["expense", "procurement", "spend"], roles: ["ADMIN"], group: "Finance" },
