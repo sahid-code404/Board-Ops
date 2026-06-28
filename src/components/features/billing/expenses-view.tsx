@@ -20,16 +20,6 @@ import {
   User,
   PencilLine,
 } from "lucide-react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 
 import { api } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
@@ -259,16 +249,6 @@ export function ExpensesView() {
     };
   }, [expenses]);
 
-  const chartData = useMemo(
-    () =>
-      CATEGORY_ORDER.map((cat) => ({
-        category: CATEGORY_META[cat].label,
-        amount: byCategory[cat] || 0,
-        color: CATEGORY_META[cat].chartColor,
-      })),
-    [byCategory]
-  );
-
   const filtered = useMemo(() => {
     if (categoryFilter === "ALL") return expenses;
     return expenses.filter((e) => e.category === categoryFilter);
@@ -343,120 +323,6 @@ export function ExpensesView() {
             icon={<Boxes className="h-5 w-5" />}
             color="success"
           />
-        </div>
-      </StaggerItem>
-
-      {/* Chart + Breakdown */}
-      <StaggerItem>
-        <div className="grid lg:grid-cols-3 gap-4">
-          <GlassCard className="p-5 md:p-6 lg:col-span-2" hover={false}>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="font-semibold text-lg">Expenses by Category</h3>
-                <p className="text-xs text-muted-foreground">Current month</p>
-              </div>
-            </div>
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
-                <defs>
-                  {CATEGORY_ORDER.map((cat) => (
-                    <linearGradient
-                      key={cat}
-                      id={`grad-${cat}`}
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop
-                        offset="0%"
-                        stopColor={CATEGORY_META[cat].chartColor}
-                        stopOpacity={0.9}
-                      />
-                      <stop
-                        offset="100%"
-                        stopColor={CATEGORY_META[cat].chartColor}
-                        stopOpacity={0.3}
-                      />
-                    </linearGradient>
-                  ))}
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis
-                  dataKey="category"
-                  stroke="var(--muted-foreground)"
-                  fontSize={11}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis
-                  stroke="var(--muted-foreground)"
-                  fontSize={11}
-                  tickFormatter={(v) => `₹${v >= 1000 ? `${Math.round(v / 1000)}k` : v}`}
-                />
-                <Tooltip
-                  cursor={{ fill: "var(--muted)", opacity: 0.3 }}
-                  contentStyle={{
-                    background: "var(--popover)",
-                    border: "1px solid var(--border)",
-                    borderRadius: 16,
-                    color: "var(--foreground)",
-                  }}
-                  formatter={(v: number) => formatINR(v)}
-                />
-                <Bar
-                  dataKey="amount"
-                  radius={[8, 8, 0, 0]}
-                  animationDuration={1000}
-                >
-                  {chartData.map((entry, i) => (
-                    <Cell
-                      key={i}
-                      fill={`url(#grad-${CATEGORY_ORDER[i]})`}
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </GlassCard>
-
-          <GlassCard className="p-5 md:p-6" hover={false}>
-            <h3 className="font-semibold text-lg mb-1">Breakdown</h3>
-            <p className="text-xs text-muted-foreground mb-4">
-              By category this month
-            </p>
-            <div className="space-y-2.5">
-              {CATEGORY_ORDER.map((cat) => {
-                const amount = byCategory[cat] || 0;
-                const pct = totalThisMonth > 0 ? (amount / totalThisMonth) * 100 : 0;
-                return (
-                  <div key={cat} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="flex items-center gap-1.5 text-muted-foreground">
-                        <span
-                          className="h-2 w-2 rounded-full"
-                          style={{ background: CATEGORY_META[cat].chartColor }}
-                        />
-                        {CATEGORY_META[cat].label}
-                      </span>
-                      <span className="font-medium tabular-nums">
-                        {formatINR(amount)}
-                      </span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${pct}%` }}
-                        transition={{ duration: 0.8, ease: "easeOut" }}
-                        className="h-full rounded-full"
-                        style={{ background: CATEGORY_META[cat].chartColor }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </GlassCard>
         </div>
       </StaggerItem>
 
