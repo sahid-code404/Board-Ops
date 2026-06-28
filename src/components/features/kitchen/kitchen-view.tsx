@@ -91,7 +91,6 @@ export function KitchenView() {
   });
 
   const counts = resp?.data?.counts ?? [];
-  const activeUsers = resp?.data?.activeUsers ?? 0;
 
   const totals = useMemo(() => {
     return {
@@ -110,10 +109,10 @@ export function KitchenView() {
 
   return (
     <StaggerGroup className="space-y-4 md:space-y-6">
-      {/* Action bar: date picker */}
+      {/* Action bar: centered date picker */}
       <StaggerItem>
-        <div className="flex items-center justify-end gap-2 flex-wrap">
-          <p className="text-sm text-muted-foreground hidden sm:flex items-center gap-1.5 mr-auto">
+        <div className="flex items-center justify-center gap-2 flex-wrap">
+          <p className="text-sm text-muted-foreground hidden sm:flex items-center gap-1.5 mr-2">
             <RefreshCw
               className={cn("h-3 w-3", isFetching && "animate-spin")}
             />
@@ -207,61 +206,6 @@ export function KitchenView() {
         </StaggerItem>
       ) : (
         <>
-          {/* Combined percentage pill — all meals ON out of total possible */}
-          {(() => {
-            const totalMealsOn = counts.reduce((s, c) => s + c.on, 0);
-            const totalPossible = activeUsers * counts.length;
-            const pct = totalPossible > 0 ? Math.round((totalMealsOn / totalPossible) * 100) : 0;
-            return (
-              <StaggerItem>
-                <div className="glass-soft rounded-3xl px-5 py-4 flex items-center justify-between gap-4">
-                  {/* Left: label + count */}
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="grid place-items-center h-11 w-11 rounded-2xl bg-primary/15 shrink-0">
-                      <Utensils className="h-5 w-5 text-primary" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[10px] uppercase tracking-wider font-semibold text-primary">
-                        Total Meals
-                      </p>
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-2xl font-bold tabular-nums">{totalMealsOn}</span>
-                        <span className="text-xs text-muted-foreground">of {totalPossible} possible</span>
-                      </div>
-                    </div>
-                  </div>
-                  {/* Right: circular ring with percentage */}
-                  <div className="relative h-14 w-14 shrink-0">
-                    <svg className="absolute inset-0 -rotate-90" viewBox="0 0 56 56">
-                      <circle
-                        cx="28"
-                        cy="28"
-                        r="24"
-                        fill="none"
-                        stroke="var(--muted)"
-                        strokeWidth="5"
-                      />
-                      <circle
-                        cx="28"
-                        cy="28"
-                        r="24"
-                        fill="none"
-                        stroke="var(--primary)"
-                        strokeWidth="5"
-                        strokeLinecap="round"
-                        strokeDasharray={`${(pct / 100) * 150.8} 150.8`}
-                        style={{ transition: "stroke-dasharray 0.8s ease" }}
-                      />
-                    </svg>
-                    <div className="absolute inset-0 grid place-items-center">
-                      <span className="text-sm font-bold tabular-nums">{pct}%</span>
-                    </div>
-                  </div>
-                </div>
-              </StaggerItem>
-            );
-          })()}
-
           {/* Per-meal cards */}
           <StaggerItem>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
