@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { requireAuth, requireRole } from "@/lib/session";
-import { ok, handleApiError } from "@/lib/api-response";
+import { ok, err, handleApiError } from "@/lib/api-response";
 import { logAudit } from "@/lib/audit";
 import { z } from "zod";
 
@@ -10,7 +10,7 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const limit = Number(url.searchParams.get("limit") || 200);
     const category = url.searchParams.get("category");
-    const month = url.searchParams.get("month"); // 0-11
+    const month = url.searchParams.get("month");
     const year = url.searchParams.get("year");
 
     const where: Record<string, unknown> = {};
@@ -37,14 +37,14 @@ export async function GET(req: Request) {
 }
 
 const createSchema = z.object({
-  title: z.string().min(2),
+  title: z.string().min(2, "Item name is required"),
+  category: z.string().min(2, "Category is required").default("GENERAL"),
+  quantity: z.number().positive().default(1),
+  unit: z.string().min(1, "Unit is required").default("piece"),
+  amount: z.number().positive("Cost must be positive"),
   description: z.string().optional(),
-  category: z.string().min(2, "Category must be at least 2 characters").default("GENERAL"),
-  amount: z.number().positive(),
-  currency: z.string().default("INR"),
   expenseDate: z.string().transform((s) => new Date(s)),
   paidTo: z.string().optional(),
-  receiptUrl: z.string().optional(),
 });
 
 export async function POST(req: Request) {
@@ -52,9 +52,29 @@ export async function POST(req: Request) {
     const user = await requireRole("ADMIN");
     const body = await req.json();
     const data = createSchema.parse(body);
+
+    // Check if the expense month is locked (bills generated)
+    const expDate = data.expenseDate;
+    const now = new Date();
+    const isCurrentOrFutureMonth =
+      expDate.getMonth() >= now.getMonth() && expDate.getFullYear() >= now.getFullYear();
+
     const expense = await db.expense.create({
-      data: { ...data, status: "APPROVED", createdBy: user.id },
+      data: {
+        title: data.title,
+        category: data.category,
+        quantity: data.quantity,
+        unit: data.unit,
+        amount: data.amount,
+        description: data.description || null,
+        expenseDate: data.expenseDate,
+        paidTo: data.paidTo || null,
+        status: "APPROVED",
+        createdBy: user.id,
+        currency: "INR",
+      },
     });
+
     await logAudit({
       actorId: user.id,
       action: "CREATE",

@@ -560,3 +560,36 @@ Stage Summary:
 - All card padding unified to p-4 md:p-6
 - Lint clean (0 errors)
 - Every view rated 8-9/10 by VLM (up from 4/10)
+
+---
+Task ID: EXP-REWRITE
+Agent: expenses-rewrite-agent
+Task: Rewrite the Expenses view — restructure layout, add Edit flow + quantity/unit fields + lock logic
+
+Work Log:
+- Read full worklog.md (563 lines) + 3 prior agent records in /agent-ctx/ for context
+- Inspected existing /api/expenses (POST) and /api/expenses/[id] (PUT/DELETE) routes — backend already supports quantity/unit fields and enforces past-month lock server-side (status LOCKED or expense year-month < today's year-month returns 422)
+
+Changes to `src/components/features/billing/expenses-view.tsx`:
+1. Layout: swapped the first two StaggerItems so the month picker now renders ABOVE the admin Add-Expense action bar (was: action bar → month picker → KPIs → … ; now: month picker → action bar → KPIs → Top Categories → Search+Filters → List). All other sections preserved.
+2. Type: extended `Expense` with `quantity: number` and `unit: string`. Added `ExpensePayload` alias + `UNIT_OPTIONS = ["piece","kg","gm","litre","metre","box","dozen"]` + `formatQuantity(qty, unit)` (e.g. "5 kg") + `isExpenseLocked(expense)` (status LOCKED OR year-month strictly < today's).
+3. Edit flow: added `editTarget` state + `openAddForm/openEditForm/closeForm` helpers + `editMutation` using `api.put('/expenses/${id}', payload)`. Added `handleSubmit(payload, id?)` dispatcher that routes to editMutation when an id is passed, otherwise to addMutation. Both mutations toast, invalidate `["expenses"]`, and close the form on success.
+4. Form rewrite: split `AddExpenseSheet` into `ExpenseFormSheet` (wrapper) + `ExpenseFormBody` (state + fields). The wrapper passes `key={expense ? 'edit-${id}' : 'add'}` so the body remounts on every target change; combined with Radix Sheet unmounting content when closed, this gives fresh state on every open via `useState` initializers — no useEffect sync (which would trip the react-hooks/set-state-in-effect rule).
+   - Fields in order: Item (text, was "title"), Category (Select with CUSTOM option + custom-name input — preserved), Quantity (number) + Unit (Select with 7 predefined units + CUSTOM option + custom-unit input), Cost (number, was "amount"), Date (date picker), Notes (textarea, was "description").
+   - Removed the Paid To field entirely. Removed the now-unused `User` lucide import and the `useEffect` import.
+   - Title and submit button copy switch between "Add Expense"/"Edit Expense" and "Add Expense"/"Save Changes"; submit icon swaps Plus ↔ PencilLine.
+   - Submit payload shape: `{ title, category, quantity, unit, amount, description?, expenseDate }` (+ `id` passed separately when editing) — exactly as requested.
+5. Cards + table rows: mobile `ExpenseCard` now shows Qty block (right side) via `formatQuantity()`, renamed "Amount"→"Cost"; desktop table replaced the "Paid To" column with a "Qty" column and renamed "Title"→"Item", "Amount"→"Cost".
+6. Edit + Delete affordances only render when admin AND `!isExpenseLocked(expense)`. For locked rows (past month or status LOCKED), show a "🔒 Locked" badge instead — applied consistently to both mobile cards and desktop table rows.
+7. Minor cleanup: collapsed redundant `isAdmin || isAdmin` to a single check.
+
+Verification:
+- `bun run lint` → 0 errors (1 pre-existing informational warning in variables-view.tsx from a prior task, unrelated)
+- dev.log shows clean recompilation (`✓ Compiled in 200ms`) and `GET /api/expenses?month=5&year=2026&limit=500 200` succeeding
+- Did NOT modify any other files (API routes, page.tsx, other views, lib, stores, prisma schema untouched)
+
+Stage Summary:
+- Expenses page now supports full Add + Edit lifecycle with quantity/unit tracking
+- Past-month expenses are visibly locked (no edit/delete buttons, 🔒 badge shown) — mirrors the server-side enforcement in PUT/DELETE /api/expenses/[id]
+- Month picker is the first thing the user sees, making month navigation the primary action before adding expenses
+- Lint clean (0 errors)

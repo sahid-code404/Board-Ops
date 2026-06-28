@@ -16,7 +16,6 @@ import {
   Boxes,
   Calendar,
   Receipt,
-  User,
   PencilLine,
   Search,
   ChevronLeft,
@@ -89,6 +88,8 @@ type Expense = {
   title: string;
   description: string | null;
   category: string;
+  quantity: number;
+  unit: string;
   amount: number;
   currency: string;
   expenseDate: string;
@@ -98,6 +99,17 @@ type Expense = {
 };
 
 type ApiResponse<T> = { success: boolean; data: T; error?: string };
+
+/** Payload sent to POST /api/expenses and PUT /api/expenses/[id]. */
+type ExpensePayload = {
+  title: string;
+  category: string;
+  quantity: number;
+  unit: string;
+  amount: number;
+  description?: string;
+  expenseDate: string;
+};
 
 // ─────────────────────────────────────────────────────────────
 // Style maps
@@ -166,6 +178,8 @@ const CATEGORY_ORDER: ExpenseCategory[] = [
   "CUSTOM",
 ];
 
+const UNIT_OPTIONS = ["piece", "kg", "gm", "litre", "metre", "box", "dozen"];
+
 function formatINR(n: number) {
   return `₹${Math.round(n).toLocaleString("en-IN")}`;
 }
@@ -189,21 +203,37 @@ function formatDate(iso: string) {
   });
 }
 
+/** Format quantity + unit for display (e.g. "5 kg", "2 piece"). */
+function formatQuantity(qty: number, unit: string): string {
+  if (!qty && !unit) return "";
+  if (!unit) return String(qty);
+  if (!qty) return unit;
+  return `${qty} ${unit}`;
+}
+
+/** An expense is locked when its status is LOCKED or it belongs to a past month. */
+function isExpenseLocked(expense: Expense): boolean {
+  if (expense.status === "LOCKED") return true;
+  const expDate = new Date(expense.expenseDate);
+  const now = new Date();
+  const expYM = expDate.getFullYear() * 12 + expDate.getMonth();
+  const todayYM = now.getFullYear() * 12 + now.getMonth();
+  return expYM < todayYM;
+}
+
 // ─────────────────────────────────────────────────────────────
 // Main view
 // ─────────────────────────────────────────────────────────────
 
 export function ExpensesView() {
   const user = useAuthStore((s) => s.user);
-  const isAdmin =
-    user?.role === "ADMIN" ||
-    user?.role === "ADMIN" ||
-    false;
+  const isAdmin = user?.role === "ADMIN" || false;
   const qc = useQueryClient();
 
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
   const [search, setSearch] = useState("");
-  const [addOpen, setAddOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Expense | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Expense | null>(null);
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
@@ -220,21 +250,49 @@ export function ExpensesView() {
   });
 
   const addMutation = useMutation({
-    mutationFn: (payload: {
-      title: string;
-      amount: number;
-      category: ExpenseCategory;
-      expenseDate: string;
-      paidTo?: string;
-      description?: string;
-    }) => api.post<ApiResponse<Expense>>("/expenses", payload),
+    mutationFn: (payload: ExpensePayload) =>
+      api.post<ApiResponse<Expense>>("/expenses", payload),
     onSuccess: () => {
       toast.success("Expense added successfully");
-      setAddOpen(false);
+      closeForm();
       qc.invalidateQueries({ queryKey: ["expenses"] });
     },
     onError: (e: Error) => toast.error(e.message || "Failed to add expense"),
   });
+
+  const editMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: ExpensePayload }) =>
+      api.put<ApiResponse<Expense>>(`/expenses/${id}`, payload),
+    onSuccess: () => {
+      toast.success("Expense updated successfully");
+      closeForm();
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+    },
+    onError: (e: Error) => toast.error(e.message || "Failed to update expense"),
+  });
+
+  function openAddForm() {
+    setEditTarget(null);
+    setFormOpen(true);
+  }
+
+  function openEditForm(exp: Expense) {
+    setEditTarget(exp);
+    setFormOpen(true);
+  }
+
+  function closeForm() {
+    setFormOpen(false);
+    setEditTarget(null);
+  }
+
+  function handleSubmit(payload: ExpensePayload, id?: string) {
+    if (id) {
+      editMutation.mutate({ id, payload });
+    } else {
+      addMutation.mutate(payload);
+    }
+  }
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) =>
@@ -299,25 +357,6 @@ export function ExpensesView() {
 
   return (
     <StaggerGroup className="space-y-4 md:space-y-6">
-      {/* Action bar */}
-      {isAdmin && (
-        <StaggerItem>
-          <div className="flex items-center justify-end gap-3">
-            <p className="text-sm text-muted-foreground hidden sm:block">
-              Track & manage operational expenses
-            </p>
-            <GlassButton
-              size="lg"
-              onClick={() => setAddOpen(true)}
-              className="shrink-0"
-            >
-              <Plus className="h-4 w-4" />
-              Add Expense
-            </GlassButton>
-          </div>
-        </StaggerItem>
-      )}
-
       {/* Month picker — centered, spreaded */}
       <StaggerItem>
         <div className="flex items-center justify-center gap-4">
@@ -360,6 +399,25 @@ export function ExpensesView() {
           </motion.button>
         </div>
       </StaggerItem>
+
+      {/* Action bar */}
+      {isAdmin && (
+        <StaggerItem>
+          <div className="flex items-center justify-end gap-3">
+            <p className="text-sm text-muted-foreground hidden sm:block">
+              Track & manage operational expenses
+            </p>
+            <GlassButton
+              size="lg"
+              onClick={openAddForm}
+              className="shrink-0"
+            >
+              <Plus className="h-4 w-4" />
+              Add Expense
+            </GlassButton>
+          </div>
+        </StaggerItem>
+      )}
 
       {/* KPIs */}
       <StaggerItem>
@@ -494,7 +552,8 @@ export function ExpensesView() {
                   <StaggerItem key={exp.id}>
                     <ExpenseCard
                       expense={exp}
-                      canDelete={isAdmin}
+                      canManage={isAdmin}
+                      onEdit={() => openEditForm(exp)}
                       onDelete={() => setDeleteTarget(exp)}
                     />
                   </StaggerItem>
@@ -507,63 +566,85 @@ export function ExpensesView() {
               <Table>
                 <TableHeader>
                   <TableRow className="border-border/60">
-                    <TableHead className="pl-4">Title</TableHead>
+                    <TableHead className="pl-4">Item</TableHead>
                     <TableHead>Category</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="text-right">Qty</TableHead>
+                    <TableHead className="text-right">Cost</TableHead>
                     <TableHead>Date</TableHead>
-                    <TableHead>Paid To</TableHead>
                     {isAdmin && <TableHead className="text-right pr-4">Actions</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map((exp) => (
-                    <TableRow key={exp.id} className="border-border/40">
-                      <TableCell className="pl-4">
-                        <div className="flex flex-col">
-                          <span className="font-medium">{exp.title}</span>
-                          {exp.description && (
-                            <span className="text-xs text-muted-foreground line-clamp-1 max-w-[260px]">
-                              {exp.description}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "rounded-full",
-                            getCatMeta(exp.category).className
-                          )}
-                        >
-                          {getCatMeta(exp.category).icon}
-                          {getCatMeta(exp.category).label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-semibold tabular-nums">
-                        {formatINR(exp.amount)}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {formatDate(exp.expenseDate)}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {exp.paidTo || "—"}
-                      </TableCell>
-                      {isAdmin && (
-                        <TableCell className="text-right pr-4">
-                          <GlassButton
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => setDeleteTarget(exp)}
-                            aria-label="Delete expense"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </GlassButton>
+                  {filtered.map((exp) => {
+                    const locked = isExpenseLocked(exp);
+                    return (
+                      <TableRow key={exp.id} className="border-border/40">
+                        <TableCell className="pl-4">
+                          <div className="flex flex-col">
+                            <span className="font-medium">{exp.title}</span>
+                            {exp.description && (
+                              <span className="text-xs text-muted-foreground line-clamp-1 max-w-[260px]">
+                                {exp.description}
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
-                      )}
-                    </TableRow>
-                  ))}
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "rounded-full",
+                              getCatMeta(exp.category).className
+                            )}
+                          >
+                            {getCatMeta(exp.category).icon}
+                            {getCatMeta(exp.category).label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right text-sm tabular-nums text-muted-foreground">
+                          {formatQuantity(exp.quantity, exp.unit) || "—"}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold tabular-nums">
+                          {formatINR(exp.amount)}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {formatDate(exp.expenseDate)}
+                        </TableCell>
+                        {isAdmin && (
+                          <TableCell className="text-right pr-4">
+                            {locked ? (
+                              <Badge
+                                variant="outline"
+                                className="rounded-full bg-muted/60 text-muted-foreground border-border/60"
+                              >
+                                🔒 Locked
+                              </Badge>
+                            ) : (
+                              <div className="flex items-center justify-end gap-1">
+                                <GlassButton
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => openEditForm(exp)}
+                                  aria-label="Edit expense"
+                                >
+                                  <PencilLine className="h-4 w-4" />
+                                </GlassButton>
+                                <GlassButton
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => setDeleteTarget(exp)}
+                                  aria-label="Delete expense"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </GlassButton>
+                              </div>
+                            )}
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </GlassCard>
@@ -571,12 +652,13 @@ export function ExpensesView() {
         )}
       </StaggerItem>
 
-      {/* Add Expense Sheet */}
-      <AddExpenseSheet
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        onSubmit={(payload) => addMutation.mutate(payload)}
-        loading={addMutation.isPending}
+      {/* Add/Edit Expense Sheet */}
+      <ExpenseFormSheet
+        open={formOpen}
+        onOpenChange={(o) => !o && closeForm()}
+        onSubmit={handleSubmit}
+        loading={addMutation.isPending || editMutation.isPending}
+        expense={editTarget}
       />
 
       {/* Delete confirm */}
@@ -675,14 +757,18 @@ function KpiCard({
 
 function ExpenseCard({
   expense,
-  canDelete,
+  canManage,
+  onEdit,
   onDelete,
 }: {
   expense: Expense;
-  canDelete: boolean;
+  canManage: boolean;
+  onEdit: () => void;
   onDelete: () => void;
 }) {
   const meta = getCatMeta(expense.category);
+  const locked = isExpenseLocked(expense);
+  const qty = formatQuantity(expense.quantity, expense.unit);
   return (
     <motion.div
       whileTap={{ scale: 0.99 }}
@@ -705,19 +791,17 @@ function ExpenseCard({
           {meta.label}
         </Badge>
       </div>
-      <div className="flex items-end justify-between">
+      <div className="flex items-end justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] text-muted-foreground uppercase">Amount</p>
+          <p className="text-[10px] text-muted-foreground uppercase">Cost</p>
           <p className="text-2xl font-bold tabular-nums">
             {formatINR(expense.amount)}
           </p>
         </div>
-        {expense.paidTo && (
+        {qty && (
           <div className="text-right shrink-0">
-            <p className="text-[10px] text-muted-foreground uppercase">Paid To</p>
-            <p className="text-sm font-medium truncate max-w-[140px]">
-              {expense.paidTo}
-            </p>
+            <p className="text-[10px] text-muted-foreground uppercase">Qty</p>
+            <p className="text-sm font-semibold tabular-nums">{qty}</p>
           </div>
         )}
       </div>
@@ -726,17 +810,32 @@ function ExpenseCard({
           {expense.description}
         </p>
       )}
-      {canDelete && (
-        <div className="mt-3 flex justify-end">
-          <GlassButton
-            variant="ghost"
-            size="sm"
-            className="text-destructive"
-            onClick={onDelete}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Delete
-          </GlassButton>
+      {canManage && (
+        <div className="mt-3 flex items-center justify-end gap-2">
+          {locked ? (
+            <Badge
+              variant="outline"
+              className="rounded-full bg-muted/60 text-muted-foreground border-border/60"
+            >
+              🔒 Locked
+            </Badge>
+          ) : (
+            <>
+              <GlassButton variant="ghost" size="sm" onClick={onEdit}>
+                <PencilLine className="h-3.5 w-3.5" />
+                Edit
+              </GlassButton>
+              <GlassButton
+                variant="ghost"
+                size="sm"
+                className="text-destructive"
+                onClick={onDelete}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </GlassButton>
+            </>
+          )}
         </div>
       )}
     </motion.div>
@@ -744,198 +843,285 @@ function ExpenseCard({
 }
 
 // ─────────────────────────────────────────────────────────────
-// Add Expense Sheet
+// Add / Edit Expense Sheet
 // ─────────────────────────────────────────────────────────────
 
-function AddExpenseSheet({
+function ExpenseFormSheet({
   open,
   onOpenChange,
   onSubmit,
   loading,
+  expense,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  onSubmit: (payload: {
-    title: string;
-    amount: number;
-    category: ExpenseCategory;
-    expenseDate: string;
-    paidTo?: string;
-    description?: string;
-  }) => void;
+  onSubmit: (payload: ExpensePayload, id?: string) => void;
   loading: boolean;
+  expense: Expense | null;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
-  const [title, setTitle] = useState("");
-  const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState<ExpenseCategory>("GROCERY");
-  const [customCategory, setCustomCategory] = useState("");
-  const [date, setDate] = useState(today);
-  const [paidTo, setPaidTo] = useState("");
-  const [description, setDescription] = useState("");
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  function reset() {
-    setTitle("");
-    setAmount("");
-    setCategory("GROCERY");
-    setCustomCategory("");
-    setDate(today);
-    setPaidTo("");
-    setDescription("");
-    setErrors({});
-  }
-
-  function handleClose(o: boolean) {
-    if (!o) reset();
-    onOpenChange(o);
-  }
-
-  function handleSubmit() {
-    const next: Record<string, string> = {};
-    if (!title.trim() || title.trim().length < 2) next.title = "Title is required";
-    const amt = parseFloat(amount);
-    if (!amt || amt <= 0) next.amount = "Enter a valid amount";
-    if (!date) next.date = "Date is required";
-    if (category === "CUSTOM" && customCategory.trim().length < 2) {
-      next.customCategory = "Enter a custom category name";
-    }
-    setErrors(next);
-    if (Object.keys(next).length > 0) return;
-
-    const finalCategory = category === "CUSTOM" ? customCategory.trim().toUpperCase().replace(/\s+/g, "_") : category;
-
-    onSubmit({
-      title: title.trim(),
-      amount: amt,
-      category: finalCategory,
-      expenseDate: new Date(date).toISOString(),
-      paidTo: paidTo.trim() || undefined,
-      description: description.trim() || undefined,
-    });
-  }
-
+  // A `key` based on the editing target forces the body to remount whenever
+  // the user switches between add / edit / a different expense. Combined with
+  // the Sheet unmounting its content when closed, this means each open starts
+  // with fresh state initialized from the `expense` prop — no useEffect sync
+  // needed (which would trigger cascading renders per the react-hooks rule).
+  const bodyKey = expense ? `edit-${expense.id}` : "add";
   return (
-    <Sheet open={open} onOpenChange={handleClose}>
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
         className="w-full sm:max-w-md flex flex-col gap-0 p-0"
       >
-        <SheetHeader className="px-6 pt-6 pb-2">
-          <SheetTitle className="flex items-center gap-2 text-xl">
-            <PencilLine className="h-5 w-5 text-primary" />
-            Add Expense
-          </SheetTitle>
-          <SheetDescription>
-            Record a new operational expense. It will be visible immediately.
-          </SheetDescription>
-        </SheetHeader>
+        <ExpenseFormBody
+          key={bodyKey}
+          expense={expense}
+          onSubmit={onSubmit}
+          loading={loading}
+          onCancel={() => onOpenChange(false)}
+        />
+      </SheetContent>
+    </Sheet>
+  );
+}
 
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3 no-scrollbar">
-          <GlassInput
-            label="Title"
-            placeholder="e.g. Monthly groceries"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            error={errors.title}
-            icon={<Receipt />}
-          />
+function ExpenseFormBody({
+  expense,
+  onSubmit,
+  loading,
+  onCancel,
+}: {
+  expense: Expense | null;
+  onSubmit: (payload: ExpensePayload, id?: string) => void;
+  loading: boolean;
+  onCancel: () => void;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const isEdit = !!expense;
 
-          <div className="grid grid-cols-2 gap-3">
+  // Derive initial category (predefined or CUSTOM) from the expense.
+  const initialCategory: ExpenseCategory = (() => {
+    if (!expense?.category) return "GROCERY";
+    if (
+      CATEGORY_ORDER.includes(expense.category as ExpenseCategory) &&
+      expense.category !== "CUSTOM"
+    ) {
+      return expense.category as ExpenseCategory;
+    }
+    return "CUSTOM";
+  })();
+  const initialCustomCategory =
+    initialCategory === "CUSTOM" ? expense?.category ?? "" : "";
+
+  // Derive initial unit (predefined or CUSTOM) from the expense.
+  const initialUnit: string = (() => {
+    if (!expense?.unit) return "piece";
+    if (UNIT_OPTIONS.includes(expense.unit)) return expense.unit;
+    return "CUSTOM";
+  })();
+  const initialCustomUnit = initialUnit === "CUSTOM" ? expense?.unit ?? "" : "";
+
+  const [title, setTitle] = useState(expense?.title ?? "");
+  const [amount, setAmount] = useState(
+    expense?.amount ? String(expense.amount) : ""
+  );
+  const [quantity, setQuantity] = useState(
+    expense?.quantity ? String(expense.quantity) : ""
+  );
+  const [category, setCategory] = useState<ExpenseCategory>(initialCategory);
+  const [customCategory, setCustomCategory] = useState(initialCustomCategory);
+  const [unit, setUnit] = useState<string>(initialUnit);
+  const [customUnit, setCustomUnit] = useState(initialCustomUnit);
+  const [date, setDate] = useState(
+    expense
+      ? new Date(expense.expenseDate).toISOString().slice(0, 10)
+      : today
+  );
+  const [description, setDescription] = useState(expense?.description ?? "");
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  function handleSubmit() {
+    const next: Record<string, string> = {};
+    if (!title.trim() || title.trim().length < 2) next.title = "Item name is required";
+    const amt = parseFloat(amount);
+    if (!amt || amt <= 0) next.amount = "Enter a valid cost";
+    if (!date) next.date = "Date is required";
+    if (category === "CUSTOM" && customCategory.trim().length < 2) {
+      next.customCategory = "Enter a custom category name";
+    }
+    const qty = quantity ? parseFloat(quantity) : 0;
+    if (quantity && (!qty || qty <= 0)) next.quantity = "Enter a valid quantity";
+    if (unit === "CUSTOM" && customUnit.trim().length < 1) {
+      next.customUnit = "Enter a custom unit";
+    }
+    setErrors(next);
+    if (Object.keys(next).length > 0) return;
+
+    const finalCategory =
+      category === "CUSTOM"
+        ? customCategory.trim().toUpperCase().replace(/\s+/g, "_")
+        : category;
+    const finalUnit = unit === "CUSTOM" ? customUnit.trim() : unit;
+
+    onSubmit(
+      {
+        title: title.trim(),
+        amount: amt,
+        category: finalCategory,
+        quantity: qty || 0,
+        unit: finalUnit,
+        expenseDate: new Date(date).toISOString(),
+        description: description.trim() || undefined,
+      },
+      isEdit ? expense!.id : undefined
+    );
+  }
+
+  return (
+    <>
+      <SheetHeader className="px-6 pt-6 pb-2">
+        <SheetTitle className="flex items-center gap-2 text-xl">
+          <PencilLine className="h-5 w-5 text-primary" />
+          {isEdit ? "Edit Expense" : "Add Expense"}
+        </SheetTitle>
+        <SheetDescription>
+          {isEdit
+            ? "Update the details of this expense."
+            : "Record a new operational expense. It will be visible immediately."}
+        </SheetDescription>
+      </SheetHeader>
+
+      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3 no-scrollbar">
+        <GlassInput
+          label="Item"
+          placeholder="e.g. Monthly groceries"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          error={errors.title}
+          icon={<Receipt />}
+        />
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground ml-1">
+            Category
+          </label>
+          <Select
+            value={category}
+            onValueChange={(v) => setCategory(v as ExpenseCategory)}
+          >
+            <SelectTrigger className="w-full h-11 rounded-2xl">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CATEGORY_ORDER.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {CATEGORY_META[c].label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {category === "CUSTOM" && (
             <GlassInput
-              label="Amount (₹)"
-              type="number"
-              inputMode="decimal"
-              placeholder="0.00"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              error={errors.amount}
-              icon={<IndianRupee />}
+              placeholder="Enter custom category name…"
+              value={customCategory}
+              onChange={(e) => setCustomCategory(e.target.value)}
+              error={errors.customCategory}
+              icon={<PencilLine className="h-4 w-4" />}
             />
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground ml-1">
-                Category
-              </label>
-              <Select
-                value={category}
-                onValueChange={(v) => setCategory(v as ExpenseCategory)}
-              >
-                <SelectTrigger className="w-full h-11 rounded-2xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORY_ORDER.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {CATEGORY_META[c].label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {category === "CUSTOM" && (
-                <GlassInput
-                  placeholder="Enter custom category name…"
-                  value={customCategory}
-                  onChange={(e) => setCustomCategory(e.target.value)}
-                  error={errors.customCategory}
-                  icon={<PencilLine className="h-4 w-4" />}
-                />
-              )}
-            </div>
-          </div>
+          )}
+        </div>
 
+        <div className="grid grid-cols-2 gap-3">
+          <GlassInput
+            label="Quantity"
+            type="number"
+            inputMode="decimal"
+            placeholder="0"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            error={errors.quantity}
+          />
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground ml-1">
-              Date
+              Unit
             </label>
-            <GlassInput
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              error={errors.date}
-              icon={<Calendar />}
-            />
+            <Select value={unit} onValueChange={(v) => setUnit(v)}>
+              <SelectTrigger className="w-full h-11 rounded-2xl">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {UNIT_OPTIONS.map((u) => (
+                  <SelectItem key={u} value={u}>
+                    {u}
+                  </SelectItem>
+                ))}
+                <SelectItem value="CUSTOM">Custom</SelectItem>
+              </SelectContent>
+            </Select>
+            {unit === "CUSTOM" && (
+              <GlassInput
+                placeholder="Enter custom unit…"
+                value={customUnit}
+                onChange={(e) => setCustomUnit(e.target.value)}
+                error={errors.customUnit}
+                icon={<PencilLine className="h-4 w-4" />}
+              />
+            )}
           </div>
+        </div>
 
+        <GlassInput
+          label="Cost (₹)"
+          type="number"
+          inputMode="decimal"
+          placeholder="0.00"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          error={errors.amount}
+          icon={<IndianRupee />}
+        />
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground ml-1">
+            Date
+          </label>
           <GlassInput
-            label="Paid To (optional)"
-            placeholder="Vendor / Person"
-            value={paidTo}
-            onChange={(e) => setPaidTo(e.target.value)}
-            icon={<User />}
-          />
-
-          <GlassTextarea
-            label="Description (optional)"
-            placeholder="Add any notes about this expense…"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={3}
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            error={errors.date}
+            icon={<Calendar />}
           />
         </div>
 
-        <SheetFooter className="px-6 py-4 border-t border-border/40 flex-row gap-2">
-          <GlassButton
-            variant="ghost"
-            className="flex-1"
-            onClick={() => handleClose(false)}
-          >
-            Cancel
-          </GlassButton>
-          <GlassButton
-            className="flex-1"
-            onClick={handleSubmit}
-            loading={loading}
-          >
+        <GlassTextarea
+          label="Notes (optional)"
+          placeholder="Add any notes about this expense…"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={3}
+        />
+      </div>
+
+      <SheetFooter className="px-6 py-4 border-t border-border/40 flex-row gap-2">
+        <GlassButton variant="ghost" className="flex-1" onClick={onCancel}>
+          Cancel
+        </GlassButton>
+        <GlassButton
+          className="flex-1"
+          onClick={handleSubmit}
+          loading={loading}
+        >
+          {isEdit ? (
+            <PencilLine className="h-4 w-4" />
+          ) : (
             <Plus className="h-4 w-4" />
-            Add Expense
-          </GlassButton>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+          )}
+          {isEdit ? "Save Changes" : "Add Expense"}
+        </GlassButton>
+      </SheetFooter>
+    </>
   );
 }
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────
-

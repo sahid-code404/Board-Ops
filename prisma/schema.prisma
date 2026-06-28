@@ -348,15 +348,17 @@ model Payment {
 
 model Expense {
   id           String   @id @default(cuid())
-  title        String
-  description  String?
-  category     String   @default("GENERAL") // GROCERY | UTILITIES | SALARY | MAINTENANCE | GENERAL
-  amount       Float
+  title        String   // Item name
+  description  String?  // Notes (optional)
+  category     String   @default("GENERAL")
+  quantity     Float    @default(1)
+  unit         String   @default("piece") // kg | gm | piece | litre | custom
+  amount       Float    // total cost
   currency     String   @default("INR")
   expenseDate  DateTime
   paidTo       String?
   receiptUrl   String?
-  status       String   @default("APPROVED")
+  status       String   @default("APPROVED") // APPROVED | LOCKED
   createdBy    String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
