@@ -352,7 +352,7 @@ export function ProfileView() {
               {
                 icon: Palette,
                 label: "Theme",
-                value: (me.theme || resolvedTheme || "system") === "dark" ? "Dark" : (me.theme || resolvedTheme) === "light" ? "Light" : "System",
+                value: me.theme === "dark" ? "Dark" : me.theme === "light" ? "Light" : "System",
               },
               { icon: Languages, label: "Language", value: LANGUAGES.find((l) => l.value === (me.language || "en"))?.label || "English" },
               { icon: Globe, label: "Timezone", value: me.timezone || "UTC" },
@@ -397,6 +397,7 @@ export function ProfileView() {
         open={editOpen}
         onOpenChange={setEditOpen}
         user={me}
+        setTheme={setTheme}
         onUpdated={(updated) => {
           setUser({ ...me, ...updated });
           qc.invalidateQueries({ queryKey: ["auth", "me"] });
@@ -617,11 +618,13 @@ function EditProfileDialog({
   onOpenChange,
   user,
   onUpdated,
+  setTheme,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   user: MeUser;
   onUpdated: (u: Partial<MeUser>) => void;
+  setTheme: (t: string) => void;
 }) {
   const qc = useQueryClient();
   const isMobile = useIsMobile();
@@ -671,6 +674,8 @@ function EditProfileDialog({
       });
       onUpdated(res.data);
       qc.invalidateQueries({ queryKey: ["auth", "me"] });
+      // Apply theme change immediately
+      if (form.theme) setTheme(form.theme);
       toast.success("Profile updated successfully");
       onOpenChange(false);
     } catch (e: unknown) {

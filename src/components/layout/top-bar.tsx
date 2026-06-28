@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Search, Sun, Moon, Menu } from "lucide-react";
+import { Bell, Search, Sun, Moon, Menu, Monitor, Check } from "lucide-react";
 import { useTheme } from "next-themes";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
@@ -11,6 +11,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { NAV_LABELS } from "./nav-config";
 import { api } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
+import { useState, useRef, useEffect } from "react";
 
 const AVATAR_GRADIENTS = [
   "from-violet-500 to-fuchsia-500",
@@ -122,16 +123,8 @@ export function TopBar() {
           </kbd>
         </GlassButton>
 
-        {/* Theme toggle */}
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={() => setTheme(isDark ? "light" : "dark")}
-          aria-label="Toggle theme"
-          suppressHydrationWarning
-          className="grid place-items-center h-10 w-10 rounded-2xl glass-soft text-foreground hover:text-primary transition-colors shrink-0"
-        >
-          {isDark ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
-        </motion.button>
+        {/* Theme switcher — overlay with Light/Dark/System */}
+        <ThemeSwitcher isDark={isDark} onThemeChange={setTheme} currentTheme={resolvedTheme || "system"} />
 
         {/* Notifications — routes to notifications page, shows unread count badge */}
         <motion.button
@@ -194,5 +187,83 @@ export function TopBar() {
         </motion.button>
       </div>
     </header>
+  );
+}
+
+function ThemeSwitcher({
+  isDark,
+  onThemeChange,
+  currentTheme,
+}: {
+  isDark: boolean;
+  onThemeChange: (t: string) => void;
+  currentTheme: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    if (open) {
+      document.addEventListener("mousedown", handleClick);
+      return () => document.removeEventListener("mousedown", handleClick);
+    }
+  }, [open]);
+
+  const options = [
+    { value: "light", label: "Light", icon: Sun },
+    { value: "dark", label: "Dark", icon: Moon },
+    { value: "system", label: "System", icon: Monitor },
+  ];
+
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <motion.button
+        whileTap={{ scale: 0.9 }}
+        onClick={() => setOpen(!open)}
+        aria-label="Theme switcher"
+        suppressHydrationWarning
+        className="grid place-items-center h-10 w-10 rounded-2xl glass-soft text-foreground hover:text-primary transition-colors"
+      >
+        {isDark ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+      </motion.button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: -8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: -8 }}
+            transition={{ type: "spring", stiffness: 400, damping: 28 }}
+            className="absolute right-0 top-12 z-50 glass-strong rounded-2xl p-1.5 min-w-[140px] shadow-xl"
+          >
+            {options.map((opt) => {
+              const active = currentTheme === opt.value;
+              const Icon = opt.icon;
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => {
+                    onThemeChange(opt.value);
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-colors",
+                    active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span className="flex-1 text-left">{opt.label}</span>
+                  {active && <Check className="h-4 w-4" />}
+                </button>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
