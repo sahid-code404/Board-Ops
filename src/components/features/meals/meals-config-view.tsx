@@ -13,6 +13,7 @@ import {
   Search,
   Pencil,
   Trash2,
+  Archive,
   Clock,
   ShieldCheck,
   AlertCircle,
@@ -84,7 +85,7 @@ type MealConfiguration = {
   icon: string;
   color: string;
   mealType: string; // REGULAR | SPECIAL | GUEST_ONLY | FESTIVAL | CUSTOM
-  status: string; // ACTIVE | INACTIVE
+  status: string; // ACTIVE | INACTIVE | ARCHIVED
   displayOrder: number;
   defaultState: string; // ON | OFF
   defaultVisibility: string; // VISIBLE | HIDDEN
@@ -616,11 +617,15 @@ function MealConfigCard({
   isAdmin,
   onEdit,
   onDelete,
+  onStatusChange,
+  statusLoading,
 }: {
   meal: MealConfiguration;
   isAdmin: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  onStatusChange: (status: string) => void;
+  statusLoading?: boolean;
 }) {
   const cutoffPreview = computeCutoffPreview(
     meal.cutoffStrategy,
@@ -628,6 +633,7 @@ function MealConfigCard({
     meal.cutoffOffsetMinutes
   );
   const inactive = meal.status === "INACTIVE";
+  const archived = meal.status === "ARCHIVED";
 
   return (
     <motion.div
@@ -676,7 +682,11 @@ function MealConfigCard({
 
         {/* Status badges */}
         <div className="flex items-center gap-1.5 flex-wrap mb-3">
-          {inactive ? (
+          {archived ? (
+            <Badge variant="secondary" className="text-[10px] bg-muted text-muted-foreground">
+              <Archive className="h-2.5 w-2.5" /> Archived
+            </Badge>
+          ) : inactive ? (
             <Badge variant="secondary" className="text-[10px]">
               Inactive
             </Badge>
@@ -726,23 +736,58 @@ function MealConfigCard({
 
         {/* Actions */}
         {isAdmin && (
-          <div className="mt-auto flex items-center gap-2">
-            <GlassButton
-              variant="secondary"
-              size="sm"
-              className="flex-1"
-              onClick={onEdit}
+          <div className="mt-auto space-y-2">
+            {/* Status selector */}
+            <Select
+              value={meal.status}
+              onValueChange={(v) => onStatusChange(v)}
+              disabled={statusLoading}
             >
-              <Pencil className="h-3.5 w-3.5" /> Edit
-            </GlassButton>
-            <GlassButton
-              variant="ghost"
-              size="sm"
-              onClick={onDelete}
-              className="text-destructive hover:text-destructive hover:bg-destructive/10"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </GlassButton>
+              <SelectTrigger className="h-9 rounded-xl glass-soft border-0 text-xs w-full">
+                <div className="flex items-center gap-1.5">
+                  {meal.status === "ACTIVE" && <ShieldCheck className="h-3 w-3 text-success" />}
+                  {meal.status === "INACTIVE" && <EyeOff className="h-3 w-3 text-muted-foreground" />}
+                  {meal.status === "ARCHIVED" && <Archive className="h-3 w-3 text-muted-foreground" />}
+                  <SelectValue />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ACTIVE">
+                  <span className="flex items-center gap-2">
+                    <ShieldCheck className="h-3.5 w-3.5 text-success" /> Active
+                  </span>
+                </SelectItem>
+                <SelectItem value="INACTIVE">
+                  <span className="flex items-center gap-2">
+                    <EyeOff className="h-3.5 w-3.5 text-muted-foreground" /> Inactive
+                  </span>
+                </SelectItem>
+                <SelectItem value="ARCHIVED">
+                  <span className="flex items-center gap-2">
+                    <Archive className="h-3.5 w-3.5 text-muted-foreground" /> Archived
+                  </span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            {/* Edit + Delete */}
+            <div className="flex items-center gap-2">
+              <GlassButton
+                variant="secondary"
+                size="sm"
+                className="flex-1"
+                onClick={onEdit}
+              >
+                <Pencil className="h-3.5 w-3.5" /> Edit
+              </GlassButton>
+              <GlassButton
+                variant="ghost"
+                size="sm"
+                onClick={onDelete}
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </GlassButton>
+            </div>
           </div>
         )}
       </GlassCard>
@@ -853,6 +898,28 @@ export function MealsConfigView() {
     },
   });
 
+  const statusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const res = await api.put<{ success: boolean; data: MealConfiguration }>(
+        `/meals/config/${id}`,
+        { status }
+      );
+      return res.data;
+    },
+    onSuccess: (_, { status }) => {
+      const label = status === "ACTIVE" ? "activated" : status === "INACTIVE" ? "deactivated" : "archived";
+      toast.success(`Meal ${label}`);
+      qc.invalidateQueries({ queryKey });
+    },
+    onError: (e) => {
+      toast.error(
+        e instanceof ApiError
+          ? e.message
+          : "Failed to update meal status. Please try again."
+      );
+    },
+  });
+
   const handleSubmit = (v: MealFormValues) => {
     if (editing) {
       updateMutation.mutate({ id: editing.id, values: v });
@@ -926,6 +993,7 @@ export function MealsConfigView() {
             <SelectItem value="ALL">All status</SelectItem>
             <SelectItem value="ACTIVE">Active</SelectItem>
             <SelectItem value="INACTIVE">Inactive</SelectItem>
+            <SelectItem value="ARCHIVED">Archived</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -1059,6 +1127,13 @@ export function MealsConfigView() {
                       isAdmin={!!isAdmin}
                       onEdit={() => openEdit(m)}
                       onDelete={() => setDeleteTarget(m)}
+                      onStatusChange={(status) =>
+                        statusMutation.mutate({ id: m.id, status })
+                      }
+                      statusLoading={
+                        statusMutation.isPending &&
+                        statusMutation.variables?.id === m.id
+                      }
                     />
                   </StaggerItem>
                 ))}

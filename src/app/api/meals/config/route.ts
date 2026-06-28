@@ -7,9 +7,10 @@ import { z } from "zod";
 export async function GET() {
   try {
     const user = await requireAuth();
+    // Admins see all meals (including archived); users see only active
     const meals = await db.mealConfiguration.findMany({
-      where: { status: { not: "ARCHIVED" } },
-      orderBy: [{ displayOrder: "asc" }, { createdAt: "asc" }],
+      where: user.role === "ADMIN" ? undefined : { status: "ACTIVE" },
+      orderBy: [{ status: "asc" }, { displayOrder: "asc" }, { createdAt: "asc" }],
     });
     return ok(meals);
   } catch (e) {
