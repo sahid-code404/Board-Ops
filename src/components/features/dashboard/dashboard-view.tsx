@@ -11,6 +11,8 @@ import { useAppStore } from "@/stores/use-app-store";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { Users, Utensils, Wallet, Receipt, TrendingUp, TrendingDown, Bell, ArrowUpRight, Activity, Clock } from "lucide-react";
 import { motion } from "framer-motion";
+import { getTimeGreeting, getGradientForName } from "@/lib/greetings";
+import { cn } from "@/lib/utils";
 
 type DashboardData = {
   todayMeals: Array<{
@@ -87,14 +89,18 @@ export function DashboardView() {
 
   return (
     <StaggerGroup className="space-y-4 md:space-y-5">
-      {/* Welcome — compact, no duplicate CTA */}
+      {/* Time-based greeting with gradient name */}
       <StaggerItem>
         <GlassCard className="p-4 md:p-6" hover={false} glow="primary">
-          <p className="text-xs text-muted-foreground mb-0.5">
+          <p className="text-xs text-muted-foreground mb-1">
             {new Date().toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long" })}
           </p>
-          <h2 className="text-xl md:text-2xl font-bold">
-            Welcome back, {user?.name.split(" ")[0]} 👋
+          <h2 className="text-xl md:text-3xl font-bold flex items-baseline gap-2 flex-wrap">
+            <span>{getTimeGreeting().greeting},</span>
+            <span className={cn("bg-gradient-to-r bg-clip-text text-transparent", getGradientForName(user?.name || "User"))}>
+              {user?.name.split(" ")[0]}
+            </span>
+            <span className="text-lg">{getTimeGreeting().emoji}</span>
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
             {data.isAdmin

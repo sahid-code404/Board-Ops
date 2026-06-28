@@ -12,6 +12,7 @@ import { api } from "@/lib/api-client";
 import { toast } from "sonner";
 import { z } from "zod";
 import { GlassNav } from "@/components/glass/glass-nav";
+import { getTimeGreeting } from "@/lib/greetings";
 
 const loginSchema = z.object({
   email: z.string().email("Enter a valid email"),
@@ -53,7 +54,7 @@ export function AuthScreen() {
         const res = await api.post<{ success: boolean; data: { token: string; user: any } }>("/auth/login", data);
         setToken(res.data.token);
         setUser(res.data.user);
-        toast.success(`Welcome back, ${res.data.user.name.split(" ")[0]}!`);
+        toast.success(`${getTimeGreeting().greeting}, ${res.data.user.name.split(" ")[0]}! ${getTimeGreeting().emoji}`);
       } else {
         const data = registerSchema.parse(form);
         await api.post("/auth/register", data);
