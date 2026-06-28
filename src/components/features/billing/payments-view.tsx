@@ -514,15 +514,10 @@ export function PaymentsView() {
         </div>
       </StaggerItem>
 
-      {/* Action bar */}
-      <StaggerItem>
-        <div className="flex items-center justify-end gap-3">
-          <p className="text-sm text-muted-foreground hidden sm:block">
-            {isAdmin
-              ? "Approve payments & track transactions"
-              : "Submit payments & track history"}
-          </p>
-          {!isAdmin && (
+      {/* Action bar — only for non-admins (who can submit payments) */}
+      {!isAdmin && (
+        <StaggerItem>
+          <div className="flex items-center justify-end gap-3">
             <GlassButton
               size="lg"
               onClick={() => setSubmitOpen(true)}
@@ -531,9 +526,9 @@ export function PaymentsView() {
               <Plus className="h-4 w-4" />
               Submit Payment
             </GlassButton>
-          )}
-        </div>
-      </StaggerItem>
+          </div>
+        </StaggerItem>
+      )}
 
       {/* KPIs */}
       <StaggerItem>

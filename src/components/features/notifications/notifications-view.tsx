@@ -156,11 +156,6 @@ export function NotificationsView() {
       {/* Action bar */}
       <StaggerItem>
         <div className="flex items-center justify-end gap-3">
-          <p className="text-sm text-muted-foreground hidden sm:block">
-            {unreadCount > 0
-              ? `${unreadCount} unread`
-              : "You're all caught up"}
-          </p>
           <GlassButton
             variant="secondary"
             size="sm"

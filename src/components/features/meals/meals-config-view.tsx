@@ -994,9 +994,6 @@ export function MealsConfigView() {
       {isAdmin && (
         <StaggerItem>
           <div className="flex items-center justify-end gap-3">
-            <p className="text-sm text-muted-foreground hidden sm:block">
-              Create & manage meal types
-            </p>
             <GlassButton onClick={openCreate} size="md" className="shrink-0">
               <Plus className="h-4 w-4" /> Create Meal
             </GlassButton>

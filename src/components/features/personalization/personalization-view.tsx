@@ -157,9 +157,6 @@ export function PersonalizationView() {
               </div>
               <div>
                 <h2 className="text-xl md:text-2xl font-bold">Personalization</h2>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  Customize the entire app's appearance for all users — accent colors, theme mode, and corner radius.
-                </p>
               </div>
             </div>
             <div className="flex gap-2">

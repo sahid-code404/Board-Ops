@@ -265,9 +265,6 @@ export function VariablesView() {
       {isAdmin && (
         <StaggerItem>
           <div className="flex items-center justify-end gap-3">
-            <p className="text-sm text-muted-foreground hidden sm:block">
-              Manage configurable values for the formula engine
-            </p>
             <GlassButton onClick={() => setCreateOpen(true)} className="shrink-0">
               <Plus className="h-4 w-4" />
               Create Variable

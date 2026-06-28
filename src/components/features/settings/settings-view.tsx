@@ -192,9 +192,6 @@ export function SettingsView() {
       {/* Action bar */}
       <StaggerItem>
         <div className="flex items-center justify-end gap-3">
-          <p className="text-sm text-muted-foreground hidden sm:block">
-            Manage configuration & feature flags
-          </p>
           <GlassButton variant="primary" size="md" onClick={() => setAddOpen(true)} className="shrink-0">
             <Plus className="h-4 w-4" />
             Add Setting
