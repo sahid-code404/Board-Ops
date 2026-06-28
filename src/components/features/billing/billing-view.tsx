@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
   Wallet,
@@ -17,6 +17,9 @@ import {
   Calendar,
   CheckCircle2,
   Clock,
+  Mail,
+  DoorOpen,
+  MoreVertical,
   IndianRupee,
   ChevronLeft,
   ChevronRight,
@@ -59,13 +62,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -586,142 +589,29 @@ export function BillingView() {
             </div>
           </GlassCard>
         ) : (
-          <>
-            {/* Mobile cards */}
-            <div className="md:hidden space-y-3">
-              <StaggerGroup className="space-y-3">
-                {filtered.map((bill) => (
-                  <StaggerItem key={bill.id}>
-                    <BillCard
-                      bill={bill}
-                      isAdmin={isAdmin}
-                      onView={() => setSelectedBill(bill)}
-                      onVoid={() => setVoidTarget(bill)}
-                      onDelete={() => setDeleteTarget(bill)}
-                      onRestore={() => restoreMutation.mutate(bill.id)}
-                    />
-                  </StaggerItem>
-                ))}
-              </StaggerGroup>
-            </div>
-
-            {/* Desktop table */}
-            <GlassCard className="hidden md:block p-2" hover={false}>
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-border/60">
-                    <TableHead className="pl-4">Resident</TableHead>
-                    <TableHead>Period</TableHead>
-                    <TableHead className="text-right">Meals</TableHead>
-                    <TableHead className="text-right">Other</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead className="text-right">Paid</TableHead>
-                    <TableHead className="text-right">Due</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Due Date</TableHead>
-                    <TableHead className="text-right pr-4">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.map((bill) => (
-                    <TableRow key={bill.id} className="border-border/40">
-                      <TableCell className="pl-4">
-                        <div className="flex items-center gap-2.5">
-                          <Avatar className="h-8 w-8 rounded-xl shrink-0">
-                            {bill.user.avatarUrl && <AvatarImage src={bill.user.avatarUrl} alt={bill.user.name} />}
-                            <AvatarFallback className={cn("rounded-xl bg-gradient-to-br text-white font-semibold text-[10px]", gradientFor(bill.user.name))}>
-                              {initials(bill.user.name) || "U"}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex flex-col">
-                            <span className="font-medium">{bill.user.name}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {bill.user.room ? `Room ${bill.user.room}` : bill.user.email}
-                            </span>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {formatMonthYear(bill.periodMonth, bill.periodYear)}
-                      </TableCell>
-                      <TableCell className="text-right text-sm tabular-nums">
-                        {formatINR(bill.mealCharges)}
-                      </TableCell>
-                      <TableCell className="text-right text-sm tabular-nums">
-                        {formatINR(bill.otherCharges)}
-                      </TableCell>
-                      <TableCell className="text-right font-semibold tabular-nums">
-                        {formatINR(bill.totalAmount)}
-                      </TableCell>
-                      <TableCell className="text-right text-sm text-success tabular-nums">
-                        {formatINR(bill.paidAmount)}
-                      </TableCell>
-                      <TableCell className="text-right text-sm text-warning tabular-nums">
-                        {formatINR(bill.dueAmount)}
-                      </TableCell>
-                      <TableCell>
-                        <BillStatusBadge status={bill.status} />
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {formatDate(bill.dueDate)}
-                      </TableCell>
-                      <TableCell className="pr-4">
-                        <div className="flex items-center justify-end gap-1">
-                          {bill.deletedAt ? (
-                            isAdmin && (
-                              <GlassButton
-                                variant="ghost"
-                                size="sm"
-                                className="text-success hover:text-success"
-                                onClick={() => restoreMutation.mutate(bill.id)}
-                                aria-label="Restore bill"
-                              >
-                                <RotateCcw className="h-3.5 w-3.5" />
-                                Restore
-                              </GlassButton>
-                            )
-                          ) : (
-                            <>
-                              <GlassButton
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => setSelectedBill(bill)}
-                                aria-label="View bill"
-                              >
-                                <Eye className="h-4 w-4" />
-                              </GlassButton>
-                              {isAdmin && bill.status !== "VOID" && (
-                                <GlassButton
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => setVoidTarget(bill)}
-                                  aria-label="Void bill"
-                                  className="text-destructive hover:text-destructive"
-                                >
-                                  <Ban className="h-4 w-4" />
-                                </GlassButton>
-                              )}
-                              {isAdmin && (
-                                <GlassButton
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => setDeleteTarget(bill)}
-                                  aria-label="Delete bill"
-                                  className="text-destructive hover:text-destructive"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </GlassButton>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </GlassCard>
-          </>
+          <div className="space-y-3">
+            <AnimatePresence mode="popLayout">
+              {filtered.map((bill) => (
+                <motion.div
+                  key={bill.id}
+                  layout
+                  initial={{ opacity: 0, y: 12, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ type: "spring", stiffness: 280, damping: 26 }}
+                >
+                  <BillRow
+                    bill={bill}
+                    isAdmin={isAdmin}
+                    onView={() => setSelectedBill(bill)}
+                    onVoid={() => setVoidTarget(bill)}
+                    onDelete={() => setDeleteTarget(bill)}
+                    onRestore={() => restoreMutation.mutate(bill.id)}
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
         )}
       </StaggerItem>
 
@@ -985,7 +875,7 @@ function KpiCard({
   );
 }
 
-function BillCard({
+function BillRow({
   bill,
   isAdmin,
   onView,
@@ -998,123 +888,125 @@ function BillCard({
   onView: () => void;
   onVoid: () => void;
   onDelete: () => void;
-  onRestore?: () => void;
+  onRestore: () => void;
 }) {
   const isDeleted = !!bill.deletedAt;
+
+  // Build the actions list — same shape as UserRow's `actions` array.
+  const actions: { label: string; icon: typeof Eye; onClick: () => void; variant?: "destructive" }[] = [];
+  if (isDeleted) {
+    if (isAdmin) {
+      actions.push({ label: "Restore Bill", icon: RotateCcw, onClick: onRestore });
+    }
+  } else {
+    actions.push({ label: "View Details", icon: Eye, onClick: onView });
+    if (isAdmin && bill.status !== "VOID") {
+      actions.push({ label: "Void Bill", icon: Ban, onClick: onVoid, variant: "destructive" });
+    }
+    if (isAdmin) {
+      actions.push({ label: "Delete Bill", icon: Trash2, onClick: onDelete, variant: "destructive" });
+    }
+  }
+
   return (
-    <motion.div
-      whileTap={{ scale: 0.99 }}
-      className={cn("glass rounded-3xl p-4", isDeleted ? "cursor-default opacity-75" : "cursor-pointer")}
-      onClick={isDeleted ? undefined : onView}
-    >
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          <Avatar className="h-10 w-10 rounded-2xl shrink-0">
-            {bill.user.avatarUrl && <AvatarImage src={bill.user.avatarUrl} alt={bill.user.name} />}
-            <AvatarFallback className={cn("rounded-2xl bg-gradient-to-br text-white font-semibold text-xs", gradientFor(bill.user.name))}>
-              {initials(bill.user.name) || "U"}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0">
-            <p className="font-semibold truncate">{bill.user.name}</p>
-            <p className="text-xs text-muted-foreground truncate">
-              {bill.user.room ? `Room ${bill.user.room}` : bill.user.email}
-            </p>
-            <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              {formatMonthYear(bill.periodMonth, bill.periodYear)}
-            </p>
-          </div>
-        </div>
-        {isDeleted ? (
-          <Badge variant="outline" className="text-[10px] bg-destructive/15 text-destructive border-destructive/30 shrink-0">
-            <Clock className="h-2.5 w-2.5" /> {formatDeletionCountdown(new Date(bill.deletedAt!))}
-          </Badge>
-        ) : (
-          <BillStatusBadge status={bill.status} />
-        )}
-      </div>
-      <div className="grid grid-cols-3 gap-2 text-center">
-        <div className="glass-soft rounded-2xl py-2">
-          <p className="text-[10px] text-muted-foreground uppercase">Total</p>
-          <p className="text-sm font-semibold tabular-nums">
-            {formatINR(bill.totalAmount)}
-          </p>
-        </div>
-        <div className="glass-soft rounded-2xl py-2">
-          <p className="text-[10px] text-muted-foreground uppercase">Paid</p>
-          <p className="text-sm font-semibold text-success tabular-nums">
-            {formatINR(bill.paidAmount)}
-          </p>
-        </div>
-        <div className="glass-soft rounded-2xl py-2">
-          <p className="text-[10px] text-muted-foreground uppercase">Due</p>
-          <p className="text-sm font-semibold text-warning tabular-nums">
-            {formatINR(bill.dueAmount)}
-          </p>
-        </div>
-      </div>
-      <div className="flex items-center justify-between mt-3">
-        {isDeleted ? (
-          <div className="flex flex-col gap-0.5">
-            <span className="text-xs text-destructive/80 flex items-center gap-1">
-              <AlertTriangle className="h-3 w-3" />
-              Scheduled for deletion
-            </span>
-            {bill.deletionReason && (
-              <span className="text-[10px] text-destructive/60 truncate max-w-[150px]">
-                Reason: {bill.deletionReason}
-              </span>
+    <GlassCard className="p-4 md:p-5" hover={false}>
+      <div className="flex items-start gap-3 md:gap-4">
+        <Avatar className="h-12 w-12 md:h-14 md:w-14 rounded-2xl shrink-0">
+          {bill.user.avatarUrl && <AvatarImage src={bill.user.avatarUrl} alt={bill.user.name} />}
+          <AvatarFallback className={cn("rounded-2xl bg-gradient-to-br text-white font-semibold", gradientFor(bill.user.name))}>
+            {initials(bill.user.name) || "U"}
+          </AvatarFallback>
+        </Avatar>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className={cn("font-semibold truncate", isDeleted && "text-muted-foreground line-through")}>
+                  {bill.user.name}
+                </h3>
+                {isDeleted ? (
+                  <Badge variant="outline" className="text-[10px] bg-destructive/15 text-destructive border-destructive/30">
+                    <Clock className="h-2.5 w-2.5" /> {formatDeletionCountdown(new Date(bill.deletedAt!))}
+                  </Badge>
+                ) : (
+                  <>
+                    <Badge variant="outline" className={cn("text-[10px]", BILL_STATUS_STYLES[bill.status].className)}>
+                      {BILL_STATUS_STYLES[bill.status].label}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px] bg-muted text-muted-foreground border-border">
+                      <Calendar className="h-2.5 w-2.5" /> {formatMonthYear(bill.periodMonth, bill.periodYear)}
+                    </Badge>
+                  </>
+                )}
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-x-3 gap-y-0.5 mt-1.5 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1 truncate">
+                  <Mail className="h-3 w-3" /> {bill.user.email}
+                </span>
+                {bill.user.room && (
+                  <span className="inline-flex items-center gap-1">
+                    <DoorOpen className="h-3 w-3" /> Room {bill.user.room}
+                  </span>
+                )}
+                {!isDeleted && (
+                  <span className="inline-flex items-center gap-1">
+                    <Clock className="h-3 w-3" /> Due {formatDate(bill.dueDate)}
+                  </span>
+                )}
+              </div>
+              {/* Total / Paid / Due inline — like the KPI strip */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-muted-foreground">
+                <span>
+                  Total <span className="font-semibold text-foreground tabular-nums">{formatINR(bill.totalAmount)}</span>
+                </span>
+                <span>
+                  Paid <span className="font-semibold text-success tabular-nums">{formatINR(bill.paidAmount)}</span>
+                </span>
+                <span>
+                  Due <span className="font-semibold text-warning tabular-nums">{formatINR(bill.dueAmount)}</span>
+                </span>
+                {bill.deletedAt && bill.deletionReason && (
+                  <span className="inline-flex items-start gap-1 text-destructive/80">
+                    <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                    Reason: {bill.deletionReason}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Dropdown — only render if there are actions */}
+            {actions.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <GlassButton variant="ghost" size="icon" className="shrink-0" aria-label="Bill actions">
+                    <MoreVertical className="h-4 w-4" />
+                  </GlassButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44 rounded-2xl">
+                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {actions.map((a) => {
+                    const Icon = a.icon;
+                    return (
+                      <DropdownMenuItem
+                        key={a.label}
+                        onClick={a.onClick}
+                        variant={a.variant}
+                        className="rounded-xl cursor-pointer"
+                      >
+                        <Icon className="h-4 w-4" />
+                        {a.label}
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
-        ) : (
-          <span className="text-xs text-muted-foreground flex items-center gap-1">
-            <Clock className="h-3 w-3" />
-            Due {formatDate(bill.dueDate)}
-          </span>
-        )}
-        <div className="flex items-center gap-1">
-          {isDeleted ? (
-            isAdmin && onRestore && (
-              <GlassButton
-                variant="ghost"
-                size="sm"
-                className="text-success hover:text-success"
-                onClick={(e) => { e.stopPropagation(); onRestore(); }}
-              >
-                <RotateCcw className="h-3.5 w-3.5" /> Restore
-              </GlassButton>
-            )
-          ) : (
-            <>
-              <GlassButton variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onView(); }}>
-                <Eye className="h-3.5 w-3.5" /> View
-              </GlassButton>
-              {isAdmin && bill.status !== "VOID" && (
-                <GlassButton
-                  variant="ghost"
-                  size="sm"
-                  className="text-destructive"
-                  onClick={(e) => { e.stopPropagation(); onVoid(); }}
-                >
-                  <Ban className="h-3.5 w-3.5" />
-                </GlassButton>
-              )}
-              {isAdmin && (
-                <GlassButton
-                  variant="ghost"
-                  size="sm"
-                  className="text-destructive"
-                  onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </GlassButton>
-              )}
-            </>
-          )}
         </div>
       </div>
-    </motion.div>
+    </GlassCard>
   );
 }
 

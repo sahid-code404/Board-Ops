@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
   Wallet,
@@ -20,6 +20,7 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  MoreVertical,
 } from "lucide-react";
 
 import { api } from "@/lib/api-client";
@@ -53,13 +54,13 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -177,6 +178,21 @@ const CATEGORY_ORDER: ExpenseCategory[] = [
   "GENERAL",
   "CUSTOM",
 ];
+
+/**
+ * Component lookup for category icons — used inside the larger avatar-style
+ * tile in `ExpenseRow` where the icon needs to render at h-5 w-5 (vs the
+ * pre-rendered h-3.5 w-3.5 element stored in CATEGORY_META.icon, which is sized
+ * for inline use in badges/pills).
+ */
+const CATEGORY_ICON_COMPONENTS: Record<string, typeof Boxes> = {
+  GROCERY: ShoppingBag,
+  UTILITIES: Zap,
+  SALARY: Users,
+  MAINTENANCE: Wrench,
+  GENERAL: Boxes,
+  CUSTOM: Plus,
+};
 
 const UNIT_OPTIONS = ["piece", "kg", "gm", "litre", "metre", "box", "dozen"];
 
@@ -544,111 +560,27 @@ export function ExpensesView() {
             </div>
           </GlassCard>
         ) : (
-          <>
-            {/* Mobile cards */}
-            <div className="md:hidden space-y-3">
-              <StaggerGroup className="space-y-3">
-                {filtered.map((exp) => (
-                  <StaggerItem key={exp.id}>
-                    <ExpenseCard
-                      expense={exp}
-                      canManage={isAdmin}
-                      onEdit={() => openEditForm(exp)}
-                      onDelete={() => setDeleteTarget(exp)}
-                    />
-                  </StaggerItem>
-                ))}
-              </StaggerGroup>
-            </div>
-
-            {/* Desktop table */}
-            <GlassCard className="hidden md:block p-2" hover={false}>
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-border/60">
-                    <TableHead className="pl-4">Item</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead className="text-right">Qty</TableHead>
-                    <TableHead className="text-right">Cost</TableHead>
-                    <TableHead>Date</TableHead>
-                    {isAdmin && <TableHead className="text-right pr-4">Actions</TableHead>}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.map((exp) => {
-                    const locked = isExpenseLocked(exp);
-                    return (
-                      <TableRow key={exp.id} className="border-border/40">
-                        <TableCell className="pl-4">
-                          <div className="flex flex-col">
-                            <span className="font-medium">{exp.title}</span>
-                            {exp.description && (
-                              <span className="text-xs text-muted-foreground line-clamp-1 max-w-[260px]">
-                                {exp.description}
-                              </span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "rounded-full",
-                              getCatMeta(exp.category).className
-                            )}
-                          >
-                            {getCatMeta(exp.category).icon}
-                            {getCatMeta(exp.category).label}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right text-sm tabular-nums text-muted-foreground">
-                          {formatQuantity(exp.quantity, exp.unit) || "—"}
-                        </TableCell>
-                        <TableCell className="text-right font-semibold tabular-nums">
-                          {formatINR(exp.amount)}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {formatDate(exp.expenseDate)}
-                        </TableCell>
-                        {isAdmin && (
-                          <TableCell className="text-right pr-4">
-                            {locked ? (
-                              <Badge
-                                variant="outline"
-                                className="rounded-full bg-muted/60 text-muted-foreground border-border/60"
-                              >
-                                🔒 Locked
-                              </Badge>
-                            ) : (
-                              <div className="flex items-center justify-end gap-1">
-                                <GlassButton
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => openEditForm(exp)}
-                                  aria-label="Edit expense"
-                                >
-                                  <PencilLine className="h-4 w-4" />
-                                </GlassButton>
-                                <GlassButton
-                                  variant="ghost"
-                                  size="icon"
-                                  className="text-destructive hover:text-destructive"
-                                  onClick={() => setDeleteTarget(exp)}
-                                  aria-label="Delete expense"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </GlassButton>
-                              </div>
-                            )}
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </GlassCard>
-          </>
+          <div className="space-y-3">
+            <AnimatePresence mode="popLayout">
+              {filtered.map((exp) => (
+                <motion.div
+                  key={exp.id}
+                  layout
+                  initial={{ opacity: 0, y: 12, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ type: "spring", stiffness: 280, damping: 26 }}
+                >
+                  <ExpenseRow
+                    expense={exp}
+                    canManage={isAdmin}
+                    onEdit={() => openEditForm(exp)}
+                    onDelete={() => setDeleteTarget(exp)}
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
         )}
       </StaggerItem>
 
@@ -755,7 +687,7 @@ function KpiCard({
   );
 }
 
-function ExpenseCard({
+function ExpenseRow({
   expense,
   canManage,
   onEdit,
@@ -769,76 +701,135 @@ function ExpenseCard({
   const meta = getCatMeta(expense.category);
   const locked = isExpenseLocked(expense);
   const qty = formatQuantity(expense.quantity, expense.unit);
+
+  // Build the actions list — same shape as UserRow's `actions` array.
+  const actions: {
+    label: string;
+    icon: typeof PencilLine;
+    onClick: () => void;
+    variant?: "destructive";
+  }[] = [];
+  if (canManage && !locked) {
+    actions.push({ label: "Edit Expense", icon: PencilLine, onClick: onEdit });
+    actions.push({
+      label: "Delete Expense",
+      icon: Trash2,
+      onClick: onDelete,
+      variant: "destructive",
+    });
+  }
+
+  const CatIcon = CATEGORY_ICON_COMPONENTS[expense.category] ?? Boxes;
+
   return (
-    <motion.div
-      whileTap={{ scale: 0.99 }}
-      className="glass rounded-3xl p-4 relative overflow-hidden"
-    >
-      <div
-        className="absolute inset-y-0 left-0 w-1"
-        style={{ background: meta.colorVar }}
-      />
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="min-w-0 flex-1">
-          <p className="font-semibold truncate">{expense.title}</p>
-          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-            <Calendar className="h-3 w-3" />
-            {formatDate(expense.expenseDate)}
-          </p>
+    <GlassCard className="p-4 md:p-5" hover={false}>
+      <div className="flex items-start gap-3 md:gap-4">
+        {/* Category icon tile (replaces avatar) */}
+        <div
+          className="grid place-items-center h-12 w-12 md:h-14 md:w-14 rounded-2xl shrink-0"
+          style={{
+            background: `color-mix(in oklch, ${meta.colorVar} 15%, transparent)`,
+            color: meta.colorVar,
+          }}
+        >
+          <CatIcon className="h-5 w-5" />
         </div>
-        <Badge variant="outline" className={cn("rounded-full", meta.className)}>
-          {meta.icon}
-          {meta.label}
-        </Badge>
-      </div>
-      <div className="flex items-end justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[10px] text-muted-foreground uppercase">Cost</p>
-          <p className="text-2xl font-bold tabular-nums">
-            {formatINR(expense.amount)}
-          </p>
-        </div>
-        {qty && (
-          <div className="text-right shrink-0">
-            <p className="text-[10px] text-muted-foreground uppercase">Qty</p>
-            <p className="text-sm font-semibold tabular-nums">{qty}</p>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3
+                  className={cn(
+                    "font-semibold truncate",
+                    locked && "text-muted-foreground"
+                  )}
+                >
+                  {expense.title}
+                </h3>
+                <Badge
+                  variant="outline"
+                  className={cn("text-[10px]", meta.className)}
+                >
+                  {meta.label}
+                </Badge>
+                {locked && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] bg-muted/60 text-muted-foreground border-border/60"
+                  >
+                    🔒 Locked
+                  </Badge>
+                )}
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-x-3 gap-y-0.5 mt-1.5 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1 truncate">
+                  <Calendar className="h-3 w-3" /> {formatDate(expense.expenseDate)}
+                </span>
+                {qty && (
+                  <span className="inline-flex items-center gap-1">
+                    <Boxes className="h-3 w-3" /> {qty}
+                  </span>
+                )}
+                {expense.user?.name && (
+                  <span className="inline-flex items-center gap-1">
+                    <Users className="h-3 w-3" /> {expense.user.name}
+                  </span>
+                )}
+              </div>
+              {expense.description && (
+                <p className="text-[11px] text-muted-foreground mt-1.5 line-clamp-1">
+                  {expense.description}
+                </p>
+              )}
+              {/* Cost inline */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-muted-foreground">
+                <span>
+                  Cost{" "}
+                  <span className="font-semibold text-foreground tabular-nums">
+                    {formatINR(expense.amount)}
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            {/* Dropdown — only render if there are actions */}
+            {actions.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <GlassButton
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0"
+                    aria-label="Expense actions"
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </GlassButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44 rounded-2xl">
+                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {actions.map((a) => {
+                    const Icon = a.icon;
+                    return (
+                      <DropdownMenuItem
+                        key={a.label}
+                        onClick={a.onClick}
+                        variant={a.variant}
+                        className="rounded-xl cursor-pointer"
+                      >
+                        <Icon className="h-4 w-4" />
+                        {a.label}
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
-        )}
-      </div>
-      {expense.description && (
-        <p className="mt-3 text-xs text-muted-foreground glass-soft rounded-2xl p-2.5 line-clamp-2">
-          {expense.description}
-        </p>
-      )}
-      {canManage && (
-        <div className="mt-3 flex items-center justify-end gap-2">
-          {locked ? (
-            <Badge
-              variant="outline"
-              className="rounded-full bg-muted/60 text-muted-foreground border-border/60"
-            >
-              🔒 Locked
-            </Badge>
-          ) : (
-            <>
-              <GlassButton variant="ghost" size="sm" onClick={onEdit}>
-                <PencilLine className="h-3.5 w-3.5" />
-                Edit
-              </GlassButton>
-              <GlassButton
-                variant="ghost"
-                size="sm"
-                className="text-destructive"
-                onClick={onDelete}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete
-              </GlassButton>
-            </>
-          )}
         </div>
-      )}
-    </motion.div>
+      </div>
+    </GlassCard>
   );
 }
 

@@ -692,3 +692,94 @@ Stage Summary:
 - KPIs simplified to remove the redundant in-month filter and now show 4 distinct status counts/sums for the selected day
 - All existing functionality (submit, approve/reject, RBAC gating, pending approvals card, dialog/sheet forms) preserved
 - Lint clean (0 errors)
+
+---
+Task ID: BILL-ROWS
+Agent: billing-rows-agent
+Task: Replace Billing list dual mobile/desktop split with a single Users-style BillRow list
+
+Work Log:
+- Read worklog.md (695 lines) tail for recent context (BILL-FIX, PAY-FIX, EXP-REWRITE, UX-1) — understood prior agents left a `md:hidden` mobile BillCard + `hidden md:block` desktop `<Table>` split on the Billing view that needed unification.
+- Studied the canonical Users row pattern in users-view.tsx lines 469-521 (list wrapper: `<div className="space-y-3">` + `<AnimatePresence mode="popLayout">` + per-row `motion.div` with `layout` + spring `initial/animate/exit`) and lines 779-921 (UserRow: `GlassCard p-4 md:p-5 hover={false}` + `flex items-start gap-3 md:gap-4` + avatar + name/badges/meta + MoreVertical `DropdownMenu` with `align="end" className="w-44 rounded-2xl"` + `DropdownMenuLabel`/`DropdownMenuSeparator` + mapped `DropdownMenuItem`).
+- Read billing-view.tsx end-to-end (1271 lines) to map imports, the list block (lines 588-725), the `BillCard` component (lines 988-1119), and confirm `BillDetail`, `KpiCard`, `Sparkles`, `BILL_STATUS_STYLES`, `BillStatusBadge` must be preserved.
+
+Changes to `src/components/features/billing/billing-view.tsx` (only file modified):
+1. Imports:
+   - Updated `import { motion } from "framer-motion";` → `import { motion, AnimatePresence } from "framer-motion";`
+   - Added `Mail`, `DoorOpen`, `MoreVertical` to the lucide-react block (inserted after `Clock`, before `IndianRupee`).
+   - Removed the `Table, TableBody, TableCell, TableHead, TableHeader, TableRow` import from `@/components/ui/table` (no longer used).
+   - Added the `DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel` import from `@/components/ui/dropdown-menu` (replacing the Table block).
+2. Replaced the dual list block (the `<>` fragment with `md:hidden` StaggerGroup of `BillCard` + `hidden md:block` GlassCard-wrapped `<Table>`) with a SINGLE unified list: `<div className="space-y-3">` → `<AnimatePresence mode="popLayout">` → `motion.div` per-row wrapper (layout + initial `{opacity:0,y:12,scale:0.98}` + animate `{opacity:1,y:0,scale:1}` + exit `{opacity:0,scale:0.95}` + spring transition `{type:"spring",stiffness:280,damping:26}`) → `<BillRow>`. No `md:hidden` / `hidden md:block` split remains.
+3. Deleted the old `BillCard` component (132 lines) and replaced it with a new `BillRow` component that mirrors `UserRow` exactly:
+   - Same outer `GlassCard className="p-4 md:p-5" hover={false}` + `flex items-start gap-3 md:gap-4`.
+   - Avatar `h-12 w-12 md:h-14 md:w-14 rounded-2xl shrink-0` with `AvatarImage` + `AvatarFallback` gradient (`gradientFor(bill.user.name)`) + `initials(bill.user.name)`.
+   - Header line: `<h3>` name (line-through + muted when deleted) + status `Badge` (`BILL_STATUS_STYLES[bill.status]`) + period `Badge` (Calendar icon + `formatMonthYear`). For deleted bills, replaces both with a destructive countdown badge (`formatDeletionCountdown`).
+   - Meta line: Mail icon + email + DoorOpen icon + Room + Clock icon + Due date (only when not deleted).
+   - Inline KPI strip: Total (foreground) / Paid (success) / Due (warning) using `formatINR` with `tabular-nums`, plus deletion reason (`AlertTriangle` icon) when applicable.
+   - Right side: `DropdownMenu` with `DropdownMenuTrigger asChild` wrapping `GlassButton variant="ghost" size="icon"` with `MoreVertical`, content `align="end" className="w-44 rounded-2xl"`, `DropdownMenuLabel` "Actions" + `DropdownMenuSeparator` + mapped `DropdownMenuItem` (rounded-xl cursor-pointer, `variant="destructive"` for Void/Delete). Actions array: View Details (always for non-deleted); Void Bill (admin + non-VOID, destructive); Delete Bill (admin, destructive); Restore Bill (admin + deleted).
+   - Dropdown only renders when `actions.length > 0` — so residents on a deleted bill (no admin rights) get no trigger, exactly like Users.
+4. Preserved unchanged: month picker, KPIs, search/filter pills (with the Delete All + Restore All action buttons), Generate Dialog, Bill Detail Dialog, void AlertDialog, delete-single AlertDialog, delete-all AlertDialog, `BillDetail` component, `Sparkles` helper, `KpiCard` component, `BILL_STATUS_STYLES`/`BillStatusBadge`/`formatINR`/`formatMonthYear`/`formatDate` helpers. The `BillStatusBadge` is still used inside `BillDetail`.
+
+Verification:
+- `bun run lint` → 0 errors (1 pre-existing informational warning in variables-view.tsx from a prior task, unrelated — react-hooks/incompatible-library on `form.watch`)
+- dev.log shows clean recompilation (`✓ Compiled in 723ms`) and successful `GET /api/bills?month=5&year=2026` + `GET /api/bills?month=5&year=2026&includeDeleted=true` 200 responses — no compile errors
+- File size: 1271 → 1162 lines (the unified BillRow is more compact than the dual mobile-card + desktop-table block it replaced)
+
+Stage Summary:
+- Billing list now uses the EXACT same row pattern as the Users list: single `space-y-3` + `AnimatePresence mode="popLayout"` + springy `motion.div` per-row wrapper + `GlassCard p-4 md:p-5 hover={false}` row + MoreVertical dropdown holding every per-row action
+- The `md:hidden` mobile cards vs. `hidden md:block` desktop `<Table>` split is GONE — no Table import remains in this file
+- All actions (View / Void / Delete / Restore) live inside the MoreVertical dropdown; no inline view/void/delete buttons remain — matches Users exactly
+- RBAC gating preserved: residents never see admin actions; deleted bills show only Restore (admin) and nothing else; VOID bills hide the Void action
+- All other Billing functionality (month picker, KPIs, filters, generate dialog, void/delete/delete-all AlertDialogs, Bill detail dialog with payment history) preserved unchanged
+- Lint clean (0 errors)
+
+---
+Task ID: EXP-ROWS
+Agent: expenses-rows-agent
+Task: Replace Expenses list dual mobile/desktop split with a single Users-style ExpenseRow list
+
+Work Log:
+- Read worklog.md tail (Tasks EXP-REWRITE, BILL-FIX, PAY-FIX, UX-1, 10) for prior context on the Expenses view and the canonical Users row pattern.
+- Read `src/components/features/users/users-view.tsx` lines 469-521 (list wrapper: `<div className="space-y-3">` + `<AnimatePresence mode="popLayout">` + per-row `motion.div` with layout/initial/animate/exit + spring transition) and lines 779-921 (`UserRow` component: `GlassCard p-4 md:p-5 hover={false}`, top-level `flex items-start gap-3 md:gap-4`, left Avatar h-12 w-12 md:h-14 md:w-14 rounded-2xl, middle meta stack, right DropdownMenu with MoreVertical trigger + GlassButton ghost size="icon" + content w-44 rounded-2xl with DropdownMenuLabel + DropdownMenuSeparator + mapped DropdownMenuItem entries).
+- Read full `src/components/features/billing/expenses-view.tsx` (1128 lines) to identify the exact dual list block (lines 547-667) and the old `ExpenseCard` component (lines 758-843).
+
+Changes to `src/components/features/billing/expenses-view.tsx` (only file modified):
+1. Imports:
+   - Updated `import { motion } from "framer-motion"` → `import { motion, AnimatePresence } from "framer-motion"`.
+   - Added `MoreVertical` to the lucide-react import block.
+   - Removed the entire `Table, TableBody, TableCell, TableHead, TableHeader, TableRow` import (no longer used — desktop table is gone).
+   - Added a new `DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel` import block from `@/components/ui/dropdown-menu`.
+2. Added a `CATEGORY_ICON_COMPONENTS: Record<string, typeof Boxes>` lookup map (GROCERY→ShoppingBag, UTILITIES→Zap, SALARY→Users, MAINTENANCE→Wrench, GENERAL→Boxes, CUSTOM→Plus) immediately after `CATEGORY_ORDER`. Needed because the existing `CATEGORY_META.icon` entries are pre-rendered JSX elements sized `h-3.5 w-3.5` for inline badge use; the new row tile wants the icon at `h-5 w-5` so a component reference (not a frozen element) is required.
+3. Replaced the dual list block (`<>` fragment containing the `md:hidden` mobile StaggerGroup of `ExpenseCard`s + the `hidden md:block` GlassCard-wrapped `<Table>`) with a single unified list:
+   ```
+   <div className="space-y-3">
+     <AnimatePresence mode="popLayout">
+       {filtered.map((exp) => (
+         <motion.div key={exp.id} layout initial={{opacity:0,y:12,scale:0.98}} animate={{opacity:1,y:0,scale:1}} exit={{opacity:0,scale:0.95}} transition={{type:"spring",stiffness:280,damping:26}}>
+           <ExpenseRow expense={exp} canManage={isAdmin} onEdit={() => openEditForm(exp)} onDelete={() => setDeleteTarget(exp)} />
+         </motion.div>
+       ))}
+     </AnimatePresence>
+   </div>
+   ```
+   The empty-state GlassCard above it was preserved unchanged.
+4. Deleted the old `ExpenseCard` component (was lines 758-843) and replaced it with a new `ExpenseRow` component that mirrors `UserRow` exactly:
+   - Outer `<GlassCard className="p-4 md:p-5" hover={false}>` with top-level `<div className="flex items-start gap-3 md:gap-4">`.
+   - Left: category-colored icon tile `h-12 w-12 md:h-14 md:w-14 rounded-2xl shrink-0` using `color-mix(in oklch, ${meta.colorVar} 15%, transparent)` for background and `meta.colorVar` for color. Icon rendered at `h-5 w-5` via the `CATEGORY_ICON_COMPONENTS` lookup (falls back to `Boxes`).
+   - Middle: `<h3 className="font-semibold truncate">` (muted when locked) + category `Badge variant="outline"` (uses `meta.className`) + optional `🔒 Locked` badge + meta row (Calendar/Boxes/Users icons with date, qty, user name) + optional description `line-clamp-1` + inline Cost line with `formatINR()` tabular-nums.
+   - Right: `DropdownMenu` with `DropdownMenuTrigger asChild` wrapping `GlassButton variant="ghost" size="icon"` with `MoreVertical`; `DropdownMenuContent align="end" className="w-44 rounded-2xl"` with `DropdownMenuLabel` "Actions" + `DropdownMenuSeparator` then `actions.map(...)` rendering `DropdownMenuItem` (Edit Expense → PencilLine, Delete Expense → Trash2 variant="destructive"). The dropdown only renders when `actions.length > 0` (i.e., `canManage && !locked`), matching the Users pattern where the menu is the single source of per-row actions.
+5. All other sections preserved unchanged: month picker, admin action bar, KPIs, Top Categories chart, search + filter pills, ExpenseFormSheet, ExpenseFormBody, helpers (`formatINR`, `formatDate`, `formatQuantity`, `isExpenseLocked`, `getCatMeta`), `KpiCard`, Add/Edit mutations, Delete AlertDialog, and RBAC gating.
+
+Verification:
+- `bun run lint` → 0 errors (1 pre-existing informational warning in `variables-view.tsx` from a prior task, unrelated).
+- `tail -30 /home/z/my-project/dev.log` shows multiple clean `✓ Compiled in XXXms` entries after the edit (712ms, 193ms, 163ms, 399ms, 109ms, 723ms) — Next.js picked up the file change and recompiled successfully with no errors.
+- grep confirmed no orphan references to `ExpenseCard`, `Table`, `TableRow`, `TableCell`, `TableHead`, `TableBody`, `TableHeader`, `md:hidden`, or `hidden md:block` remain in the file.
+
+Stage Summary:
+- Expenses list is now a single unified list of `GlassCard` rows identical in pattern to the Users list: same `space-y-3` wrapper, same `AnimatePresence mode="popLayout"` + per-row `motion.div` (layout/initial/animate/exit + spring transition), same `GlassCard p-4 md:p-5 hover={false}` row card, same `MoreVertical` dropdown holding every per-row action.
+- The mobile (`md:hidden`) cards + desktop (`hidden md:block`) `<Table>` split is GONE entirely — one list renders on every breakpoint.
+- All per-row actions (Edit, Delete) live inside the dropdown menu; no inline edit/delete buttons remain. When `locked` is true OR `canManage` is false, the dropdown simply doesn't render (the `🔒 Locked` badge in the row header communicates state).
+- Category icon tile replaces the user Avatar — same sizing (`h-12 w-12 md:h-14 md:w-14 rounded-2xl`) but tinted with the category's `colorVar` via `color-mix(in oklch, … 15%, transparent)` instead of a name-gradient.
+- All existing functionality (Add/Edit sheet, lock logic, RBAC gating, mutations, delete confirm, KPIs, Top Categories chart, month picker, search/filter pills) preserved unchanged.
+- Only `src/components/features/billing/expenses-view.tsx` was modified — no API routes, prisma schema, stores, or other views touched.
+- Lint clean (0 errors).
