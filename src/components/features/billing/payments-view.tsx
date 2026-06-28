@@ -307,14 +307,16 @@ export function PaymentsView() {
               ? "Approve payments & track transactions"
               : "Submit payments & track history"}
           </p>
-          <GlassButton
-            size="lg"
-            onClick={() => setSubmitOpen(true)}
-            className="shrink-0"
-          >
-            <Plus className="h-4 w-4" />
-            Submit Payment
-          </GlassButton>
+          {!isAdmin && (
+            <GlassButton
+              size="lg"
+              onClick={() => setSubmitOpen(true)}
+              className="shrink-0"
+            >
+              <Plus className="h-4 w-4" />
+              Submit Payment
+            </GlassButton>
+          )}
         </div>
       </StaggerItem>
 
