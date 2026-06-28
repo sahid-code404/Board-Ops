@@ -51,7 +51,7 @@ type DashboardData = {
   };
   trend: Array<{ date: string; on: number; off: number }>;
   expenseBreakdown: Array<{ category: string; amount: number }>;
-  notifications: Array<any>;
+  unreadNotifications: number;
   recentActivity: Array<any>;
   isAdmin: boolean;
 };
@@ -96,7 +96,7 @@ export function DashboardView() {
     : [
         { label: "Meals ON Today", value: data.todayMeals.filter((m) => m.status === "ON").length, icon: Utensils, color: "success", change: `${data.todayMeals.filter((m) => m.status === "OFF").length} OFF`, route: "calendar" as const },
         { label: "Pending Bills", value: data.kpis.pendingBills, icon: Receipt, color: "warning", change: "view billing", route: "billing" as const },
-        { label: "Notifications", value: data.notifications.length, icon: Bell, color: "primary", change: "unread", route: "notifications" as const },
+        { label: "Notifications", value: data.unreadNotifications, icon: Bell, color: "primary", change: "unread", route: "notifications" as const },
         { label: "Meals This Week", value: data.trend.reduce((s, t) => s + t.on, 0), icon: Activity, color: "info", change: "7-day total", route: "calendar" as const },
       ];
 
@@ -319,81 +319,32 @@ export function DashboardView() {
         </div>
       </StaggerItem>
 
-      {/* Notifications + Activity */}
-      <StaggerItem>
-        <div className="grid lg:grid-cols-2 gap-4">
-          <GlassCard className="p-4 md:p-6" hover={false}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold">Notifications</h3>
-              <GlassButton variant="ghost" size="sm" onClick={() => setView("notifications")}>
-                View all
-                <ArrowUpRight className="h-3.5 w-3.5" />
-              </GlassButton>
-            </div>
-            <div className="space-y-2 max-h-72 overflow-y-auto no-scrollbar">
-              {data.notifications.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">No notifications</p>
-              ) : (
-                data.notifications.map((n) => (
-                  <motion.button
-                    key={n.id}
-                    whileHover={{ x: 4 }}
-                    onClick={() => n.route && setView(n.route as never)}
-                    className="glass-soft rounded-2xl p-3 flex items-start gap-3 w-full text-left"
-                  >
-                    <div
-                      className={`grid place-items-center h-8 w-8 rounded-xl shrink-0 ${
-                        n.type === "SUCCESS"
-                          ? "bg-success/15"
-                          : n.type === "WARNING"
-                            ? "bg-warning/15"
-                            : n.type === "DANGER"
-                              ? "bg-destructive/15"
-                              : "bg-info/15"
-                      }`}
-                    >
-                      <Bell className="h-4 w-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{n.title}</p>
-                      <p className="text-xs text-muted-foreground line-clamp-2">{n.description}</p>
-                    </div>
-                    {n.route && <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />}
-                  </motion.button>
-                ))
-              )}
-            </div>
-          </GlassCard>
-
+      {/* Recent Activity (admin only) */}
+      {data.isAdmin && data.recentActivity.length > 0 && (
+        <StaggerItem>
           <GlassCard className="p-4 md:p-6" hover={false}>
             <h3 className="font-semibold mb-4">Recent Activity</h3>
-            {data.isAdmin && data.recentActivity.length > 0 ? (
-              <div className="space-y-2 max-h-72 overflow-y-auto no-scrollbar">
-                {data.recentActivity.map((a) => (
-                  <div key={a.id} className="glass-soft rounded-2xl p-3 flex items-start gap-3">
-                    <div className="grid place-items-center h-8 w-8 rounded-xl bg-primary/15 shrink-0">
-                      <Clock className="h-4 w-4 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm">
-                        <span className="font-medium">{a.actor?.name || "System"}</span>{" "}
-                        <span className="text-muted-foreground">{a.action.toLowerCase().replace(/_/g, " ")}</span>
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(a.createdAt).toLocaleString()}
-                      </p>
-                    </div>
+            <div className="space-y-2">
+              {data.recentActivity.map((a) => (
+                <div key={a.id} className="glass-soft rounded-2xl p-3 flex items-start gap-3">
+                  <div className="grid place-items-center h-8 w-8 rounded-xl bg-primary/15 shrink-0">
+                    <Clock className="h-4 w-4 text-primary" />
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground text-center py-8">
-                No recent activity
-              </p>
-            )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm">
+                      <span className="font-medium">{a.actor?.name || "System"}</span>{" "}
+                      <span className="text-muted-foreground">{a.action.toLowerCase().replace(/_/g, " ")}</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(a.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </GlassCard>
-        </div>
-      </StaggerItem>
+        </StaggerItem>
+      )}
     </StaggerGroup>
   );
 }

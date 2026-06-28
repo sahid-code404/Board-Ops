@@ -1,10 +1,15 @@
 import { db } from "@/lib/db";
 import { requireAuth } from "@/lib/session";
 import { ok, err, handleApiError } from "@/lib/api-response";
+import { cleanupOldReadNotifications } from "@/lib/notification-cleanup";
 
 export async function GET(req: Request) {
   try {
     const user = await requireAuth();
+
+    // Auto-delete read notifications older than 24 hours (for all users)
+    await cleanupOldReadNotifications();
+
     const url = new URL(req.url);
     const unreadOnly = url.searchParams.get("unread") === "true";
     const notifications = await db.notification.findMany({
@@ -30,6 +35,8 @@ export async function PATCH(req: Request) {
         where: { userId: user.id, readAt: null },
         data: { readAt: new Date() },
       });
+      // Clean up old read notifications after marking all as read
+      await cleanupOldReadNotifications();
       return ok({ success: true });
     }
     if (body.id) {
@@ -39,6 +46,8 @@ export async function PATCH(req: Request) {
         where: { id: body.id },
         data: { readAt: n.readAt ? null : new Date() },
       });
+      // Clean up old read notifications
+      await cleanupOldReadNotifications();
       return ok({ success: true });
     }
     return err("Nothing to update", 400);

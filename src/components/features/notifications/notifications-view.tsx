@@ -13,7 +13,6 @@ import {
   RefreshCw,
   ArrowRight,
   Sparkles,
-  Filter,
 } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { GlassCard } from "@/components/glass/glass-card";
@@ -21,7 +20,6 @@ import { GlassButton } from "@/components/glass/glass-button";
 import { StaggerGroup, StaggerItem } from "@/components/glass/page-transition";
 import { ShimmerSkeleton } from "@/components/glass/shimmer-skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAppStore } from "@/stores/use-app-store";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -188,29 +186,36 @@ export function NotificationsView() {
         </div>
       </StaggerItem>
 
-      {/* Filters */}
+      {/* Filters — symmetrical equal-width pills */}
       <StaggerItem>
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-1 px-1">
-          <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
-          <Tabs value={filter} onValueChange={(v) => setFilter(v as Filter)}>
-            <TabsList className="bg-muted/50 h-9 p-1">
-              {FILTERS.map((f) => (
-                <TabsTrigger
-                  key={f.key}
-                  value={f.key}
-                  className="rounded-xl text-xs px-2.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground whitespace-nowrap"
-                >
-                  {f.label}
-                  {f.key === "UNREAD" && unreadCount > 0 && (
-                    <span className="ml-1.5 text-[10px] bg-destructive text-white rounded-full px-1.5 py-0.5 leading-none">
-                      {unreadCount}
-                    </span>
-                  )}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-          </div>
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+          {FILTERS.map((f) => {
+            const active = filter === f.key;
+            return (
+              <motion.button
+                key={f.key}
+                whileTap={{ scale: 0.96 }}
+                onClick={() => setFilter(f.key)}
+                className={cn(
+                  "relative flex items-center justify-center gap-1.5 py-2 px-2 rounded-2xl text-xs font-medium transition-all whitespace-nowrap",
+                  active
+                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                    : "glass-soft text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <span>{f.label}</span>
+                {f.key === "UNREAD" && unreadCount > 0 && (
+                  <span className={cn(
+                    "text-[10px] rounded-full px-1.5 py-0.5 leading-none font-bold",
+                    active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-destructive text-white"
+                  )}>
+                    {unreadCount}
+                  </span>
+                )}
+              </motion.button>
+            );
+          })}
+        </div>
       </StaggerItem>
 
       {/* List */}

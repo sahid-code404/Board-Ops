@@ -84,11 +84,9 @@ export async function GET() {
       byCategory[e.category] = (byCategory[e.category] || 0) + e.amount;
     });
 
-    // ── Recent notifications ──
-    const notifications = await db.notification.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: "desc" },
-      take: 5,
+    // ── Unread notification count (for badge) ──
+    const unreadNotifications = await db.notification.count({
+      where: { userId: user.id, readAt: null },
     });
 
     // ── Recent audit log (admin only) ──
@@ -115,7 +113,7 @@ export async function GET() {
       },
       trend,
       expenseBreakdown: Object.entries(byCategory).map(([category, amount]) => ({ category, amount })),
-      notifications,
+      unreadNotifications,
       recentActivity,
       isAdmin,
     });

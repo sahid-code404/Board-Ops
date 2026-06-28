@@ -20,7 +20,6 @@ import { UsersView } from "@/components/features/users/users-view";
 import { ProfileView } from "@/components/features/auth/profile-view";
 import { PersonalizationView } from "@/components/features/personalization/personalization-view";
 import { useAppStore } from "@/stores/use-app-store";
-import { NotificationsSheet } from "@/components/features/notifications/notifications-sheet";
 import { CommandPalette } from "@/components/layout/command-palette";
 import { ShimmerSkeleton } from "@/components/glass/shimmer-skeleton";
 
@@ -83,7 +82,6 @@ export default function Page() {
         {view === "users" && <UsersView />}
         {view === "profile" && <ProfileView />}
       </AppShell>
-      <NotificationsSheet />
       <CommandPalette />
     </>
   );

@@ -38,7 +38,6 @@ export function TopBar() {
   const view = useAppStore((s) => s.view);
   const setView = useAppStore((s) => s.setView);
   const setCommandOpen = useAppStore((s) => s.setCommandOpen);
-  const setNotificationsOpen = useAppStore((s) => s.setNotificationsOpen);
   const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
   const user = useAuthStore((s) => s.user);
   const isDark = resolvedTheme === "dark";
@@ -111,12 +110,15 @@ export function TopBar() {
           {isDark ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
         </motion.button>
 
-        {/* Notifications */}
+        {/* Notifications — routes to notifications page instantly */}
         <motion.button
           whileTap={{ scale: 0.9 }}
-          onClick={() => setNotificationsOpen(true)}
+          onClick={() => setView("notifications")}
           aria-label="Notifications"
-          className="relative grid place-items-center h-10 w-10 rounded-2xl glass-soft text-foreground shrink-0"
+          className={cn(
+            "relative grid place-items-center h-10 w-10 rounded-2xl glass-soft shrink-0 transition-colors",
+            view === "notifications" ? "text-primary ring-2 ring-primary/50" : "text-foreground"
+          )}
         >
           <Bell className="h-[18px] w-[18px]" />
           <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-destructive ring-2 ring-background" />
