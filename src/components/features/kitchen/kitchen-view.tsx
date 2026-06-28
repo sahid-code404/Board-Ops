@@ -218,57 +218,61 @@ export function KitchenView() {
         </StaggerItem>
       ) : (
         <>
-          {/* Percentage of active users per meal (excludes guests) */}
+          {/* Percentage pills — horizontal pills with count on left, ring on right */}
           <StaggerItem>
-            <GlassCard className="p-4 md:p-5" hover={false}>
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h3 className="font-semibold text-sm">Resident Participation</h3>
-                  <p className="text-[11px] text-muted-foreground">
-                    % of {activeUsers} active residents opted in per meal
-                  </p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                {counts.map((m) => {
-                  const pct = activeUsers > 0 ? Math.round((m.on / activeUsers) * 100) : 0;
-                  return (
-                    <div key={m.id} className="text-center">
-                      <div className="relative h-16 flex items-end justify-center mb-1.5">
-                        <svg className="absolute inset-0 -rotate-90" viewBox="0 0 64 64">
-                          <circle
-                            cx="32"
-                            cy="32"
-                            r="28"
-                            fill="none"
-                            stroke="var(--muted)"
-                            strokeWidth="5"
-                          />
-                          <circle
-                            cx="32"
-                            cy="32"
-                            r="28"
-                            fill="none"
-                            stroke={m.color}
-                            strokeWidth="5"
-                            strokeLinecap="round"
-                            strokeDasharray={`${(pct / 100) * 175.9} 175.9`}
-                            style={{ transition: "stroke-dasharray 0.8s ease" }}
-                          />
-                        </svg>
-                        <div className="relative z-10">
-                          <span className="text-lg font-bold tabular-nums">{pct}%</span>
+            <div className="space-y-2.5">
+              {counts.map((m) => {
+                const pct = activeUsers > 0 ? Math.round((m.on / activeUsers) * 100) : 0;
+                return (
+                  <div
+                    key={m.id}
+                    className="glass-soft rounded-2xl px-4 py-3 flex items-center justify-between gap-3"
+                    style={{ borderColor: `${m.color}30` }}
+                  >
+                    {/* Left: icon + label + count */}
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <span className="text-2xl shrink-0">{m.icon}</span>
+                      <div className="min-w-0">
+                        <p className="text-[10px] uppercase tracking-wider font-semibold truncate" style={{ color: m.color }}>
+                          {m.displayName}
+                        </p>
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-xl font-bold tabular-nums">{m.on}</span>
+                          <span className="text-[11px] text-muted-foreground">of {activeUsers} residents</span>
                         </div>
                       </div>
-                      <p className="text-[11px] font-medium truncate">{m.displayName}</p>
-                      <p className="text-[10px] text-muted-foreground tabular-nums">
-                        {m.on}/{activeUsers}
-                      </p>
                     </div>
-                  );
-                })}
-              </div>
-            </GlassCard>
+                    {/* Right: circular ring with percentage */}
+                    <div className="relative h-12 w-12 shrink-0">
+                      <svg className="absolute inset-0 -rotate-90" viewBox="0 0 48 48">
+                        <circle
+                          cx="24"
+                          cy="24"
+                          r="20"
+                          fill="none"
+                          stroke="var(--muted)"
+                          strokeWidth="4"
+                        />
+                        <circle
+                          cx="24"
+                          cy="24"
+                          r="20"
+                          fill="none"
+                          stroke={m.color}
+                          strokeWidth="4"
+                          strokeLinecap="round"
+                          strokeDasharray={`${(pct / 100) * 125.66} 125.66`}
+                          style={{ transition: "stroke-dasharray 0.8s ease" }}
+                        />
+                      </svg>
+                      <div className="absolute inset-0 grid place-items-center">
+                        <span className="text-xs font-bold tabular-nums">{pct}%</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </StaggerItem>
 
           {/* Per-meal cards */}
