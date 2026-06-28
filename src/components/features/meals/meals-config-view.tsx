@@ -988,17 +988,19 @@ export function MealsConfigView() {
 
   return (
     <StaggerGroup className="space-y-4 pb-6">
-      {/* Action bar — centered glowing CTA */}
+      {/* Action bar — centered glass card with border glow */}
       {isAdmin && (
         <StaggerItem>
           <div className="flex items-center justify-center">
-            <GlassButton
-              onClick={openCreate}
-              size="lg"
-              className="shrink-0 glow-primary animate-pulse-slow"
-            >
-              <Plus className="h-5 w-5" /> Create Meal
-            </GlassButton>
+            <div className="glass glow-border-card rounded-3xl p-2">
+              <GlassButton
+                onClick={openCreate}
+                size="lg"
+                className="shrink-0"
+              >
+                <Plus className="h-5 w-5" /> Create Meal
+              </GlassButton>
+            </div>
           </div>
         </StaggerItem>
       )}

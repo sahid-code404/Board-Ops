@@ -468,18 +468,20 @@ export function ExpensesView() {
         </div>
       </StaggerItem>
 
-      {/* Action bar — centered glowing CTA */}
+      {/* Action bar — centered glass card with border glow */}
       {isAdmin && (
         <StaggerItem>
           <div className="flex items-center justify-center">
-            <GlassButton
-              size="lg"
-              onClick={openAddForm}
-              className="shrink-0 glow-primary animate-pulse-slow"
-            >
-              <Plus className="h-5 w-5" />
-              Add Expense
-            </GlassButton>
+            <div className="glass glow-border-card rounded-3xl p-2">
+              <GlassButton
+                size="lg"
+                onClick={openAddForm}
+                className="shrink-0"
+              >
+                <Plus className="h-5 w-5" />
+                Add Expense
+              </GlassButton>
+            </div>
           </div>
         </StaggerItem>
       )}
