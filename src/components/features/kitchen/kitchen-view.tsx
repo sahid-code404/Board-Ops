@@ -125,7 +125,7 @@ export function KitchenView() {
   if (isLoading) return <KitchenSkeleton />;
 
   return (
-    <StaggerGroup className="space-y-4 md:space-y-6">
+    <StaggerGroup className="space-y-4">
       {/* Date picker — wide capsule with centered text + circular arrows */}
       <StaggerItem>
         <div className="flex items-center justify-center gap-4">
@@ -169,7 +169,7 @@ export function KitchenView() {
 
       {/* KPI cards */}
       <StaggerItem>
-        <div className="grid grid-cols-3 gap-3 md:gap-4">
+        <div className="grid grid-cols-3 gap-3">
           <KpiCard
             icon={Utensils}
             label="Total Meals"
@@ -197,7 +197,7 @@ export function KitchenView() {
       {/* Empty state */}
       {counts.length === 0 ? (
         <StaggerItem>
-          <GlassCard className="p-10 md:p-14 text-center" hover={false}>
+          <GlassCard className="p-10 text-center" hover={false}>
             <div className="grid place-items-center h-16 w-16 rounded-3xl bg-muted/40 mx-auto mb-4">
               <Soup className="h-8 w-8 text-muted-foreground/60" />
             </div>
@@ -217,7 +217,7 @@ export function KitchenView() {
         <>
           {/* Per-meal cards */}
           <StaggerItem>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+            <div className="grid grid-cols-1 gap-3">
               {counts.map((m) => (
                 <MealCard key={m.id} meal={m} />
               ))}
@@ -254,7 +254,7 @@ function KpiCard({
         : "var(--warning)";
   return (
     <GlassCard
-      className="p-4 md:p-5 relative overflow-hidden"
+      className="p-4 relative overflow-hidden"
       glow={color}
       whileHover={{ y: -2 }}
     >
@@ -265,22 +265,22 @@ function KpiCard({
       <div className="relative">
         <div className="flex items-start justify-between mb-3">
           <div
-            className="grid place-items-center h-9 w-9 md:h-10 md:w-10 rounded-2xl"
+            className="grid place-items-center h-9 w-9 rounded-2xl"
             style={{
               background: `color-mix(in oklch, ${colorVar} 18%, transparent)`,
             }}
           >
             <Icon
-              className="h-4 w-4 md:h-5 md:w-5"
+              className="h-4 w-4"
               style={{ color: colorVar }}
             />
           </div>
         </div>
-        <p className="text-[11px] md:text-xs text-muted-foreground">{label}</p>
-        <div className="text-2xl md:text-3xl font-bold tracking-tight tabular-nums">
+        <p className="text-[11px] text-muted-foreground">{label}</p>
+        <div className="text-2xl font-bold tracking-tight tabular-nums">
           <AnimatedCounter value={value} />
         </div>
-        <p className="text-[10px] md:text-[11px] text-muted-foreground mt-1">
+        <p className="text-[10px] text-muted-foreground mt-1">
           {sub}
         </p>
       </div>
@@ -364,7 +364,7 @@ function AccessRestricted() {
       <StaggerGroup className="w-full max-w-md">
         <StaggerItem>
           <GlassCard
-            className="p-8 md:p-10 text-center"
+            className="p-8 text-center"
             glow="warning"
             hover={false}
           >
@@ -376,7 +376,7 @@ function AccessRestricted() {
             >
               <Lock className="h-8 w-8 text-warning" />
             </motion.div>
-            <h2 className="text-xl md:text-2xl font-bold mb-2">
+            <h2 className="text-xl font-bold mb-2">
               Access restricted
             </h2>
             <p className="text-sm text-muted-foreground">
@@ -397,15 +397,15 @@ function AccessRestricted() {
 
 function KitchenSkeleton() {
   return (
-    <div className="space-y-4 md:space-y-6">
-      <ShimmerSkeleton className="h-32 md:h-28" />
-      <div className="grid grid-cols-3 gap-3 md:gap-4">
-        <ShimmerSkeleton className="h-28 md:h-32" />
-        <ShimmerSkeleton className="h-28 md:h-32" />
-        <ShimmerSkeleton className="h-28 md:h-32" />
+    <div className="space-y-4">
+      <ShimmerSkeleton className="h-32" />
+      <div className="grid grid-cols-3 gap-3">
+        <ShimmerSkeleton className="h-28" />
+        <ShimmerSkeleton className="h-28" />
+        <ShimmerSkeleton className="h-28" />
       </div>
       <ShimmerSkeleton className="h-32" />
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+      <div className="grid grid-cols-1 gap-3">
         {Array.from({ length: 6 }).map((_, i) => (
           <ShimmerSkeleton key={i} className="h-44" />
         ))}

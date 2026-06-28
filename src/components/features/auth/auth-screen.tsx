@@ -79,13 +79,13 @@ export function AuthScreen() {
     <div className="min-h-screen relative flex items-center justify-center p-4 safe-top safe-bottom">
       <AnimatedBackground />
 
-      <div className="w-full max-w-5xl grid lg:grid-cols-2 gap-6 items-center">
+      <div className="w-full max-w-md mx-auto flex flex-col gap-6 items-center">
         {/* Hero side */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.6 }}
-          className="hidden lg:flex flex-col gap-6 p-8"
+          className="hidden flex-col gap-6 p-8"
         >
           <div className="flex items-center gap-3">
             <div className="grid place-items-center h-12 w-12 rounded-3xl bg-gradient-to-br from-primary to-chart-4 shadow-xl shadow-primary/40">
@@ -142,9 +142,9 @@ export function AuthScreen() {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
         >
-          <GlassCard strong className="p-6 md:p-8" hover={false}>
+          <GlassCard strong className="p-6" hover={false}>
             {/* Mobile brand */}
-            <div className="lg:hidden flex items-center gap-3 mb-6">
+            <div className="flex items-center gap-3 mb-6">
               <div className="grid place-items-center h-11 w-11 rounded-2xl bg-gradient-to-br from-primary to-chart-4 shadow-lg shadow-primary/40">
                 <Sparkles className="h-5 w-5 text-primary-foreground" />
               </div>

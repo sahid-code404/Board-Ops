@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { useAppStore } from "@/stores/use-app-store";
 import { useAuthStore } from "@/stores/use-auth-store";
-import { GlassButton } from "@/components/glass/glass-button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { NAV_LABELS } from "./nav-config";
 import { api } from "@/lib/api-client";
@@ -79,25 +78,25 @@ export function TopBar() {
   const showBadge = unreadCount > 0;
 
   return (
-    <header className="sticky top-0 z-30 safe-top px-2.5 sm:px-3 pt-2.5 sm:pt-3">
-      <div className="glass rounded-2xl sm:rounded-3xl px-2.5 sm:px-3 md:px-5 py-2 sm:py-2.5 flex items-center gap-1.5 sm:gap-2 md:gap-4">
-        {/* Hamburger — mobile only, well-sized touch target */}
+    <header className="sticky top-0 z-30 safe-top px-3 pt-3">
+      <div className="glass rounded-3xl px-3 py-2.5 flex items-center gap-2">
+        {/* Hamburger — always visible (mobile-first on all screens) */}
         <motion.button
           whileTap={{ scale: 0.9 }}
           onClick={() => setSidebarOpen(true)}
           aria-label="Open menu"
-          className="md:hidden grid place-items-center h-10 w-10 rounded-2xl glass-soft text-foreground shrink-0"
+          className="grid place-items-center h-10 w-10 rounded-2xl glass-soft text-foreground shrink-0"
         >
           <Menu className="h-5 w-5" />
         </motion.button>
 
-        {/* Title — scales fluidly */}
+        {/* Title */}
         <div className="flex-1 min-w-0">
           <motion.p
             key={view}
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
-            className="text-[10px] sm:text-xs md:text-sm text-muted-foreground leading-tight truncate"
+            className="text-[10px] text-muted-foreground leading-tight truncate"
           >
             {user?.role === "ADMIN" ? "Admin Console" : "Workspace"}
           </motion.p>
@@ -105,33 +104,21 @@ export function TopBar() {
             key={`${view}-title`}
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-sm sm:text-base md:text-lg font-semibold leading-tight truncate"
+            className="text-sm font-semibold leading-tight truncate"
           >
             {label}
           </motion.h1>
         </div>
 
-        {/* Search button — icon on mobile, full on desktop */}
+        {/* Search button — icon only on all screens */}
         <motion.button
           whileTap={{ scale: 0.9 }}
           onClick={() => setCommandOpen(true)}
           aria-label="Search"
-          className="sm:hidden grid place-items-center h-10 w-10 rounded-2xl glass-soft text-muted-foreground hover:text-foreground shrink-0"
+          className="grid place-items-center h-10 w-10 rounded-2xl glass-soft text-muted-foreground hover:text-foreground shrink-0"
         >
           <Search className="h-[18px] w-[18px]" />
         </motion.button>
-        <GlassButton
-          variant="secondary"
-          size="sm"
-          onClick={() => setCommandOpen(true)}
-          className="hidden sm:inline-flex"
-        >
-          <Search className="h-4 w-4" />
-          <span className="text-xs text-muted-foreground">Search…</span>
-          <kbd className="ml-2 text-[10px] px-1.5 py-0.5 rounded-md bg-muted/60 text-muted-foreground">
-            ⌘K
-          </kbd>
-        </GlassButton>
 
         {/* Theme switcher — overlay with Light/Dark/System */}
         <ThemeSwitcher

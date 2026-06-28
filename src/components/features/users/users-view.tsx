@@ -404,10 +404,10 @@ export function UsersView() {
   };
 
   return (
-    <StaggerGroup className="space-y-4 md:space-y-6 pb-6">
+    <StaggerGroup className="space-y-4 pb-6">
       {/* KPIs */}
       <StaggerItem>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <div className="grid grid-cols-2 gap-3">
           <KpiCard label="Total Users" value={kpis.total} icon={UsersIcon} color="primary" />
           <KpiCard label="Active" value={kpis.active} icon={UserCheck} color="success" />
           <KpiCard label="Pending Approval" value={kpis.pending} icon={UserPlus} color="warning" />
@@ -444,8 +444,7 @@ export function UsersView() {
                       : "glass-soft text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  <span className="sm:hidden">{f.short}</span>
-                  <span className="hidden sm:inline">{f.label}</span>
+                  <span>{f.short}</span>
                   {badge !== null && (
                     <span className={cn(
                       "text-[9px] rounded-full px-1.5 py-0.5 leading-none font-bold min-w-[16px] text-center",
@@ -764,12 +763,12 @@ function KpiCard({
     danger: "bg-destructive/15 text-destructive",
   }[color];
   return (
-    <GlassCard className="p-4 md:p-5" glow={color}>
+    <GlassCard className="p-4" glow={color}>
       <div className={cn("grid place-items-center h-10 w-10 rounded-2xl mb-3", colorClass)}>
         <Icon className="h-5 w-5" />
       </div>
       <p className="text-xs text-muted-foreground">{label}</p>
-      <div className="text-2xl md:text-3xl font-bold tracking-tight">
+      <div className="text-2xl font-bold tracking-tight">
         <AnimatedCounter value={value} />
       </div>
     </GlassCard>
@@ -829,9 +828,9 @@ function UserRow({
   }
 
   return (
-    <GlassCard className="p-4 md:p-5" hover={false}>
-      <div className="flex items-start gap-3 md:gap-4">
-        <Avatar className="h-12 w-12 md:h-14 md:w-14 rounded-2xl">
+    <GlassCard className="p-4" hover={false}>
+      <div className="flex items-start gap-3">
+        <Avatar className="h-12 w-12 rounded-2xl">
           {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.name} />}
           <AvatarFallback className={cn("rounded-2xl bg-gradient-to-br text-white font-semibold", gradientFor(user.name))}>
             {initials(user.name) || "U"}
@@ -860,7 +859,7 @@ function UserRow({
                   </>
                 )}
               </div>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-x-3 gap-y-0.5 mt-1.5 text-xs text-muted-foreground">
+              <div className="flex flex-col gap-y-0.5 mt-1.5 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1 truncate">
                   <Mail className="h-3 w-3" /> {user.email}
                 </span>

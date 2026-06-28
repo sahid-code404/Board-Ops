@@ -152,7 +152,7 @@ export function NotificationsView() {
   };
 
   return (
-    <StaggerGroup className="space-y-4 md:space-y-6 pb-6">
+    <StaggerGroup className="space-y-4 pb-6">
       {/* Action bar */}
       <StaggerItem>
         <div className="flex items-center justify-end gap-3">
@@ -165,7 +165,6 @@ export function NotificationsView() {
             className="shrink-0"
           >
             <RefreshCw className="h-4 w-4" />
-            <span className="hidden sm:inline">Refresh</span>
           </GlassButton>
           <GlassButton
             variant="primary"
@@ -199,8 +198,7 @@ export function NotificationsView() {
                     : "glass-soft text-muted-foreground hover:text-foreground"
                 )}
               >
-                <span className="sm:hidden">{f.short}</span>
-                <span className="hidden sm:inline">{f.label}</span>
+                <span>{f.short}</span>
                 {badge !== null && (
                   <span className={cn(
                     "text-[9px] rounded-full px-1.5 py-0.5 leading-none font-bold min-w-[16px] text-center",
@@ -300,7 +298,7 @@ export function NotificationsView() {
 
 function EmptyState() {
   return (
-    <GlassCard className="p-10 md:p-16 text-center" hover={false} glow="primary">
+    <GlassCard className="p-10 text-center" hover={false} glow="primary">
       <motion.div
         initial={{ opacity: 0, scale: 0.85 }}
         animate={{ opacity: 1, scale: 1 }}

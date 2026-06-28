@@ -453,7 +453,7 @@ export function PaymentsView() {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <ShimmerSkeleton key={i} className="h-32" />
           ))}
@@ -469,7 +469,7 @@ export function PaymentsView() {
   }
 
   return (
-    <StaggerGroup className="space-y-4 md:space-y-6">
+    <StaggerGroup className="space-y-4">
       {/* Day picker — wide capsule with centered text + circular arrows */}
       <StaggerItem>
         <div className="flex items-center justify-center gap-4">
@@ -532,7 +532,7 @@ export function PaymentsView() {
 
       {/* KPIs */}
       <StaggerItem>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <div className="grid grid-cols-2 gap-3">
           <KpiCard
             label="Total Approved"
             value={kpis.totalApproved}
@@ -564,7 +564,7 @@ export function PaymentsView() {
       {/* Admin: Pending payments section */}
       {isAdmin && pendingPayments.length > 0 && (
         <StaggerItem>
-          <GlassCard className="p-5 md:p-6" hover={false} glow="warning">
+          <GlassCard className="p-5" hover={false} glow="warning">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="font-semibold text-lg flex items-center gap-2">
@@ -672,7 +672,7 @@ export function PaymentsView() {
       {/* List */}
       <StaggerItem>
         {filtered.length === 0 ? (
-          <GlassCard className="p-10 md:p-16" hover={false}>
+          <GlassCard className="p-10" hover={false}>
             <div className="flex flex-col items-center justify-center text-center gap-3">
               <div className="grid place-items-center h-14 w-14 rounded-3xl bg-muted/40">
                 <IndianRupee className="h-6 w-6 text-muted-foreground" />
@@ -942,7 +942,7 @@ function KpiCard({
             : "var(--info)";
   return (
     <GlassCard
-      className="p-4 md:p-5"
+      className="p-4"
       glow={color === "danger" ? "danger" : color === "warning" ? "warning" : color === "success" ? "success" : "primary"}
     >
       <div className="flex items-start justify-between mb-3">
@@ -957,7 +957,7 @@ function KpiCard({
         </div>
       </div>
       <p className="text-xs text-muted-foreground">{label}</p>
-      <div className="text-2xl md:text-3xl font-bold tracking-tight tabular-nums">
+      <div className="text-2xl font-bold tracking-tight tabular-nums">
         <AnimatedCounter value={value} prefix={prefix || ""} />
       </div>
     </GlassCard>
@@ -1095,9 +1095,9 @@ function PaymentRow({
   const statusMeta = STATUS_STYLES[payment.status];
 
   return (
-    <GlassCard className="p-4 md:p-5" hover={false}>
-      <div className="flex items-start gap-3 md:gap-4">
-        <Avatar className="h-12 w-12 md:h-14 md:w-14 rounded-2xl shrink-0">
+    <GlassCard className="p-4" hover={false}>
+      <div className="flex items-start gap-3">
+        <Avatar className="h-12 w-12 rounded-2xl shrink-0">
           <AvatarFallback
             className={cn(
               "rounded-2xl bg-gradient-to-br text-white font-semibold",
@@ -1145,7 +1145,7 @@ function PaymentRow({
                   </>
                 )}
               </div>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-x-3 gap-y-0.5 mt-1.5 text-xs text-muted-foreground">
+              <div className="flex flex-col gap-x-3 gap-y-0.5 mt-1.5 text-xs text-muted-foreground">
                 {isAdmin && (
                   <span className="inline-flex items-center gap-1 truncate">
                     <Mail className="h-3 w-3" /> {payment.user.email}
@@ -1440,7 +1440,7 @@ function PaymentEditSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-md flex flex-col gap-0 p-0"
+        className="w-full max-w-md flex flex-col gap-0 p-0"
       >
         <PaymentEditBody
           key={bodyKey}

@@ -134,7 +134,7 @@ export function PersonalizationView() {
     return (
       <div className="space-y-4">
         <ShimmerSkeleton className="h-40" />
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <ShimmerSkeleton className="h-64" />
           <ShimmerSkeleton className="h-64" />
         </div>
@@ -143,11 +143,11 @@ export function PersonalizationView() {
   }
 
   return (
-    <StaggerGroup className="space-y-4 md:space-y-6 pb-6">
+    <StaggerGroup className="space-y-4 pb-6">
       {/* Header */}
       <StaggerItem>
-        <GlassCard className="p-5 md:p-7" hover={false} glow="primary">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <GlassCard className="p-5" hover={false} glow="primary">
+          <div className="flex flex-col justify-between gap-4">
             <div className="flex items-center gap-4">
               <div
                 className="grid place-items-center h-12 w-12 rounded-3xl shrink-0"
@@ -156,7 +156,7 @@ export function PersonalizationView() {
                 <Palette className="h-6 w-6" />
               </div>
               <div>
-                <h2 className="text-xl md:text-2xl font-bold">Personalization</h2>
+                <h2 className="text-xl font-bold">Personalization</h2>
               </div>
             </div>
             <div className="flex gap-2">
@@ -173,12 +173,12 @@ export function PersonalizationView() {
         </GlassCard>
       </StaggerItem>
 
-      <div className="grid lg:grid-cols-2 gap-4 md:gap-6">
+      <div className="grid grid-cols-1 gap-4">
         {/* Left: Controls */}
-        <div className="space-y-4 md:space-y-6">
+        <div className="space-y-4">
           {/* Preset Themes */}
           <StaggerItem>
-            <GlassCard className="p-5 md:p-6" hover={false}>
+            <GlassCard className="p-5" hover={false}>
               <div className="flex items-center gap-2 mb-4">
                 <Sparkles className="h-5 w-5 text-primary" />
                 <h3 className="font-semibold">Preset Themes</h3>
@@ -220,7 +220,7 @@ export function PersonalizationView() {
 
           {/* Custom Colors */}
           <StaggerItem>
-            <GlassCard className="p-5 md:p-6" hover={false}>
+            <GlassCard className="p-5" hover={false}>
               <div className="flex items-center gap-2 mb-4">
                 <Palette className="h-5 w-5 text-primary" />
                 <h3 className="font-semibold">Custom Colors</h3>
@@ -250,7 +250,7 @@ export function PersonalizationView() {
 
           {/* Corner Radius */}
           <StaggerItem>
-            <GlassCard className="p-5 md:p-6" hover={false}>
+            <GlassCard className="p-5" hover={false}>
               <div className="flex items-center gap-2 mb-4">
                 <CornerDownLeft className="h-5 w-5 text-primary" />
                 <h3 className="font-semibold">Corner Radius</h3>
@@ -284,9 +284,9 @@ export function PersonalizationView() {
         </div>
 
         {/* Right: Live Preview */}
-        <div className="space-y-4 md:space-y-6">
+        <div className="space-y-4">
           <StaggerItem>
-            <GlassCard className="p-5 md:p-6 sticky top-24" hover={false} glow="primary">
+            <GlassCard className="p-5 sticky top-24" hover={false} glow="primary">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Smartphone className="h-5 w-5 text-primary" />

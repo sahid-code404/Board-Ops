@@ -408,7 +408,7 @@ export function ExpensesView() {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <ShimmerSkeleton key={i} className="h-32" />
           ))}
@@ -424,7 +424,7 @@ export function ExpensesView() {
   }
 
   return (
-    <StaggerGroup className="space-y-4 md:space-y-6">
+    <StaggerGroup className="space-y-4">
       {/* Month picker — centered, spreaded */}
       <StaggerItem>
         <div className="flex items-center justify-center gap-4">
@@ -486,7 +486,7 @@ export function ExpensesView() {
 
       {/* KPIs */}
       <StaggerItem>
-        <div className="grid grid-cols-2 gap-3 md:gap-4">
+        <div className="grid grid-cols-2 gap-3">
           <KpiCard
             label={`Total Expenses · ${new Date(selectedYear, selectedMonth).toLocaleDateString("en-US", { month: "short" })}`}
             value={totalThisMonth}
@@ -505,7 +505,7 @@ export function ExpensesView() {
 
       {/* Top Categories — horizontal bars sorted high to low */}
       <StaggerItem>
-        <GlassCard className="p-4 md:p-6" hover={false}>
+        <GlassCard className="p-4" hover={false}>
           <h3 className="font-semibold mb-4">Top Categories <span className="text-xs font-normal text-muted-foreground ml-1">· {new Date(selectedYear, selectedMonth).toLocaleDateString("en-US", { month: "long", year: "numeric" })}</span></h3>
           <div className="space-y-3">
             {(() => {
@@ -625,7 +625,7 @@ export function ExpensesView() {
       {/* List */}
       <StaggerItem>
         {filtered.length === 0 ? (
-          <GlassCard className="p-10 md:p-16" hover={false}>
+          <GlassCard className="p-10" hover={false}>
             <div className="flex flex-col items-center justify-center text-center gap-3">
               <div className="grid place-items-center h-14 w-14 rounded-3xl bg-muted/40">
                 <Receipt className="h-6 w-6 text-muted-foreground" />
@@ -768,7 +768,7 @@ function KpiCard({
             : "var(--info)";
   return (
     <GlassCard
-      className="p-4 md:p-5"
+      className="p-4"
       glow={color === "danger" ? "danger" : color === "warning" ? "warning" : color === "success" ? "success" : "primary"}
     >
       <div className="flex items-start justify-between mb-3">
@@ -783,7 +783,7 @@ function KpiCard({
         </div>
       </div>
       <p className="text-xs text-muted-foreground">{label}</p>
-      <div className="text-2xl md:text-3xl font-bold tracking-tight tabular-nums">
+      <div className="text-2xl font-bold tracking-tight tabular-nums">
         <AnimatedCounter value={value} prefix={prefix || ""} />
       </div>
       {suffixLabel && (
@@ -835,11 +835,11 @@ function ExpenseRow({
   const CatIcon = CATEGORY_ICON_COMPONENTS[expense.category] ?? Boxes;
 
   return (
-    <GlassCard className="p-4 md:p-5" hover={false}>
-      <div className="flex items-start gap-3 md:gap-4">
+    <GlassCard className="p-4" hover={false}>
+      <div className="flex items-start gap-3">
         {/* Category icon tile (replaces avatar) */}
         <div
-          className="grid place-items-center h-12 w-12 md:h-14 md:w-14 rounded-2xl shrink-0"
+          className="grid place-items-center h-12 w-12 rounded-2xl shrink-0"
           style={{
             background: `color-mix(in oklch, ${meta.colorVar} 15%, transparent)`,
             color: meta.colorVar,
@@ -888,7 +888,7 @@ function ExpenseRow({
                   </>
                 )}
               </div>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-x-3 gap-y-0.5 mt-1.5 text-xs text-muted-foreground">
+              <div className="flex flex-col gap-x-3 gap-y-0.5 mt-1.5 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1 truncate">
                   <Calendar className="h-3 w-3" /> {formatDate(expense.expenseDate)}
                 </span>
@@ -992,7 +992,7 @@ function ExpenseFormSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-md flex flex-col gap-0 p-0"
+        className="w-full max-w-md flex flex-col gap-0 p-0"
       >
         <ExpenseFormBody
           key={bodyKey}

@@ -1025,3 +1025,227 @@ Stage Summary:
 - The KPIs memo and Top Categories chart are unchanged — they derive from the `expenses` query (current month, non-deleted), so soft-deleted expenses correctly do NOT count toward the current month's totals or category breakdown.
 - Only `src/components/features/billing/expenses-view.tsx` was modified. No API routes, prisma schema, stores, or other views touched. The ExpenseFormSheet + ExpenseFormBody were preserved verbatim — the edit flow is unchanged.
 - Lint clean (0 errors). Dev server running healthy with no compile errors after the edit.
+
+---
+Task ID: MOBILE-FIRST-B
+Agent: mobile-first-agent-b
+Task: Convert users + meals + kitchen + notifications views to mobile-first (remove all md:/lg:/sm: layout breakpoints)
+
+Work Log:
+- Read worklog.md tail (PAY-BACKEND, EXP-BACKEND, EXP-FRONTEND) for recent context — confirmed the AppShell now wraps content in `<div className="mx-auto w-full max-w-md">` (verified by reading src/components/layout/app-shell.tsx lines 27-28), so the desktop sidebar is gone and the bottom nav shows on ALL screens. The mobile-first design means all `md:`/`lg:`/`sm:` layout breakpoints must collapse to their mobile-equivalent classes since the container is capped at 448px (max-w-md) — `sm:` triggers at 640px so it never applies.
+- Ran `grep -n "md:\|lg:\|sm:"` on each of the 4 target files to enumerate every responsive class. Counts: users-view.tsx → 9 lines; meals-config-view.tsx → 17 lines; kitchen-view.tsx → 16 lines; notifications-view.tsx → 5 lines. Then read surrounding context for each match to ensure unique anchors before editing.
+
+Changes to `src/components/features/users/users-view.tsx` (921 lines, 6 edits):
+- Root `StaggerGroup` wrapper: `space-y-4 md:space-y-6 pb-6` → `space-y-4 pb-6`.
+- KPI grid: `grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4` → `grid grid-cols-2 gap-3` (KPI cards stay 2×2 on all screens).
+- Filter pills: collapsed `<span className="sm:hidden">{f.short}</span><span className="hidden sm:inline">{f.label}</span>` → `<span>{f.short}</span>` (always show the short label).
+- KpiCard component: `p-4 md:p-5` → `p-4`; `text-2xl md:text-3xl` → `text-2xl`.
+- UserRow card: `p-4 md:p-5` → `p-4`; avatar `h-12 w-12 md:h-14 md:w-14` → `h-12 w-12`; flex `gap-3 md:gap-4` → `gap-3`.
+- UserRow contact line: `flex flex-col sm:flex-row sm:items-center gap-x-3 gap-y-0.5 mt-1.5` → `flex flex-col gap-y-0.5 mt-1.5` (always vertical email/phone stack).
+
+Changes to `src/components/features/meals/meals-config-view.tsx` (1289 lines, 13 edits + 1 import cleanup):
+- MealFormBody grids (4 occurrences, lines 319/421/481/540): each `grid grid-cols-1 md:grid-cols-2 gap-3` → `grid grid-cols-1 gap-3` (single-column form on all screens).
+- Emoji picker grid: `grid grid-cols-8 sm:grid-cols-10 gap-1.5 mt-2 max-h-32 overflow-y-auto no-scrollbar` → `grid grid-cols-8 gap-1.5 mt-2 max-h-32 overflow-y-auto no-scrollbar` (kept the mobile 8-column layout; `sm:grid-cols-10` removed since sm: never triggers inside max-w-md).
+- MealConfigCard: `p-4 md:p-5 h-full flex flex-col relative overflow-hidden` → `p-4 h-full flex flex-col relative overflow-hidden`.
+- ConfigSkeleton grid: `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4` → `grid grid-cols-1 gap-4`.
+- Filter bar wrapper: `flex flex-col md:flex-row gap-3 md:items-center` → `flex flex-col gap-3` (always vertical: search on top, then the two Select dropdowns side-by-side beneath).
+- Removed the decorative `<Filter className="h-4 w-4 text-muted-foreground hidden md:block" />` icon entirely (it was desktop-only decoration; mobile is now the only layout). Also removed the now-unused `Filter` import from the lucide-react block to keep lint clean.
+- Two Select triggers: `w-full md:w-40` / `w-full md:w-36` → `w-full` for both (the Selects now stretch full-width inside the always-vertical filter bar — they sit side-by-side in the inner `flex items-center gap-2` row beneath the search input, sharing the row's width equally).
+- Root `StaggerGroup` wrapper: `space-y-4 md:space-y-5 pb-6` → `space-y-4 pb-6`.
+- Filter card padding: `p-3 md:p-4` → `p-3`.
+- Error-state GlassCard: `p-8 md:p-12` → `p-8`.
+- Empty-state GlassCard: `p-10 md:p-14` → `p-10`.
+- Main meal grid: `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4` → `grid grid-cols-1 gap-4` (cards now stack single-column on all screens, matching the AppShell's mobile-first philosophy).
+
+Changes to `src/components/features/kitchen/kitchen-view.tsx` (415 lines, 8 edits):
+- Root `StaggerGroup` wrapper: `space-y-4 md:space-y-6` → `space-y-4`.
+- KPI grid: `grid grid-cols-3 gap-3 md:gap-4` → `grid grid-cols-3 gap-3` (3 KPIs stay in one row — they fit comfortably within 448px).
+- Empty-state GlassCard: `p-10 md:p-14` → `p-10`.
+- Per-meal cards grid: `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4` → `grid grid-cols-1 gap-3` (MealCards stack single-column on all screens).
+- KpiCard component: `p-4 md:p-5 relative overflow-hidden` → `p-4 relative overflow-hidden`; icon container `h-9 w-9 md:h-10 md:w-10 rounded-2xl` → `h-9 w-9 rounded-2xl`; icon `h-4 w-4 md:h-5 md:w-5` → `h-4 w-4` (collapsed responsive icon size to its mobile base); label `text-[11px] md:text-xs` → `text-[11px]`; value `text-2xl md:text-3xl` → `text-2xl`; sub `text-[10px] md:text-[11px]` → `text-[10px]`.
+- AccessRestricted GlassCard: `p-8 md:p-10` → `p-8`; heading `text-xl md:text-2xl` → `text-xl`.
+- KitchenSkeleton: `space-y-4 md:space-y-6` → `space-y-4`; main skeleton `h-32 md:h-28` → `h-32` (kept mobile height); KPI skeleton row `grid grid-cols-3 gap-3 md:gap-4` → `grid grid-cols-3 gap-3` with each `h-28 md:h-32` → `h-28`; final meal-cards skeleton grid `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4` → `grid grid-cols-1 gap-3`.
+
+Changes to `src/components/features/notifications/notifications-view.tsx` (325 lines, 4 edits):
+- Root `StaggerGroup` wrapper: `space-y-4 md:space-y-6 pb-6` → `space-y-4 pb-6`.
+- Refresh button: removed `<span className="hidden sm:inline">Refresh</span>` entirely — the button is now icon-only (`<RefreshCw className="h-4 w-4" />` + `aria-label="Refresh"`) on all screens, matching the rule "remove the span entirely (icon-only button)".
+- Filter pills: collapsed `<span className="sm:hidden">{f.short}</span><span className="hidden sm:inline">{f.label}</span>` → `<span>{f.short}</span>` (always show the short label).
+- EmptyState GlassCard: `p-10 md:p-16` → `p-10`.
+
+Verification:
+- `bun run lint` → 0 errors, 1 pre-existing informational warning in `variables-view.tsx` (react-hooks/incompatible-library on `form.watch` — called out as acceptable in the task spec, predates this task, unrelated to these 4 views).
+- `grep -n "md:\|lg:\|sm:"` on all 4 edited files → 0 matches each. No responsive layout breakpoints remain in users-view.tsx, meals-config-view.tsx, kitchen-view.tsx, or notifications-view.tsx.
+- `tail -25 dev.log` shows healthy `✓ Compiled in Nms` lines + `GET /api/notifications?unread=true 200` + `GET /api/kitchen?date=2026-06-28 200` — no compile errors, no runtime errors. The 4 edited views compile cleanly on the running dev server (Next.js compiled them lazily on the next request after edits).
+- Did NOT touch: component logic, state, mutations, queries, actual content/text of badges/labels/buttons, icon sizes that were already static (h-3 w-3, h-4 w-4, h-5 w-5, h-7 w-7, h-8 w-8 etc.), color classes, animation classes, `shrink-0` / `whitespace-nowrap` / `overflow-x-auto` on filter pill rows, or any `safe-top` / `safe-bottom` / `safe-x` classes. No other files were modified.
+
+Stage Summary:
+- All 4 views (users, meals-config, kitchen, notifications) are now fully mobile-first: every `md:`/`lg:`/`sm:` layout breakpoint has been removed or collapsed to its mobile-equivalent class. Inside the AppShell's 448px `max-w-md` container, the layouts are now identical on phone, tablet, and desktop — no dual-layout desktop view exists anywhere in these 4 files.
+- KPI grids: users (4 KPIs) renders as 2×2, kitchen (3 KPIs) renders as 1×3 (all three fit on one row at 448px), meals-config has no top-level KPI grid (no change there), notifications has no KPI grid (no change there).
+- Multi-column content grids: meals-config meal cards (was 1/2/3 cols) → 1 col; kitchen per-meal cards (was 1/2/3 cols) → 1 col; meals-config ConfigSkeleton (was 1/2/3 cols) → 1 col; meals-config MealFormBody sub-grids (was 1/2 cols, 4 occurrences) → 1 col; meals-config emoji picker (was 8/10 cols) → 8 cols (mobile only).
+- Filter bars: meals-config filter bar is now always vertical (search on top, type + status Selects in a horizontal row beneath — both `w-full` so they share the row equally). Notifications refresh button is icon-only on all screens (the "Refresh" text span was `hidden sm:inline` so it was desktop-only and is now removed).
+- Filter pills: users + notifications filter pills now always render the `f.short` label (the `f.label` long-form was `hidden sm:inline` desktop-only and is now removed).
+- Padding on GlassCards collapsed to mobile-only values throughout: `p-4 md:p-5` → `p-4`; `p-3 md:p-4` → `p-3`; `p-8 md:p-10` / `p-8 md:p-12` → `p-8`; `p-10 md:p-14` / `p-10 md:p-16` → `p-10`. Vertical rhythm collapsed: `space-y-4 md:space-y-5` / `space-y-4 md:space-y-6` → `space-y-4`. Gaps collapsed: `gap-3 md:gap-4` → `gap-3`.
+- Responsive text sizes collapsed to mobile base: `text-2xl md:text-3xl` → `text-2xl`; `text-xl md:text-2xl` → `text-xl`; `text-[11px] md:text-xs` → `text-[11px]`; `text-[10px] md:text-[11px]` → `text-[10px]`.
+- Responsive avatar/icon sizes collapsed: users avatar `h-12 w-12 md:h-14 md:w-14` → `h-12 w-12`; kitchen KpiCard icon container `h-9 w-9 md:h-10 md:w-10` → `h-9 w-9`; kitchen KpiCard icon `h-4 w-4 md:h-5 md:w-5` → `h-4 w-4`.
+- Removed now-unused `Filter` import from meals-config-view.tsx (the only icon import that became orphaned — every other icon is still used in JSX).
+- Lint clean (0 errors, 1 pre-existing unrelated warning). Dev server healthy with all 4 views compiling on demand.
+
+---
+Task ID: MOBILE-FIRST-A
+Agent: mobile-first-agent-a
+Task: Convert dashboard + billing + payments + expenses views to mobile-first (remove all md:/lg:/sm: layout breakpoints)
+
+Work Log:
+- Read worklog.md tail (PAY-ROWS, BILL-ROWS, EXP-REWRITE, BILL-FIX, PAY-FIX, PAY-BACKEND, EXP-BACKEND, EXP-FRONTEND) for context. Confirmed the prior work on these 4 views (admin delete/restore, deletion queue, etc.) is fully in place and that I should ONLY strip responsive layout breakpoints — not touch any logic/state/queries/mutations/content.
+- For each of the 4 target files ran `rg -n "md:|lg:|sm:" <file>` to enumerate every responsive class occurrence before editing. Counts: dashboard-view.tsx=14 occurrences, billing-view.tsx=12, payments-view.tsx=12, expenses-view.tsx=12 (50 total). After edits: re-ran the same rg on each file → 0 matches in all 4. Confirmed no `md:`/`lg:`/`sm:` survive in any of the 4 view files.
+- Edits applied (all using MultiEdit; each edit keeps the mobile/base class, drops the responsive variant):
+
+  1. `/home/z/my-project/src/components/features/dashboard/dashboard-view.tsx`:
+     - Loading skeleton grid: `grid grid-cols-2 lg:grid-cols-4 gap-3` → `grid grid-cols-2 gap-3`.
+     - Loading skeleton 3-col layout: `grid lg:grid-cols-3 gap-4` + `h-72 lg:col-span-2` → `grid grid-cols-1 gap-4` + plain `h-72` (no col-span, single column).
+     - Root StaggerGroup: `space-y-4 md:space-y-5` → `space-y-4`.
+     - Greeting card: `p-5 md:p-7` → `p-5`; date paragraph `text-sm md:text-lg` → `text-sm`; h2 `text-2xl md:text-3xl` → `text-2xl`; emoji span `text-xl md:text-2xl` → `text-xl`.
+     - KPI grid: `grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4` → `grid grid-cols-2 gap-3`.
+     - KpiCard inner GlassCard: `p-4 md:p-5 cursor-pointer` → `p-4 cursor-pointer`.
+     - KpiCard value: `text-2xl md:text-3xl` → `text-2xl`.
+     - Recent Activity card: `p-4 md:p-6` → `p-4`.
+
+  2. `/home/z/my-project/src/components/features/billing/billing-view.tsx`:
+     - Loading skeleton KPI grid: `grid grid-cols-2 lg:grid-cols-4 gap-3` → `grid grid-cols-2 gap-3`.
+     - Root StaggerGroup: `space-y-4 md:space-y-5` → `space-y-4`.
+     - KPI grid: `grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4` → `grid grid-cols-2 gap-3`.
+     - Empty-state card: `p-10 md:p-16` → `p-10`.
+     - KpiCard GlassCard: `p-4 md:p-5` → `p-4`.
+     - KpiCard value: `text-2xl md:text-3xl` → `text-2xl`.
+     - BillRow GlassCard: `p-4 md:p-5` → `p-4`; inner flex `flex items-start gap-3 md:gap-4` → `flex items-start gap-3`; Avatar `h-12 w-12 md:h-14 md:w-14` → `h-12 w-12`.
+     - BillRow meta row: `flex flex-col sm:flex-row sm:items-center gap-x-3 gap-y-0.5` → `flex flex-col gap-x-3 gap-y-0.5` (dropped `sm:flex-row sm:items-center` per rule 3; kept `gap-x-3 gap-y-0.5` since they're not breakpoints — only relevant in flex-row, harmless in flex-col).
+
+  3. `/home/z/my-project/src/components/features/billing/payments-view.tsx`:
+     - Loading skeleton KPI grid: `grid grid-cols-2 lg:grid-cols-4 gap-3` → `grid grid-cols-2 gap-3`.
+     - Root StaggerGroup: `space-y-4 md:space-y-6` → `space-y-4`.
+     - KPI grid: `grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4` → `grid grid-cols-2 gap-3`.
+     - Pending Approvals card: `p-5 md:p-6` → `p-5`.
+     - Empty-state card: `p-10 md:p-16` → `p-10`.
+     - KpiCard GlassCard (multi-line className): `p-4 md:p-5` → `p-4`.
+     - KpiCard value: `text-2xl md:text-3xl` → `text-2xl`.
+     - PaymentRow GlassCard: `p-4 md:p-5` → `p-4`; inner flex `flex items-start gap-3 md:gap-4` → `flex items-start gap-3`; Avatar `h-12 w-12 md:h-14 md:w-14` → `h-12 w-12`.
+     - PaymentRow meta row: `flex flex-col sm:flex-row sm:items-center gap-x-3 gap-y-0.5` → `flex flex-col gap-x-3 gap-y-0.5`.
+     - PaymentEditSheet SheetContent: `w-full sm:max-w-md flex flex-col gap-0 p-0` → `w-full max-w-md flex flex-col gap-0 p-0` (dropped `sm:` prefix, kept `max-w-md` always-on so the Sheet panel width stays capped at 448px to match the AppShell container — without this the side-docked Sheet would stretch to full viewport width on tablet/desktop, breaking the centered-app illusion).
+
+  4. `/home/z/my-project/src/components/features/billing/expenses-view.tsx`:
+     - Loading skeleton KPI grid: `grid grid-cols-2 lg:grid-cols-4 gap-3` → `grid grid-cols-2 gap-3`.
+     - Root StaggerGroup: `space-y-4 md:space-y-6` → `space-y-4`.
+     - KPI grid (note: already had no `lg:grid-cols-*` here, just `md:gap-4`): `grid grid-cols-2 gap-3 md:gap-4` → `grid grid-cols-2 gap-3`.
+     - Top Categories card: `p-4 md:p-6` → `p-4`.
+     - Empty-state card: `p-10 md:p-16` → `p-10`.
+     - KpiCard GlassCard (multi-line): `p-4 md:p-5` → `p-4`.
+     - KpiCard value: `text-2xl md:text-3xl` → `text-2xl`.
+     - ExpenseRow GlassCard: `p-4 md:p-5` → `p-4`; inner flex `flex items-start gap-3 md:gap-4` → `flex items-start gap-3`; category icon tile `h-12 w-12 md:h-14 md:w-14` → `h-12 w-12`.
+     - ExpenseRow meta row: `flex flex-col sm:flex-row sm:items-center gap-x-3 gap-y-0.5` → `flex flex-col gap-x-3 gap-y-0.5`.
+     - ExpenseFormSheet SheetContent: `w-full sm:max-w-md flex flex-col gap-0 p-0` → `w-full max-w-md flex flex-col gap-0 p-0` (same rationale as payments-view — keep the Sheet capped at 448px on all screens).
+
+- Did NOT modify: any component logic, state, mutations, queries, badges/labels/button text, icon sizes (`h-4 w-4`/`h-5 w-5` etc.), color classes, motion classes, `shrink-0`/`whitespace-nowrap`/`overflow-x-auto` on filter pill rows, or any `safe-top`/`safe-bottom`/`safe-x` classes. Did NOT touch any other file.
+
+Verification:
+- `cd /home/z/my-project && bun run lint` → 0 errors, 1 pre-existing informational warning in `variables-view.tsx` (react-hooks/incompatible-library on `form.watch` — unrelated, predates this task, called out as acceptable in the spec).
+- Re-ran `rg -n "md:|lg:|sm:" <file>` on each of the 4 edited files → 0 matches in all 4. (Also spot-checked that no `xl:` / `2xl:` breakpoints were introduced by the edits.)
+- `tail -25 dev.log` shows healthy dev server: repeated `✓ Compiled in <200ms` and `GET /api/notifications?unread=true 200` + `GET /api/kitchen?date=... 200` — all 200s, no compile errors, no runtime errors. The Next.js dev server hot-reloaded all 4 edited files cleanly (each file's edit triggered a `✓ Compiled in …` line in dev.log with no warnings/errors).
+- File size delta: dashboard 177→175 lines (−2: loading skeleton 3-col→1-col collapsed one div), billing 1156→1156 (net 0), payments 1590→1590 (net 0), expenses 1251→1251 (net 0). The size changes are tiny because each edit only shortened class strings, not structures — confirming no logic was added or removed.
+
+Stage Summary:
+- All 4 views (dashboard, billing, payments, expenses) now render as a pure single mobile layout on every screen size — no `md:`/`lg:`/`sm:` layout breakpoints remain anywhere in these files. On phone (≤448px) the AppShell fills the viewport; on tablet/desktop the AppShell centers the same 448px column and the bottom-nav shows on all screens, so the layout is identical across devices — only the surrounding whitespace differs.
+- KPI grids: always 2 columns (`grid-cols-2 gap-3`) on all screens. Previously `grid-cols-2 lg:grid-cols-4` (4-col on desktop) — now 2-col everywhere, with slightly wider cells on tablet/desktop since the container is still 448px max.
+- Loading skeletons: dashboard's 3-col skeleton collapsed to single column (`grid grid-cols-1`) to match the always-single-column content layout. billing/payments/expenses loading skeletons already used `grid gap-3` (no col-span) so no change there beyond the KPI grid fix.
+- StaggerGroup spacing: all four views now use `space-y-4` (was `md:space-y-5`/`md:space-y-6` on billing/payments/expenses respectively). Consistent vertical rhythm across all 4 views.
+- KpiCard component (each view has its own local KpiCard): padding is now `p-4` (was `p-4 md:p-5`), value text is `text-2xl` (was `text-2xl md:text-3xl`). Slightly tighter, fits the 448px column better.
+- Row components (BillRow, PaymentRow, ExpenseRow): card padding `p-4` (was `p-4 md:p-5`), inner flex gap `gap-3` (was `md:gap-4`), avatar/icon tile `h-12 w-12` (was `h-12 w-12 md:h-14 md:w-14`), and the email+room meta row is always `flex-col` (was `flex-col sm:flex-row sm:items-center`) — so email and room now stack vertically on all screens, which is the correct mobile reading order.
+- Empty-state cards: `p-10` everywhere (was `p-10 md:p-16`). Still generous padding for the centered icon + message.
+- Greeting card (dashboard only): `p-5` (was `p-5 md:p-7`), heading `text-2xl` (was `text-2xl md:text-3xl`), date `text-sm` (was `text-sm md:text-lg`), emoji `text-xl` (was `text-xl md:text-2xl`). The greeting no longer enlarges on desktop.
+- Sheet panels (PaymentEditSheet, ExpenseFormSheet): converted `sm:max-w-md` → `max-w-md` so the side-docked Sheet is always capped at 448px on all screens, matching the AppShell container width. Without this fix the Sheet would stretch to viewport width on tablet/desktop and break the centered-app illusion.
+- 0 lint errors. Dev server running healthy with all 4 views hot-reloading cleanly. No non-target files modified.
+
+---
+Task ID: MOBILE-FIRST-C
+Agent: mobile-first-agent-c
+Task: Convert settings + variables + profile + personalization + auth views to mobile-first
+
+Work Log:
+- Read worklog.md tail (EXP-FRONTEND, EXP-REWRITE, BILL-FIX, PAY-FIX, PAY-FRONTEND) for recent context. Read the AppShell philosophy in the task spec — AppShell wraps content in `<div className="mx-auto w-full max-w-md">`, no desktop sidebar, bottom nav on ALL screens. All `md:`/`lg:`/`sm:` layout breakpoints must be removed.
+- Read all 5 target files end-to-end: settings-view.tsx (595 lines), variables-view.tsx (944 lines), profile-view.tsx (1532 lines), personalization-view.tsx (508 lines), auth-screen.tsx (253 lines). Used `grep -n "md:|lg:|sm:"` on each to enumerate the responsive class inventory.
+- For each file, also grepped for `grid-cols-2` to find side-by-side form input pairs and applied rule 7 judgment (keep 2-col only if inputs are narrow enough to fit in 448px). Verified:
+  - settings-view.tsx line 498: Category + Type selects (single-word dropdown values) → keep grid-cols-2.
+  - variables-view.tsx line 851: Unit (short text) + Category (dropdown) → keep grid-cols-2.
+  - profile-view.tsx line 758: Phone + Room (short inputs) → keep grid-cols-2.
+  - profile-view.tsx line 792: Theme + Language (dropdowns) → keep grid-cols-2.
+  - profile-view.tsx line 1258: 2FA backup codes grid → keep grid-cols-2 (short codes).
+
+Edits to `src/components/features/settings/settings-view.tsx`:
+- `<StaggerGroup className="space-y-4 md:space-y-6 pb-6">` → `space-y-4 pb-6`.
+- `<GlassCard className="p-4 md:p-5" hover={false}>` (SettingRow) → `p-4`.
+- `<div className="flex flex-col md:flex-row md:items-end gap-3">` (SettingRow input+button container) → `flex flex-col gap-3` (rule 2).
+- `<GlassButton className="md:w-32">` (Save button) → `className="w-full"` (with flex-col stack, full-width button below input is the mobile-native pattern — judgment call like rule 7).
+- Left unchanged: AddSettingDialog's `grid grid-cols-2 gap-3` (Category + Type selects — narrow enough to fit), the `max-w-lg` on DialogContent (rule 8 — overlays are fine).
+
+Edits to `src/components/features/variables/variables-view.tsx`:
+- `<StaggerGroup className="space-y-4 md:space-y-6">` → `space-y-4`.
+- Stats bar `<div className="grid grid-cols-2 md:grid-cols-4 gap-3">` → `grid grid-cols-2 gap-3` (rule 1: KPI/multi-column grid).
+- Search+filters container `<div className="flex flex-col md:flex-row gap-3">` → `flex flex-col gap-3`.
+- Two SelectTrigger `className="w-full md:w-44 h-12 ..."` → `w-full h-12 ...` (drop the md:w-44 — selects now stack full-width below the search input).
+- Empty-state `<GlassCard className="p-10 md:p-14 text-center" hover={false}>` → `p-10 text-center` (rule 3).
+- AccordionItem `className="glass rounded-3xl overflow-hidden border-b-0 px-4 md:px-5"` → `px-4` only.
+- Accordion content `<div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pb-3 pt-1">` → `grid grid-cols-1 gap-3 pb-3 pt-1` (rule 1: variable cards now stack vertically instead of 2-per-row).
+- VariablesSkeleton: `<div className="space-y-4 md:space-y-6">` → `space-y-4`; inner `<div className="grid grid-cols-2 md:grid-cols-4 gap-3">` → `grid grid-cols-2 gap-3`.
+- Left unchanged: line 851 `grid grid-cols-2 gap-3` for Unit + Category form inputs (narrow enough).
+
+Edits to `src/components/features/auth/profile-view.tsx`:
+- Loading skeleton: `<div className="grid md:grid-cols-2 gap-4">` → `grid grid-cols-1 gap-4`.
+- `<StaggerGroup className="space-y-4 md:space-y-6 pb-6">` → `space-y-4 pb-6`.
+- Profile header GlassCard `className="p-6 md:p-8 relative overflow-hidden"` → `p-6 relative overflow-hidden`.
+- Header layout `<div className="flex flex-col md:flex-row md:items-center gap-5 md:gap-7">` → `flex flex-col gap-5` (avatar on top, name/badges below, edit button below that — vertical stack).
+- Info column `<div className="flex-1 min-w-0 text-center md:text-left">` → `flex-1 min-w-0 text-center` (text stays centered under the centered avatar).
+- Name `<h2 className="text-2xl md:text-3xl font-bold truncate">` → `text-2xl font-bold truncate` (rule 4).
+- Badges row `<div className="flex items-center gap-2 mt-3 flex-wrap justify-center md:justify-start">` → `justify-center` only (paired with text-center above for the centered mobile layout).
+- Quick action cards `<div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">` → `grid grid-cols-1 gap-3` (3 cards stack vertically).
+- Info cards `<div className="grid md:grid-cols-2 gap-4">` → `grid grid-cols-1 gap-4` (Contact + Preferences stack).
+- Sign out card `<GlassCard className="p-4 md:p-5" hover={false}>` → `p-4`.
+- AvatarUpload wrapper `className="relative shrink-0 mx-auto md:mx-0"` → `relative shrink-0 mx-auto` (avatar stays centered, drops the md:mx-0 that left-aligned it in the old horizontal layout).
+- `<Avatar className="relative h-24 w-24 md:h-28 md:w-28 rounded-3xl">` → `relative h-24 w-24 rounded-3xl` (rule 6: responsive widths).
+- AvatarFallback `"rounded-3xl bg-gradient-to-br text-white font-bold text-2xl md:text-3xl"` → `text-2xl` only (rule 4).
+- QuickActionCard `<GlassCard className="p-4 md:p-5 h-full" hover>` → `p-4 h-full`.
+- InfoCard `<GlassCard className="p-4 md:p-6" hover={false}>` → `p-4` (rule 3).
+- Left unchanged: SheetContent `sm:max-w-md` on SessionsSheet (line 1449 — it's an overlay/sheet, not inside the AppShell container; rule 8 says max-w-* on dialogs/sheets is fine; `sm:max-w-md` provides the right behavior: full-width on mobile viewport, capped at 448px on tablet/desktop — matches the app's centered max-w-md design).
+
+Edits to `src/components/features/personalization/personalization-view.tsx`:
+- Loading skeleton `<div className="grid md:grid-cols-2 gap-4">` → `grid grid-cols-1 gap-4`.
+- `<StaggerGroup className="space-y-4 md:space-y-6 pb-6">` → `space-y-4 pb-6`.
+- Header GlassCard `className="p-5 md:p-7"` → `p-5`.
+- Header layout `<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">` → `flex flex-col justify-between gap-4`.
+- Title `<h2 className="text-xl md:text-2xl font-bold">` → `text-xl font-bold` (rule 4).
+- Main 2-col layout `<div className="grid lg:grid-cols-2 gap-4 md:gap-6">` → `grid grid-cols-1 gap-4` (rule 1: Controls and Live Preview stack vertically).
+- Both left/right column wrappers `<div className="space-y-4 md:space-y-6">` → `space-y-4` (two instances, both updated).
+- Three GlassCards in the Controls column (`Preset Themes`, `Custom Colors`, `Corner Radius`) `className="p-5 md:p-6"` → `p-5` (rule 3).
+- Live Preview GlassCard `className="p-5 md:p-6 sticky top-24"` → `p-5 sticky top-24` (kept the sticky positioning since the preview now scrolls below the controls — still useful for the preview to stick while scrolling through controls).
+- Left unchanged: `grid grid-cols-2 gap-3` for PRESETS (8 preset theme cards in a 2-col grid — fits 448px), `grid grid-cols-5 gap-2` for RADIUS_OPTIONS (5 small radius buttons — fits), the mini-app preview's internal `grid grid-cols-2 gap-2` and `grid grid-cols-3 gap-2` (color swatches — fits).
+
+Edits to `src/components/features/auth/auth-screen.tsx` (rule 9 special case — NOT inside AppShell):
+- Outer container `<div className="w-full max-w-5xl grid lg:grid-cols-2 gap-6 items-center">` → `<div className="w-full max-w-md mx-auto flex flex-col gap-6 items-center">` (single-column centered mobile layout — drops the 2-col split entirely, matches AppShell's max-w-md constraint).
+- Hero motion.div `className="hidden lg:flex flex-col gap-6 p-8"` → `className="hidden flex-col gap-6 p-8"` (rule 5: keep mobile version — hero is now always hidden, since stacking it above the form would push the form below the fold on a 448px-wide centered app). The hero's source content is preserved (not deleted) per the "don't change content/text" rule; it's just `display:none`.
+- Form GlassCard `className="p-6 md:p-8"` → `p-6` (rule 3).
+- Mobile brand block `<div className="lg:hidden flex items-center gap-3 mb-6">` → `<div className="flex items-center gap-3 mb-6">` (rule 5: remove `lg:hidden` so the mobile brand is ALWAYS visible — needed now that the hero is hidden everywhere; otherwise the form would have no BoardOps branding at all).
+
+Verification:
+- `cd /home/z/my-project && bun run lint` → 0 errors, 1 pre-existing informational warning in variables-view.tsx (`react-hooks/incompatible-library` on `form.watch` — unrelated, predates this task, called out as acceptable in the task spec).
+- `grep -n "md:|lg:|sm:"` on all 5 edited files → 0 matches in 4 files; the only remaining match is `sm:max-w-md` on the SessionsSheet in profile-view.tsx (intentionally preserved per rule 8 — Sheet is an overlay).
+- Dev server was already running (port 3000, shared with prior tasks). After the edits, `curl http://localhost:3000/` → 200 with `compile: 60ms, render: 277ms` (no compile errors, no runtime errors). dev.log tail shows only healthy `GET / 200`, `GET /api/... 200` lines — no errors, no warnings, no "Module not found" or "Unhandled Runtime Error".
+- Did NOT touch: any component logic, state, mutations, queries, actual content/text, icon sizes, color classes, animation classes, any `safe-top`/`safe-bottom`/`safe-x` classes, any other files outside the 5 listed.
+
+Stage Summary:
+- All 5 views (settings, variables, profile, personalization, auth) now use mobile-first layout classes only. On any viewport (phone/tablet/desktop), they render in a single centered column capped at max-w-md (448px) by the AppShell — no dual-layout branches, no `md:`/`lg:` breakpoint transitions, no desktop sidebar remnants.
+- KPI/stats grids collapse to 2 columns (variables) or 1 column (profile quick-action cards, info cards; personalization controls + preview stack). Form input pairs that fit in 448px (Phone+Room, Theme+Language, Unit+Category, Category+Type) stay 2-col for compactness.
+- Profile header is now a centered vertical stack: avatar (24×24, centered) → name + email + badges (text-center, justify-center) → Edit Profile button. Avatar size locked at h-24 w-24 (was md:h-28 md:w-28 on desktop). Initials font-size locked at text-2xl (was md:text-3xl).
+- Personalization page: Controls (Preset Themes / Custom Colors / Corner Radius) stack on top; Live Preview is below (sticky top-24 preserved so it stays visible while scrolling the controls section). All padding normalized to p-5 (was md:p-6 / md:p-7).
+- Auth screen: container is now `w-full max-w-md mx-auto flex flex-col gap-6 items-center`. The desktop hero/branding motion.div is `hidden` (always — its source content preserved for if someone re-enables it later). The compact mobile brand block (BoardOps logo + name + tagline) is now always visible above the GlassNav tabs and form. Form GlassCard padding locked at p-6 (was md:p-8).
+- Variables view: Accordion content cards now stack 1-per-row (was 2-per-row at lg). Search + Type filter + Category filter all stack full-width (was md:flex-row with 44-width selects). KPI stats grid stays 2×2 (was 1×4 at md+).
+- Settings view: Each SettingRow is now a vertical stack (input/textarea/switch on top, full-width Save button below). The Save button is `w-full` so it spans the row regardless of dirty state (was `md:w-32` fixed-width on desktop, content-width on mobile — the latter looked awkward as a tiny left-aligned button below the input).
+- SessionsSheet in profile-view retains its `sm:max-w-md` — appropriate because Sheets are overlays not constrained by AppShell, and `sm:max-w-md` gives full-width on phone + 448px cap on tablet/desktop (matching the app's centered design).
+- Lint clean (0 errors). Dev server healthy, no compile errors. Only 5 specified files were modified.

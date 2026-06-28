@@ -21,7 +21,7 @@ export function MobileBottomNav() {
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 z-40 safe-x safe-bottom"
+      className="fixed bottom-0 left-0 right-0 z-40 safe-x safe-bottom"
       aria-label="Primary navigation"
     >
       <div className="mx-auto max-w-md px-2.5 sm:px-3 pb-2 pt-1">

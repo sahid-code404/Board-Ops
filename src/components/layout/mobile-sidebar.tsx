@@ -77,7 +77,7 @@ export function MobileSidebar() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             onClick={() => setSidebarOpen(false)}
-            className="md:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
           />
 
           {/* Sidebar panel */}
@@ -86,7 +86,7 @@ export function MobileSidebar() {
             animate={{ x: 0 }}
             exit={{ x: "-100%" }}
             transition={{ type: "spring", stiffness: 380, damping: 38 }}
-            className="md:hidden fixed left-0 top-0 bottom-0 z-50 w-[85vw] max-w-sm flex flex-col safe-top safe-bottom"
+            className="fixed left-0 top-0 bottom-0 z-50 w-[85vw] max-w-sm flex flex-col safe-top safe-bottom"
           >
             <div className="m-2 mr-1 glass-strong rounded-3xl flex-1 flex flex-col overflow-hidden shadow-2xl">
               {/* Brand header */}

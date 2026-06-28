@@ -188,7 +188,7 @@ export function SettingsView() {
   const isDirty = (s: Setting) => drafts[s.id] !== undefined && drafts[s.id] !== s.value;
 
   return (
-    <StaggerGroup className="space-y-4 md:space-y-6 pb-6">
+    <StaggerGroup className="space-y-4 pb-6">
       {/* Action bar */}
       <StaggerItem>
         <div className="flex items-center justify-end gap-3">
@@ -315,7 +315,7 @@ function SettingRow({
   const boolOn = value === "true";
 
   return (
-    <GlassCard className="p-4 md:p-5" hover={false}>
+    <GlassCard className="p-4" hover={false}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -353,7 +353,7 @@ function SettingRow({
         )}
       </div>
 
-      <div className="flex flex-col md:flex-row md:items-end gap-3">
+      <div className="flex flex-col gap-3">
         <div className="flex-1">
           {isFlag && isBoolValue ? (
             <div className="glass-soft rounded-2xl px-4 py-3 flex items-center justify-between">
@@ -412,7 +412,7 @@ function SettingRow({
           onClick={onSave}
           loading={saving}
           disabled={!isDirty}
-          className="md:w-32"
+          className="w-full"
         >
           <Save className="h-4 w-4" />
           {isDirty ? "Save" : "Saved"}

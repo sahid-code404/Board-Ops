@@ -19,7 +19,6 @@ import {
   AlertCircle,
   EyeOff,
   Sparkles,
-  Filter,
   ArrowUpDown,
 } from "lucide-react";
 import { GlassCard } from "@/components/glass/glass-card";
@@ -316,7 +315,7 @@ function MealForm({
       className="space-y-4 max-h-[70vh] overflow-y-auto no-scrollbar px-1"
     >
       {/* Identity section */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3">
         <GlassInput
           label="Internal name"
           placeholder="morning_tea"
@@ -359,7 +358,7 @@ function MealForm({
               {...register("icon")}
             />
           </div>
-          <div className="grid grid-cols-8 sm:grid-cols-10 gap-1.5 mt-2 max-h-32 overflow-y-auto no-scrollbar">
+          <div className="grid grid-cols-8 gap-1.5 mt-2 max-h-32 overflow-y-auto no-scrollbar">
             {EMOJI_CHOICES.map((emoji) => (
               <button
                 key={emoji}
@@ -418,7 +417,7 @@ function MealForm({
       </div>
 
       {/* Type + status */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3">
         <div>
           <Label className="mb-1.5 ml-1 block text-xs font-medium text-muted-foreground">
             Meal type
@@ -478,7 +477,7 @@ function MealForm({
           <Clock className="h-4 w-4 text-primary" />
           <p className="text-sm font-semibold">Cutoff configuration</p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3">
           <div>
             <Label className="mb-1.5 ml-1 block text-xs font-medium text-muted-foreground">
               Cutoff strategy
@@ -537,7 +536,7 @@ function MealForm({
       </div>
 
       {/* Defaults */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3">
         <div className="glass-soft rounded-2xl p-3 flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Default state</p>
@@ -641,7 +640,7 @@ function MealConfigCard({
       className="h-full"
     >
       <GlassCard
-        className="p-4 md:p-5 h-full flex flex-col relative overflow-hidden"
+        className="p-4 h-full flex flex-col relative overflow-hidden"
         glow="primary"
       >
         {/* Color accent */}
@@ -789,7 +788,7 @@ function MealConfigCard({
 
 function ConfigSkeleton() {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 gap-4">
       {Array.from({ length: 6 }).map((_, i) => (
         <ShimmerSkeleton key={i} className="h-56" />
       ))}
@@ -949,7 +948,7 @@ export function MealsConfigView() {
 
   // Filter bar
   const filterBar = (
-    <div className="flex flex-col md:flex-row gap-3 md:items-center">
+    <div className="flex flex-col gap-3">
       <div className="flex-1">
         <GlassInput
           placeholder="Search meals by name or description..."
@@ -959,9 +958,8 @@ export function MealsConfigView() {
         />
       </div>
       <div className="flex items-center gap-2">
-        <Filter className="h-4 w-4 text-muted-foreground hidden md:block" />
         <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="h-11 rounded-2xl glass-soft w-full md:w-40">
+          <SelectTrigger className="h-11 rounded-2xl glass-soft w-full">
             <SelectValue placeholder="Type" />
           </SelectTrigger>
           <SelectContent>
@@ -974,7 +972,7 @@ export function MealsConfigView() {
           </SelectContent>
         </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="h-11 rounded-2xl glass-soft w-full md:w-36">
+          <SelectTrigger className="h-11 rounded-2xl glass-soft w-full">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -989,7 +987,7 @@ export function MealsConfigView() {
   );
 
   return (
-    <StaggerGroup className="space-y-4 md:space-y-5 pb-6">
+    <StaggerGroup className="space-y-4 pb-6">
       {/* Action bar */}
       {isAdmin && (
         <StaggerItem>
@@ -1003,7 +1001,7 @@ export function MealsConfigView() {
 
       {/* Filters */}
       <StaggerItem>
-        <GlassCard className="p-3 md:p-4" hover={false}>
+        <GlassCard className="p-3" hover={false}>
           {filterBar}
         </GlassCard>
       </StaggerItem>
@@ -1027,7 +1025,7 @@ export function MealsConfigView() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              <GlassCard className="p-8 md:p-12 text-center" hover={false}>
+              <GlassCard className="p-8 text-center" hover={false}>
                 <div className="grid place-items-center gap-3">
                   <div className="grid place-items-center h-14 w-14 rounded-3xl bg-destructive/15">
                     <AlertCircle className="h-7 w-7 text-destructive" />
@@ -1059,7 +1057,7 @@ export function MealsConfigView() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              <GlassCard className="p-10 md:p-14 text-center" hover={false}>
+              <GlassCard className="p-10 text-center" hover={false}>
                 <div className="grid place-items-center gap-3">
                   <div className="grid place-items-center h-14 w-14 rounded-3xl bg-muted/40">
                     <Utensils className="h-7 w-7 text-muted-foreground" />
@@ -1104,7 +1102,7 @@ export function MealsConfigView() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              <StaggerGroup className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <StaggerGroup className="grid grid-cols-1 gap-4">
                 {filtered.map((m) => (
                   <StaggerItem key={m.id} className="h-full">
                     <MealConfigCard

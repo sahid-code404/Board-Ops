@@ -60,13 +60,13 @@ export function DashboardView() {
   if (isLoading || !data) {
     return (
       <div className="space-y-4">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <ShimmerSkeleton key={i} className="h-32" />
           ))}
         </div>
-        <div className="grid lg:grid-cols-3 gap-4">
-          <ShimmerSkeleton className="h-72 lg:col-span-2" />
+        <div className="grid grid-cols-1 gap-4">
+          <ShimmerSkeleton className="h-72" />
           <ShimmerSkeleton className="h-72" />
         </div>
       </div>
@@ -88,26 +88,26 @@ export function DashboardView() {
       ];
 
   return (
-    <StaggerGroup className="space-y-4 md:space-y-5">
+    <StaggerGroup className="space-y-4">
       {/* Time-based greeting with gradient name */}
       <StaggerItem>
-        <GlassCard className="p-5 md:p-7" hover={false} glow="primary">
-          <p className="text-sm md:text-lg text-muted-foreground mb-2">
+        <GlassCard className="p-5" hover={false} glow="primary">
+          <p className="text-sm text-muted-foreground mb-2">
             {new Date().toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long" })}
           </p>
-          <h2 className="text-2xl md:text-3xl font-bold flex items-baseline gap-2.5 flex-wrap">
+          <h2 className="text-2xl font-bold flex items-baseline gap-2.5 flex-wrap">
             <span>{getTimeGreeting().greeting},</span>
             <span className={cn("bg-gradient-to-r bg-clip-text text-transparent", getGradientForName(user?.name || "User"))}>
               {user?.name.split(" ")[0]}
             </span>
-            <span className="text-xl md:text-2xl">{getTimeGreeting().emoji}</span>
+            <span className="text-xl">{getTimeGreeting().emoji}</span>
           </h2>
         </GlassCard>
       </StaggerItem>
 
       {/* KPIs */}
       <StaggerItem>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <div className="grid grid-cols-2 gap-3">
           {kpis.map((kpi) => {
             const Icon = kpi.icon;
             return (
@@ -118,7 +118,7 @@ export function DashboardView() {
                 onClick={() => setView(kpi.route)}
                 className="text-left w-full"
               >
-                <GlassCard className="p-4 md:p-5 cursor-pointer" glow={kpi.color as never}>
+                <GlassCard className="p-4 cursor-pointer" glow={kpi.color as never}>
                   <div className="flex items-start justify-between mb-3">
                     <div
                       className="grid place-items-center h-10 w-10 rounded-2xl"
@@ -131,7 +131,7 @@ export function DashboardView() {
                     <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
                   </div>
                   <p className="text-xs text-muted-foreground">{kpi.label}</p>
-                  <div className="text-2xl md:text-3xl font-bold tracking-tight">
+                  <div className="text-2xl font-bold tracking-tight">
                     <AnimatedCounter
                       value={kpi.value}
                       prefix={kpi.prefix || ""}
@@ -148,7 +148,7 @@ export function DashboardView() {
       {/* Recent Activity (admin only) */}
       {data.isAdmin && data.recentActivity.length > 0 && (
         <StaggerItem>
-          <GlassCard className="p-4 md:p-6" hover={false}>
+          <GlassCard className="p-4" hover={false}>
             <h3 className="font-semibold mb-4">Recent Activity</h3>
             <div className="space-y-2">
               {data.recentActivity.map((a) => (

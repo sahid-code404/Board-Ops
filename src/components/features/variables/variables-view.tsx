@@ -260,7 +260,7 @@ export function VariablesView() {
   if (isLoading) return <VariablesSkeleton />;
 
   return (
-    <StaggerGroup className="space-y-4 md:space-y-6">
+    <StaggerGroup className="space-y-4">
       {/* Action bar */}
       {isAdmin && (
         <StaggerItem>
@@ -275,7 +275,7 @@ export function VariablesView() {
 
       {/* Stats bar */}
       <StaggerItem>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <StatCard
             icon={Database}
             label="Total"
@@ -306,7 +306,7 @@ export function VariablesView() {
       {/* Search + filters */}
       <StaggerItem>
         <GlassCard className="p-4" hover={false}>
-          <div className="flex flex-col md:flex-row gap-3">
+          <div className="flex flex-col gap-3">
             <div className="flex-1">
               <GlassInput
                 value={search}
@@ -316,7 +316,7 @@ export function VariablesView() {
               />
             </div>
             <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-full md:w-44 h-12 glass-soft rounded-2xl border-2 border-transparent">
+              <SelectTrigger className="w-full h-12 glass-soft rounded-2xl border-2 border-transparent">
                 <Filter className="h-4 w-4 mr-1 text-muted-foreground" />
                 <SelectValue placeholder="Type" />
               </SelectTrigger>
@@ -330,7 +330,7 @@ export function VariablesView() {
               </SelectContent>
             </Select>
             <Select value={catFilter} onValueChange={setCatFilter}>
-              <SelectTrigger className="w-full md:w-44 h-12 glass-soft rounded-2xl border-2 border-transparent">
+              <SelectTrigger className="w-full h-12 glass-soft rounded-2xl border-2 border-transparent">
                 <Tag className="h-4 w-4 mr-1 text-muted-foreground" />
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
@@ -350,7 +350,7 @@ export function VariablesView() {
       {/* Grouped list */}
       {grouped.length === 0 ? (
         <StaggerItem>
-          <GlassCard className="p-10 md:p-14 text-center" hover={false}>
+          <GlassCard className="p-10 text-center" hover={false}>
             <div className="grid place-items-center h-16 w-16 rounded-3xl bg-muted/40 mx-auto mb-4">
               <Database className="h-8 w-8 text-muted-foreground/60" />
             </div>
@@ -385,7 +385,7 @@ export function VariablesView() {
               <AccordionItem
                 key={category}
                 value={category}
-                className="glass rounded-3xl overflow-hidden border-b-0 px-4 md:px-5"
+                className="glass rounded-3xl overflow-hidden border-b-0 px-4"
               >
                 <AccordionTrigger className="hover:no-underline py-4">
                   <div className="flex items-center gap-3">
@@ -405,7 +405,7 @@ export function VariablesView() {
                   </div>
                 </AccordionTrigger>
                 <AccordionContent>
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pb-3 pt-1">
+                  <div className="grid grid-cols-1 gap-3 pb-3 pt-1">
                     {vars.map((v) => (
                       <VariableCard
                         key={v.id}
@@ -924,9 +924,9 @@ function CreateVariableDialog({
 
 function VariablesSkeleton() {
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="space-y-4">
       <ShimmerSkeleton className="h-28" />
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         <ShimmerSkeleton className="h-20" />
         <ShimmerSkeleton className="h-20" />
         <ShimmerSkeleton className="h-20" />

@@ -225,7 +225,7 @@ export function ProfileView() {
     return (
       <div className="space-y-4">
         <ShimmerSkeleton className="h-44" />
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <ShimmerSkeleton className="h-48" />
           <ShimmerSkeleton className="h-48" />
         </div>
@@ -241,30 +241,30 @@ export function ProfileView() {
     : "First login";
 
   return (
-    <StaggerGroup className="space-y-4 md:space-y-6 pb-6">
+    <StaggerGroup className="space-y-4 pb-6">
       {/* Profile Header with avatar upload */}
       <StaggerItem>
-        <GlassCard className="p-6 md:p-8 relative overflow-hidden" hover={false} glow="primary">
+        <GlassCard className="p-6 relative overflow-hidden" hover={false} glow="primary">
           <div className="absolute inset-0 -z-10 opacity-30 pointer-events-none">
             <div className="absolute top-0 right-0 h-40 w-40 rounded-full bg-primary/40 blur-3xl" />
             <div className="absolute bottom-0 left-0 h-32 w-32 rounded-full bg-success/30 blur-3xl" />
           </div>
-          <div className="flex flex-col md:flex-row md:items-center gap-5 md:gap-7">
+          <div className="flex flex-col gap-5">
             <AvatarUpload
               avatarUrl={me.avatarUrl}
               name={me.name}
               onUpload={(file) => avatarMutation.mutate(file)}
               loading={avatarMutation.isPending}
             />
-            <div className="flex-1 min-w-0 text-center md:text-left">
+            <div className="flex-1 min-w-0 text-center">
               <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.05 }}
               >
-                <h2 className="text-2xl md:text-3xl font-bold truncate">{me.name}</h2>
+                <h2 className="text-2xl font-bold truncate">{me.name}</h2>
                 <p className="text-sm text-muted-foreground mt-0.5 truncate">{me.email}</p>
-                <div className="flex items-center gap-2 mt-3 flex-wrap justify-center md:justify-start">
+                <div className="flex items-center gap-2 mt-3 flex-wrap justify-center">
                   <Badge variant="outline" className={cn("text-xs", rMeta.className)}>
                     <ShieldCheck className="h-3 w-3" />
                     {rMeta.label}
@@ -297,7 +297,7 @@ export function ProfileView() {
 
       {/* Quick action cards */}
       <StaggerItem>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+        <div className="grid grid-cols-1 gap-3">
           <QuickActionCard
             icon={KeyRound}
             title="Change Password"
@@ -328,7 +328,7 @@ export function ProfileView() {
       </StaggerItem>
 
       {/* Info Cards */}
-      <div className="grid md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         <StaggerItem>
           <InfoCard
             title="Contact"
@@ -423,7 +423,7 @@ export function ProfileView() {
 
       {/* Sign out */}
       <StaggerItem>
-        <GlassCard className="p-4 md:p-5" hover={false}>
+        <GlassCard className="p-4" hover={false}>
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="grid place-items-center h-10 w-10 rounded-2xl bg-destructive/15 text-destructive shrink-0">
@@ -527,14 +527,14 @@ function AvatarUpload({
       initial={{ scale: 0.85, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       transition={{ type: "spring", stiffness: 220, damping: 18 }}
-      className="relative shrink-0 mx-auto md:mx-0"
+      className="relative shrink-0 mx-auto"
     >
       <div className="absolute -inset-1 rounded-3xl bg-gradient-to-br from-primary/40 to-success/40 blur-md" />
-      <Avatar className="relative h-24 w-24 md:h-28 md:w-28 rounded-3xl">
+      <Avatar className="relative h-24 w-24 rounded-3xl">
         {avatarUrl && <AvatarImage src={avatarUrl} alt={name} />}
         <AvatarFallback
           className={cn(
-            "rounded-3xl bg-gradient-to-br text-white font-bold text-2xl md:text-3xl",
+            "rounded-3xl bg-gradient-to-br text-white font-bold text-2xl",
             gradientFor(name)
           )}
         >
@@ -599,7 +599,7 @@ function QuickActionCard({
       onClick={onClick}
       className="text-left w-full"
     >
-      <GlassCard className="p-4 md:p-5 h-full" hover>
+      <GlassCard className="p-4 h-full" hover>
         <div className="flex items-start gap-3">
           <div className={cn("grid place-items-center h-10 w-10 rounded-2xl shrink-0", colorClass)}>
             <Icon className="h-5 w-5" />
@@ -643,7 +643,7 @@ function InfoCard({
     warning: "bg-warning/15 text-warning",
   }[color];
   return (
-    <GlassCard className="p-4 md:p-6" hover={false}>
+    <GlassCard className="p-4" hover={false}>
       <div className="flex items-center gap-3 mb-4">
         <div className={cn("grid place-items-center h-9 w-9 rounded-xl", colorClass)}>
           <Icon className="h-4 w-4" />

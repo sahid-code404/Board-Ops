@@ -368,7 +368,7 @@ export function BillingView() {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <ShimmerSkeleton key={i} className="h-32" />
           ))}
@@ -384,7 +384,7 @@ export function BillingView() {
   }
 
   return (
-    <StaggerGroup className="space-y-4 md:space-y-5">
+    <StaggerGroup className="space-y-4">
       {/* Month picker — centered, capsule design (matches expenses page) */}
       <StaggerItem>
         <div className="flex items-center justify-center gap-4">
@@ -445,7 +445,7 @@ export function BillingView() {
 
       {/* KPIs */}
       <StaggerItem>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <div className="grid grid-cols-2 gap-3">
           <KpiCard
             label="Total Billed"
             value={kpis.totalBilled}
@@ -555,7 +555,7 @@ export function BillingView() {
       {/* List */}
       <StaggerItem>
         {filtered.length === 0 ? (
-          <GlassCard className="p-10 md:p-16" hover={false}>
+          <GlassCard className="p-10" hover={false}>
             <div className="flex flex-col items-center justify-center text-center gap-3">
               <div className="grid place-items-center h-14 w-14 rounded-3xl bg-muted/40">
                 <Receipt className="h-6 w-6 text-muted-foreground" />
@@ -848,7 +848,7 @@ function KpiCard({
             ? "var(--destructive)"
             : "var(--info)";
   return (
-    <GlassCard className="p-4 md:p-5" glow={color === "danger" ? "danger" : color === "warning" ? "warning" : color === "success" ? "success" : "primary"}>
+    <GlassCard className="p-4" glow={color === "danger" ? "danger" : color === "warning" ? "warning" : color === "success" ? "success" : "primary"}>
       <div className="flex items-start justify-between mb-3">
         <div
           className="grid place-items-center h-10 w-10 rounded-2xl"
@@ -861,7 +861,7 @@ function KpiCard({
         </div>
       </div>
       <p className="text-xs text-muted-foreground">{label}</p>
-      <div className="text-2xl md:text-3xl font-bold tracking-tight tabular-nums">
+      <div className="text-2xl font-bold tracking-tight tabular-nums">
         <AnimatedCounter value={value} prefix={prefix || ""} />
       </div>
     </GlassCard>
@@ -902,9 +902,9 @@ function BillRow({
   }
 
   return (
-    <GlassCard className="p-4 md:p-5" hover={false}>
-      <div className="flex items-start gap-3 md:gap-4">
-        <Avatar className="h-12 w-12 md:h-14 md:w-14 rounded-2xl shrink-0">
+    <GlassCard className="p-4" hover={false}>
+      <div className="flex items-start gap-3">
+        <Avatar className="h-12 w-12 rounded-2xl shrink-0">
           {bill.user.avatarUrl && <AvatarImage src={bill.user.avatarUrl} alt={bill.user.name} />}
           <AvatarFallback className={cn("rounded-2xl bg-gradient-to-br text-white font-semibold", gradientFor(bill.user.name))}>
             {initials(bill.user.name) || "U"}
@@ -933,7 +933,7 @@ function BillRow({
                   </>
                 )}
               </div>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-x-3 gap-y-0.5 mt-1.5 text-xs text-muted-foreground">
+              <div className="flex flex-col gap-x-3 gap-y-0.5 mt-1.5 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1 truncate">
                   <Mail className="h-3 w-3" /> {bill.user.email}
                 </span>
