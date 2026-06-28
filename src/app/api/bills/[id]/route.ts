@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { requireRole } from "@/lib/session";
 import { ok, err, handleApiError } from "@/lib/api-response";
 import { logAudit } from "@/lib/audit";
+import { getDeletionDate } from "@/lib/user-cleanup";
 
 export async function GET(
   _req: Request,
@@ -24,6 +25,7 @@ export async function GET(
   }
 }
 
+/** DELETE /api/bills/[id] — soft-delete a single bill (7-day grace period) */
 export async function DELETE(
   _req: Request,
   ctx: { params: Promise<{ id: string }> }
@@ -33,17 +35,22 @@ export async function DELETE(
     const { id } = await ctx.params;
     const existing = await db.bill.findUnique({ where: { id } });
     if (!existing) return err("Bill not found", 404);
+    if (existing.deletedAt) return err("Bill is already scheduled for deletion", 422);
 
-    // Hard delete the bill
-    await db.bill.delete({ where: { id } });
+    const deletionDate = getDeletionDate();
+    await db.bill.update({
+      where: { id },
+      data: { deletedAt: deletionDate, deletedBy: user.id, status: "DELETED" },
+    });
     await logAudit({
       actorId: user.id,
-      action: "DELETE",
+      action: "BILL_SOFT_DELETE",
       entity: "Bill",
       entityId: id,
       oldValue: existing,
+      newValue: { deletedAt: deletionDate, status: "DELETED" },
     });
-    return ok({ success: true });
+    return ok({ success: true, permanentDeletion: deletionDate.toISOString() });
   } catch (e) {
     return handleApiError(e);
   }

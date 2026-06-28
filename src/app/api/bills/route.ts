@@ -2,16 +2,21 @@ import { db } from "@/lib/db";
 import { requireAuth, requireRole } from "@/lib/session";
 import { ok, err, handleApiError } from "@/lib/api-response";
 import { logAudit } from "@/lib/audit";
+import { purgeExpiredBills, getDeletionDate } from "@/lib/user-cleanup";
 
 /** GET /api/bills — list bills (user sees own; admin sees all).
- *  Optional `month` and `year` query params filter by billing period. */
+ *  Optional `month` and `year` query params filter by billing period.
+ *  Soft-deleted bills (in 7-day queue) are excluded. */
 export async function GET(req: Request) {
   try {
+    // Purge bills whose 7-day grace period has expired
+    await purgeExpiredBills();
+
     const user = await requireAuth();
     const url = new URL(req.url);
-    const limit = Number(url.searchParams.get("limit") || 20);
+    const limit = Number(url.searchParams.get("limit") || 200);
 
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = { deletedAt: null };
     if (user.role === "USER") {
       where.userId = user.id;
     }
@@ -142,7 +147,7 @@ export async function POST(req: Request) {
   }
 }
 
-/** DELETE /api/bills — delete all bills (optionally filtered by month/year) */
+/** DELETE /api/bills — soft-delete all bills (schedule for permanent deletion after 7 days) */
 export async function DELETE(req: Request) {
   try {
     const user = await requireRole("ADMIN");
@@ -150,22 +155,26 @@ export async function DELETE(req: Request) {
     const month = url.searchParams.get("month");
     const year = url.searchParams.get("year");
 
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = { deletedAt: null };
     if (month !== null && year) {
       where.periodMonth = Number(month);
       where.periodYear = Number(year);
     }
 
-    const result = await db.bill.deleteMany({ where });
+    const deletionDate = getDeletionDate();
+    const result = await db.bill.updateMany({
+      where,
+      data: { deletedAt: deletionDate, deletedBy: user.id, status: "DELETED" },
+    });
 
     await logAudit({
       actorId: user.id,
-      action: "BILLS_DELETED_ALL",
+      action: "BILLS_SOFT_DELETED_ALL",
       entity: "Bill",
-      newValue: { deleted: result.count, month, year },
+      newValue: { scheduled: result.count, permanentDeletion: deletionDate, month, year },
     });
 
-    return ok({ deleted: result.count });
+    return ok({ deleted: result.count, permanentDeletion: deletionDate.toISOString() });
   } catch (e) {
     return handleApiError(e);
   }

@@ -50,3 +50,22 @@ export function formatDeletionCountdown(deletedAt: Date): string {
   if (hours > 0) return `${hours} hour${hours > 1 ? "s" : ""} left`;
   return "Less than 1 hour left";
 }
+
+/**
+ * Permanently delete bills whose soft-delete grace period (7 days) has expired.
+ * Called on every GET /api/bills to keep the deletion queue clean.
+ */
+export async function purgeExpiredBills(): Promise<number> {
+  try {
+    const now = new Date();
+    const result = await db.bill.deleteMany({
+      where: {
+        deletedAt: { not: null, lt: now },
+      },
+    });
+    return result.count;
+  } catch (e) {
+    console.error("Failed to purge expired bills:", e);
+    return 0;
+  }
+}

@@ -257,11 +257,10 @@ export function BillingView() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      // Use PUT to set status to VOID (existing delete endpoint sets VOID)
       await api.delete(`/bills/${id}`);
     },
     onSuccess: () => {
-      toast.success("Bill deleted");
+      toast.success("Bill scheduled for deletion — permanently removed in 7 days");
       setDeleteTarget(null);
       qc.invalidateQueries({ queryKey: ["bills"] });
     },
@@ -276,7 +275,7 @@ export function BillingView() {
       return r.data;
     },
     onSuccess: (data) => {
-      toast.success(`${data.deleted} bills deleted`);
+      toast.success(`${data.deleted} bills scheduled for deletion — permanently removed in 7 days`);
       setDeleteAllOpen(false);
       qc.invalidateQueries({ queryKey: ["bills"] });
     },
@@ -370,22 +369,13 @@ export function BillingView() {
         </div>
       </StaggerItem>
 
-      {/* Compact action bar — no duplicate title (TopBar already shows it) */}
+      {/* Compact action bar */}
       {isAdmin && (
         <StaggerItem>
           <div className="flex items-center justify-end gap-3">
             <p className="text-sm text-muted-foreground hidden sm:block">
               Generate and track resident bills
             </p>
-            <GlassButton
-              variant="danger"
-              onClick={() => setDeleteAllOpen(true)}
-              className="shrink-0"
-              disabled={bills.length === 0}
-            >
-              <Trash2 className="h-4 w-4" />
-              Delete All
-            </GlassButton>
             <GlassButton
               onClick={() => setGenerateOpen(true)}
               className="shrink-0"
@@ -467,6 +457,18 @@ export function BillingView() {
               );
             })}
           </div>
+          {/* Delete All — below the sorting bar, slim ghost button */}
+          {isAdmin && bills.length > 0 && (
+            <div className="flex justify-end pt-1">
+              <button
+                onClick={() => setDeleteAllOpen(true)}
+                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-destructive/70 hover:text-destructive transition-colors"
+              >
+                <Trash2 className="h-3 w-3" />
+                Delete All ({bills.length})
+              </button>
+            </div>
+          )}
         </div>
       </StaggerItem>
 
@@ -761,12 +763,13 @@ export function BillingView() {
             <AlertDialogDescription>
               {deleteTarget && (
                 <>
-                  This will permanently delete the bill for{" "}
+                  This will schedule the bill for{" "}
                   <span className="font-medium text-foreground">
                     {deleteTarget.user.name}
                   </span>{" "}
-                  ({formatMonthYear(deleteTarget.periodMonth, deleteTarget.periodYear)}).
-                  This action cannot be undone.
+                  ({formatMonthYear(deleteTarget.periodMonth, deleteTarget.periodYear)}) for deletion.
+                  It will be permanently removed after{" "}
+                  <span className="font-medium text-foreground">7 days</span>.
                 </>
               )}
             </AlertDialogDescription>
@@ -796,8 +799,10 @@ export function BillingView() {
               Delete all bills for {MONTHS[selectedMonth]} {selectedYear}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete ALL {bills.length} bills for{" "}
-              {MONTHS[selectedMonth]} {selectedYear}. This action cannot be undone.
+              This will schedule ALL {bills.length} bills for{" "}
+              {MONTHS[selectedMonth]} {selectedYear} for deletion. The bills will
+              be permanently removed after <span className="font-medium text-foreground">7 days</span>.
+              You can restore them before the 7-day period expires. Do you want to continue?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
