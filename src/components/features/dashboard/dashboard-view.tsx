@@ -91,16 +91,16 @@ export function DashboardView() {
     <StaggerGroup className="space-y-4 md:space-y-5">
       {/* Time-based greeting with gradient name */}
       <StaggerItem>
-        <GlassCard className="p-6 md:p-10" hover={false} glow="primary">
-          <p className="text-base md:text-xl text-muted-foreground mb-3">
+        <GlassCard className="p-5 md:p-7" hover={false} glow="primary">
+          <p className="text-sm md:text-lg text-muted-foreground mb-2">
             {new Date().toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long" })}
           </p>
-          <h2 className="text-3xl md:text-5xl font-bold flex items-baseline gap-3 flex-wrap">
+          <h2 className="text-2xl md:text-3xl font-bold flex items-baseline gap-2.5 flex-wrap">
             <span>{getTimeGreeting().greeting},</span>
             <span className={cn("bg-gradient-to-r bg-clip-text text-transparent", getGradientForName(user?.name || "User"))}>
               {user?.name.split(" ")[0]}
             </span>
-            <span className="text-2xl md:text-4xl">{getTimeGreeting().emoji}</span>
+            <span className="text-xl md:text-2xl">{getTimeGreeting().emoji}</span>
           </h2>
         </GlassCard>
       </StaggerItem>
