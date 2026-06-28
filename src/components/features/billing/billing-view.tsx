@@ -428,20 +428,19 @@ export function BillingView() {
         </div>
       </StaggerItem>
 
-      {/* Compact action bar — centered glass card with border glow */}
+      {/* Compact action bar — centered glowing glass card button */}
       {isAdmin && (
         <StaggerItem>
           <div className="flex items-center justify-center">
-            <div className="glass glow-border-card rounded-3xl p-2">
-              <GlassButton
-                size="lg"
-                onClick={() => setGenerateOpen(true)}
-                className="shrink-0"
-              >
-                <Plus className="h-5 w-5" />
-                Generate Bills
-              </GlassButton>
-            </div>
+            <GlassButton
+              variant="ghost"
+              size="lg"
+              onClick={() => setGenerateOpen(true)}
+              className="shrink-0 glass glow-glass text-primary hover:text-primary"
+            >
+              <Plus className="h-5 w-5" />
+              Generate Bills
+            </GlassButton>
           </div>
         </StaggerItem>
       )}

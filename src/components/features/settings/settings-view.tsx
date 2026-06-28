@@ -189,20 +189,18 @@ export function SettingsView() {
 
   return (
     <StaggerGroup className="space-y-4 pb-6">
-      {/* Action bar — centered glass card with border glow */}
+      {/* Action bar — centered glowing glass card button */}
       <StaggerItem>
         <div className="flex items-center justify-center">
-          <div className="glass glow-border-card rounded-3xl p-2">
-            <GlassButton
-              variant="primary"
-              size="lg"
-              onClick={() => setAddOpen(true)}
-              className="shrink-0"
-            >
-              <Plus className="h-5 w-5" />
-              Add Setting
-            </GlassButton>
-          </div>
+          <GlassButton
+            variant="ghost"
+            size="lg"
+            onClick={() => setAddOpen(true)}
+            className="shrink-0 glass glow-glass text-primary hover:text-primary"
+          >
+            <Plus className="h-5 w-5" />
+            Add Setting
+          </GlassButton>
         </div>
       </StaggerItem>
 
