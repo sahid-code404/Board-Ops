@@ -468,16 +468,17 @@ export function ExpensesView() {
         </div>
       </StaggerItem>
 
-      {/* Action bar — centered glowing glass card button */}
+      {/* Action bar — centered transparent glass card button */}
       {isAdmin && (
         <StaggerItem>
-          <div className="flex items-center justify-end gap-3">
+          <div className="flex items-center justify-center">
             <GlassButton
+              variant="ghost"
               size="lg"
               onClick={openAddForm}
-              className="shrink-0"
+              className="shrink-0 glass text-primary hover:text-primary font-semibold"
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-5 w-5" />
               Add Expense
             </GlassButton>
           </div>

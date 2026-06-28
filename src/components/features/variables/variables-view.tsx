@@ -261,12 +261,17 @@ export function VariablesView() {
 
   return (
     <StaggerGroup className="space-y-4">
-      {/* Action bar — centered glowing glass card button */}
+      {/* Action bar — centered transparent glass card button */}
       {isAdmin && (
         <StaggerItem>
-          <div className="flex items-center justify-end gap-3">
-            <GlassButton onClick={() => setCreateOpen(true)} className="shrink-0">
-              <Plus className="h-4 w-4" />
+          <div className="flex items-center justify-center">
+            <GlassButton
+              variant="ghost"
+              onClick={() => setCreateOpen(true)}
+              size="lg"
+              className="shrink-0 glass text-primary hover:text-primary font-semibold"
+            >
+              <Plus className="h-5 w-5" />
               Create Variable
             </GlassButton>
           </div>
