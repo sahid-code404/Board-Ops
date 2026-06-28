@@ -783,3 +783,65 @@ Stage Summary:
 - All existing functionality (Add/Edit sheet, lock logic, RBAC gating, mutations, delete confirm, KPIs, Top Categories chart, month picker, search/filter pills) preserved unchanged.
 - Only `src/components/features/billing/expenses-view.tsx` was modified — no API routes, prisma schema, stores, or other views touched.
 - Lint clean (0 errors).
+
+---
+Task ID: PAY-ROWS
+Agent: payments-rows-agent
+Task: Replace Payments list dual mobile/desktop split with a single Users-style PaymentRow list
+
+Work Log:
+- Read worklog.md tail (Tasks BILL-ROWS, EXP-ROWS, EXP-REWRITE, BILL-FIX, PAY-FIX, UX-1, 10) for prior context — confirmed BILL-ROWS + EXP-ROWS already established the exact pattern (unified `space-y-3` + `AnimatePresence mode="popLayout"` + springy `motion.div` per-row wrapper + `GlassCard p-4 md:p-5 hover={false}` row + MoreVertical dropdown holding every per-row action). This task applies the same to Payments.
+- Read `src/components/features/users/users-view.tsx` lines 469-521 (list wrapper) and 779-921 (`UserRow` component) — confirmed canonical pattern: `GlassCard p-4 md:p-5 hover={false}` + top-level `flex items-start gap-3 md:gap-4` + Avatar `h-12 w-12 md:h-14 md:w-14 rounded-2xl` + middle meta stack + right `DropdownMenu` with `GlassButton variant="ghost" size="icon"` MoreVertical trigger + `DropdownMenuContent align="end" className="w-44 rounded-2xl"` + `DropdownMenuLabel` + `DropdownMenuSeparator` + mapped `DropdownMenuItem`.
+- Read `src/components/features/billing/billing-view.tsx` `BillRow` (lines 878-1011) for the closest analog (also has `user.name` + `user.email`) — used as the template for `PaymentRow`.
+- Read full `src/components/features/billing/payments-view.tsx` (1047 lines) — mapped the imports block (lines 1-76), the dual list block to replace (lines 524-604), the `PendingRow` component (lines 741-803) to preserve, and the old `PaymentCard` component (lines 805-866) to delete.
+
+Changes to `src/components/features/billing/payments-view.tsx` (only file modified):
+1. Imports:
+   - Updated `import { motion } from "framer-motion";` → `import { motion, AnimatePresence } from "framer-motion";`.
+   - Added `MoreVertical`, `Mail` to the lucide-react import block (appended after `RotateCcw`).
+   - Added `import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";` right after the `Badge` import.
+   - Removed the `Table, TableBody, TableCell, TableHead, TableHeader, TableRow` import block from `@/components/ui/table` (no longer used — desktop table is gone).
+   - Added a new `DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel` import block from `@/components/ui/dropdown-menu` (placed in the same spot the Table import used to occupy, between Select and AlertDialog).
+2. Added the `AVATAR_GRADIENTS` constant + `gradientFor(name)` + `initials(name)` helpers immediately after `formatDateTime` (before the existing `getDatePickerLabels` JSDoc comment). Exact same code as in users-view.tsx / billing-view.tsx.
+3. Replaced the dual list block (the `<>` fragment containing `{/* Mobile cards */}` `md:hidden` StaggerGroup of `PaymentCard` + `{/* Desktop table */}` `hidden md:block` GlassCard-wrapped `<Table>`) with a SINGLE unified list:
+   ```
+   <div className="space-y-3">
+     <AnimatePresence mode="popLayout">
+       {filtered.map((p) => (
+         <motion.div key={p.id} layout
+           initial={{opacity:0,y:12,scale:0.98}} animate={{opacity:1,y:0,scale:1}}
+           exit={{opacity:0,scale:0.95}} transition={{type:"spring",stiffness:280,damping:26}}>
+           <PaymentRow payment={p} isAdmin={isAdmin}
+             onApprove={() => setActionTarget({ payment: p, action: "APPROVE" })}
+             onReject={() => setActionTarget({ payment: p, action: "REJECT" })} />
+         </motion.div>
+       ))}
+     </AnimatePresence>
+   </div>
+   ```
+   No `md:hidden` / `hidden md:block` split remains. The empty-state GlassCard above the list is preserved unchanged.
+4. Deleted the old `PaymentCard` component (62 lines — `motion.div whileTap` + `glass rounded-3xl p-4` layout with method-icon tile + amount + notes) and replaced it with a new `PaymentRow` component that mirrors `UserRow` / `BillRow` exactly:
+   - Outer `<GlassCard className="p-4 md:p-5" hover={false}>` with top-level `<div className="flex items-start gap-3 md:gap-4">`.
+   - Left: `<Avatar className="h-12 w-12 md:h-14 md:w-14 rounded-2xl shrink-0">` with `<AvatarFallback>` using `gradientFor(payment.user.name)` + `initials(payment.user.name) || "U"`. (No AvatarImage — the `Payment.user` type only carries `name` + `email`, no `avatarUrl`.)
+   - Middle: `<h3 className="font-semibold truncate">` showing `payment.user.name` for admins or `methodMeta.label` for non-admins (matching the old PaymentCard's behavior). Followed by `<Badge variant="outline">` status (uses `STATUS_STYLES[payment.status]`) + `<Badge variant="outline">` method (uses `METHOD_META[payment.method]`), both at `text-[10px]`.
+   - Meta line `flex flex-col sm:flex-row sm:items-center gap-x-3 gap-y-0.5 mt-1.5 text-xs text-muted-foreground`: Mail icon + email (admin only) + Clock icon + `formatDateTime(createdAt)` + ArrowUpRight icon + "Ref {reference}" (only when present).
+   - Amount line `flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-muted-foreground`: "Amount ₹X" with `font-semibold text-foreground tabular-nums`, plus optional notes (`·` separator + truncated `max-w-[280px]`).
+   - Right: `DropdownMenu` with `DropdownMenuTrigger asChild` wrapping `GlassButton variant="ghost" size="icon" shrink-0 aria-label="Payment actions"` with `MoreVertical`. `DropdownMenuContent align="end" className="w-44 rounded-2xl"` with `DropdownMenuLabel` "Actions" + `DropdownMenuSeparator` + mapped `DropdownMenuItem` (rounded-xl cursor-pointer, `variant="destructive"` for Reject).
+   - Actions array: `Approve Payment` (CheckCircle2) + `Reject Payment` (XCircle, destructive). ONLY pushed when `isAdmin && payment.status === "PENDING"`. APPROVED / REJECTED / REFUNDED payments get an empty actions array → no dropdown trigger renders → matches the existing behavior where non-pending historical records had no per-row actions.
+   - Non-admin users: actions array is always empty (the `isAdmin` guard) → no dropdown trigger renders → matches the existing behavior where regular users couldn't act on their own payments.
+5. Preserved unchanged: Day Picker (centered capsule + circular ChevronLeft/Right arrows), action bar, KPIs (Total Approved / Pending Approvals / Rejected / Refunded), Admin Pending Approvals card with `PendingRow` (separate compact `glass-soft rounded-2xl p-3` UX with inline Approve/Reject buttons — intentional, NOT touched), search + filter pills, Submit Payment Dialog, Approve/Reject AlertDialog, `KpiCard`, `PendingRow`, `SubmitPaymentDialog`, `formatMonthLabel`, `formatINR`, `formatDate`, `formatDateTime`, `STATUS_STYLES`, `METHOD_META` helpers.
+
+Verification:
+- `bun run lint` → 0 errors (1 pre-existing informational warning in `variables-view.tsx` from a prior task, unrelated — react-hooks/incompatible-library on `form.watch`).
+- `tail -30 /home/z/my-project/dev.log` shows multiple clean `✓ Compiled in 162ms` / `207ms` / `74ms` / `139ms` / `137ms` entries after the edit plus successful `GET /api/payments 200` + `GET /api/payments?date=2026-06-28 200` requests — no compile errors.
+- grep confirmed no orphan references to `PaymentCard`, `Table`, `TableRow`, `TableCell`, `TableHead`, `TableBody`, `TableHeader`, `md:hidden`, or `hidden md:block` remain in the file.
+- File size: 1047 → 1088 lines (the new `PaymentRow` is slightly larger than the old `PaymentCard`; the unified list block is more compact than the dual list — net +41 lines).
+
+Stage Summary:
+- Payments list is now a single unified list of `GlassCard` rows identical in pattern to the Users / Billing / Expenses lists: same `space-y-3` wrapper, same `AnimatePresence mode="popLayout"` + per-row `motion.div` (layout/initial/animate/exit + spring transition), same `GlassCard p-4 md:p-5 hover={false}` row card, same `MoreVertical` dropdown holding every per-row action.
+- The mobile (`md:hidden`) cards + desktop (`hidden md:block`) `<Table>` split is GONE entirely — one list renders on every breakpoint. No `Table` import remains in this file.
+- For admins, the MoreVertical dropdown renders ONLY for PENDING payments (Approve / Reject actions); APPROVED / REJECTED / REFUNDED payments have no row-level actions and the dropdown trigger doesn't render. For non-admin users, the dropdown never renders (no row-level actions exist for them). This matches the old UI's behavior where admins could act only on pending items, and regular users couldn't act on their own payments.
+- The separate Admin "Pending Approvals" card at the top of the page (using the compact `PendingRow` with inline Approve/Reject buttons) is preserved unchanged — that's a distinct UX surface, not part of the main list.
+- All other functionality (Day Picker, KPIs, search/filter pills, Submit Payment Dialog, Approve/Reject AlertDialog, mutations, RBAC gating, `pendingPayments` derivation for KPIs + Admin card) preserved unchanged.
+- Only `src/components/features/billing/payments-view.tsx` was modified — no API routes, prisma schema, stores, or other views touched.
+- Lint clean (0 errors).

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { addDays, format, isSameDay } from "date-fns";
 import {
@@ -24,6 +24,8 @@ import {
   ChevronRight,
   Calendar,
   RotateCcw,
+  MoreVertical,
+  Mail,
 } from "lucide-react";
 
 import { api } from "@/lib/api-client";
@@ -41,6 +43,7 @@ import {
 import { ShimmerSkeleton } from "@/components/glass/shimmer-skeleton";
 
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   Dialog,
   DialogContent,
@@ -57,13 +60,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -181,6 +184,24 @@ function formatDateTime(iso: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+const AVATAR_GRADIENTS = [
+  "from-violet-500 to-fuchsia-500",
+  "from-emerald-500 to-teal-500",
+  "from-amber-500 to-orange-500",
+  "from-rose-500 to-pink-500",
+  "from-cyan-500 to-blue-500",
+  "from-indigo-500 to-purple-500",
+];
+
+function gradientFor(name: string) {
+  const idx = name.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) % AVATAR_GRADIENTS.length;
+  return AVATAR_GRADIENTS[idx];
+}
+
+function initials(name: string) {
+  return name.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("");
 }
 
 /** Returns { top, bottom } for the date picker.
@@ -522,85 +543,31 @@ export function PaymentsView() {
             </div>
           </GlassCard>
         ) : (
-          <>
-            {/* Mobile cards */}
-            <div className="md:hidden space-y-3">
-              <StaggerGroup className="space-y-3">
-                {filtered.map((p) => (
-                  <StaggerItem key={p.id}>
-                    <PaymentCard payment={p} isAdmin={isAdmin} />
-                  </StaggerItem>
-                ))}
-              </StaggerGroup>
-            </div>
-
-            {/* Desktop table */}
-            <GlassCard className="hidden md:block p-2" hover={false}>
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-border/60">
-                    {isAdmin && <TableHead className="pl-4">Resident</TableHead>}
-                    <TableHead className={isAdmin ? "" : "pl-4"}>Amount</TableHead>
-                    <TableHead>Method</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Reference</TableHead>
-                    <TableHead>Date</TableHead>
-                    {!isAdmin && <TableHead className="text-right pr-4">Notes</TableHead>}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.map((p) => (
-                    <TableRow key={p.id} className="border-border/40">
-                      {isAdmin && (
-                        <TableCell className="pl-4">
-                          <div className="flex flex-col">
-                            <span className="font-medium">{p.user.name}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {p.user.email}
-                            </span>
-                          </div>
-                        </TableCell>
-                      )}
-                      <TableCell className="font-semibold tabular-nums">
-                        {formatINR(p.amount)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={cn("rounded-full", METHOD_META[p.method].className)}
-                        >
-                          {METHOD_META[p.method].icon}
-                          {METHOD_META[p.method].label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "rounded-full",
-                            STATUS_STYLES[p.status].className
-                          )}
-                        >
-                          {STATUS_STYLES[p.status].label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {p.reference || "—"}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {formatDate(p.createdAt)}
-                      </TableCell>
-                      {!isAdmin && (
-                        <TableCell className="text-right pr-4 text-xs text-muted-foreground max-w-[200px] truncate">
-                          {p.notes || "—"}
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </GlassCard>
-          </>
+          <div className="space-y-3">
+            <AnimatePresence mode="popLayout">
+              {filtered.map((p) => (
+                <motion.div
+                  key={p.id}
+                  layout
+                  initial={{ opacity: 0, y: 12, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ type: "spring", stiffness: 280, damping: 26 }}
+                >
+                  <PaymentRow
+                    payment={p}
+                    isAdmin={isAdmin}
+                    onApprove={() =>
+                      setActionTarget({ payment: p, action: "APPROVE" })
+                    }
+                    onReject={() =>
+                      setActionTarget({ payment: p, action: "REJECT" })
+                    }
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
         )}
       </StaggerItem>
 
@@ -802,66 +769,140 @@ function PendingRow({
   );
 }
 
-function PaymentCard({
+function PaymentRow({
   payment,
   isAdmin,
+  onApprove,
+  onReject,
 }: {
   payment: Payment;
   isAdmin: boolean;
+  onApprove: () => void;
+  onReject: () => void;
 }) {
+  // Build the actions list — only admins get actions, and only for PENDING payments
+  const actions: {
+    label: string;
+    icon: typeof CheckCircle2;
+    onClick: () => void;
+    variant?: "destructive";
+  }[] = [];
+  if (isAdmin && payment.status === "PENDING") {
+    actions.push({ label: "Approve Payment", icon: CheckCircle2, onClick: onApprove });
+    actions.push({
+      label: "Reject Payment",
+      icon: XCircle,
+      onClick: onReject,
+      variant: "destructive",
+    });
+  }
+
+  const methodMeta = METHOD_META[payment.method];
+  const statusMeta = STATUS_STYLES[payment.status];
+
   return (
-    <motion.div
-      whileTap={{ scale: 0.99 }}
-      className="glass rounded-3xl p-4"
-    >
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div
+    <GlassCard className="p-4 md:p-5" hover={false}>
+      <div className="flex items-start gap-3 md:gap-4">
+        <Avatar className="h-12 w-12 md:h-14 md:w-14 rounded-2xl shrink-0">
+          <AvatarFallback
             className={cn(
-              "grid place-items-center h-11 w-11 rounded-2xl shrink-0",
-              METHOD_META[payment.method].className
+              "rounded-2xl bg-gradient-to-br text-white font-semibold",
+              gradientFor(payment.user.name)
             )}
           >
-            {METHOD_META[payment.method].icon}
-          </div>
-          <div className="min-w-0">
-            <p className="font-semibold truncate">
-              {isAdmin ? payment.user.name : METHOD_META[payment.method].label}
-            </p>
-            <p className="text-xs text-muted-foreground truncate">
-              {formatDateTime(payment.createdAt)}
-              {payment.reference ? ` · Ref ${payment.reference}` : ""}
-            </p>
+            {initials(payment.user.name) || "U"}
+          </AvatarFallback>
+        </Avatar>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-semibold truncate">
+                  {isAdmin ? payment.user.name : methodMeta.label}
+                </h3>
+                <Badge
+                  variant="outline"
+                  className={cn("text-[10px]", statusMeta.className)}
+                >
+                  {statusMeta.label}
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className={cn("text-[10px]", methodMeta.className)}
+                >
+                  {methodMeta.label}
+                </Badge>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-x-3 gap-y-0.5 mt-1.5 text-xs text-muted-foreground">
+                {isAdmin && (
+                  <span className="inline-flex items-center gap-1 truncate">
+                    <Mail className="h-3 w-3" /> {payment.user.email}
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="h-3 w-3" /> {formatDateTime(payment.createdAt)}
+                </span>
+                {payment.reference && (
+                  <span className="inline-flex items-center gap-1 truncate">
+                    <ArrowUpRight className="h-3 w-3" /> Ref {payment.reference}
+                  </span>
+                )}
+              </div>
+              {/* Amount inline */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-muted-foreground">
+                <span>
+                  Amount{" "}
+                  <span className="font-semibold text-foreground tabular-nums">
+                    {formatINR(payment.amount)}
+                  </span>
+                </span>
+                {payment.notes && (
+                  <span className="inline-flex items-start gap-1 truncate max-w-[280px]">
+                    <span className="text-muted-foreground/70">·</span>
+                    <span className="truncate">{payment.notes}</span>
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Dropdown — only render if there are actions */}
+            {actions.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <GlassButton
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0"
+                    aria-label="Payment actions"
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </GlassButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44 rounded-2xl">
+                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {actions.map((a) => {
+                    const Icon = a.icon;
+                    return (
+                      <DropdownMenuItem
+                        key={a.label}
+                        onClick={a.onClick}
+                        variant={a.variant}
+                        className="rounded-xl cursor-pointer"
+                      >
+                        <Icon className="h-4 w-4" />
+                        {a.label}
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
-        <Badge
-          variant="outline"
-          className={cn("rounded-full", STATUS_STYLES[payment.status].className)}
-        >
-          {STATUS_STYLES[payment.status].label}
-        </Badge>
       </div>
-      <div className="flex items-end justify-between">
-        <div>
-          <p className="text-[10px] text-muted-foreground uppercase">Amount</p>
-          <p className="text-2xl font-bold tabular-nums">
-            {formatINR(payment.amount)}
-          </p>
-        </div>
-        <Badge
-          variant="outline"
-          className={cn("rounded-full", METHOD_META[payment.method].className)}
-        >
-          {METHOD_META[payment.method].icon}
-          {METHOD_META[payment.method].label}
-        </Badge>
-      </div>
-      {payment.notes && (
-        <p className="mt-3 text-xs text-muted-foreground glass-soft rounded-2xl p-2.5">
-          {payment.notes}
-        </p>
-      )}
-    </motion.div>
+    </GlassCard>
   );
 }
 
