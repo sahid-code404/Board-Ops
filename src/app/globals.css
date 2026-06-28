@@ -238,23 +238,28 @@
 }
 
 @layer utilities {
-  /* Liquid glass surfaces — glowing translucent glass with primary-tinted gradient + soft glow.
-     Applied globally to all cards, panels, bars, dialogs, and sheets. */
+  /* Liquid glass surfaces — EXACT match to the Kitchen MealCard style.
+     Translucent glass with primary-tinted gradient + tinted border + soft glow +
+     ambient color blob (via ::after with isolation:isolate so z-index:-1 sits
+     above the background but below content).
+     Applied globally to ALL cards, panels, bars, dialogs, sheets, pills, and rows.
+     Uses var(--primary) so it adapts to the accent color. */
   .glass {
+    isolation: isolate;
     background:
       linear-gradient(
         135deg,
-        color-mix(in oklch, var(--primary) 12%, transparent) 0%,
+        color-mix(in oklch, var(--primary) 19%, transparent) 0%,
         color-mix(in oklch, var(--primary) 4%, transparent) 55%,
         transparent 100%
       ),
       var(--glass-bg);
     backdrop-filter: blur(32px) saturate(180%);
     -webkit-backdrop-filter: blur(32px) saturate(180%);
-    border: 1px solid color-mix(in oklch, var(--primary) 25%, var(--glass-border));
+    border: 1px solid color-mix(in oklch, var(--primary) 31%, var(--glass-border));
     box-shadow:
-      0 8px 32px -8px color-mix(in oklch, var(--primary) 18%, transparent),
-      inset 0 1px 0 0 color-mix(in oklch, var(--primary) 12%, transparent),
+      0 8px 32px -10px color-mix(in oklch, var(--primary) 25%, transparent),
+      inset 0 1px 0 0 color-mix(in oklch, var(--primary) 15%, transparent),
       var(--glass-shadow);
     position: relative;
   }
@@ -272,38 +277,88 @@
     );
     pointer-events: none;
     opacity: 0.35;
+    z-index: 1;
+  }
+  /* Ambient color blob — mirrors the MealCard's blurred top-right glow div.
+     isolation:isolate on parent creates a stacking context, so z-index:-1
+     places this ABOVE the element's background but BELOW all content. */
+  .glass::after {
+    content: "";
+    position: absolute;
+    top: -20%;
+    right: -10%;
+    width: 60%;
+    height: 80%;
+    border-radius: 50%;
+    background: var(--primary);
+    filter: blur(40px);
+    opacity: 0.3;
+    pointer-events: none;
+    z-index: -1;
   }
 
   .glass-strong {
+    isolation: isolate;
     background:
       linear-gradient(
         135deg,
-        color-mix(in oklch, var(--primary) 15%, transparent) 0%,
+        color-mix(in oklch, var(--primary) 22%, transparent) 0%,
         color-mix(in oklch, var(--primary) 5%, transparent) 55%,
         transparent 100%
       ),
       var(--glass-bg);
     backdrop-filter: blur(48px) saturate(200%);
     -webkit-backdrop-filter: blur(48px) saturate(200%);
-    border: 1px solid color-mix(in oklch, var(--primary) 30%, var(--glass-border));
+    border: 1px solid color-mix(in oklch, var(--primary) 35%, var(--glass-border));
     box-shadow:
-      0 20px 60px -10px color-mix(in oklch, var(--primary) 22%, transparent),
-      inset 0 1px 0 0 color-mix(in oklch, var(--primary) 15%, transparent),
+      0 20px 60px -10px color-mix(in oklch, var(--primary) 28%, transparent),
+      inset 0 1px 0 0 color-mix(in oklch, var(--primary) 18%, transparent),
       0 2px 4px oklch(0.3 0.05 280 / 0.08);
+    position: relative;
+  }
+  .glass-strong::after {
+    content: "";
+    position: absolute;
+    top: -20%;
+    right: -10%;
+    width: 60%;
+    height: 80%;
+    border-radius: 50%;
+    background: var(--primary);
+    filter: blur(48px);
+    opacity: 0.35;
+    pointer-events: none;
+    z-index: -1;
   }
 
   .glass-soft {
+    isolation: isolate;
     background:
       linear-gradient(
         135deg,
-        color-mix(in oklch, var(--primary) 8%, transparent) 0%,
-        color-mix(in oklch, var(--primary) 2%, transparent) 55%,
+        color-mix(in oklch, var(--primary) 12%, transparent) 0%,
+        color-mix(in oklch, var(--primary) 3%, transparent) 55%,
         transparent 100%
       ),
       color-mix(in oklch, var(--glass-bg) 88%, transparent);
     backdrop-filter: blur(20px) saturate(160%);
     -webkit-backdrop-filter: blur(20px) saturate(160%);
-    border: 1px solid color-mix(in oklch, var(--primary) 15%, var(--glass-border));
+    border: 1px solid color-mix(in oklch, var(--primary) 20%, var(--glass-border));
+    position: relative;
+  }
+  .glass-soft::after {
+    content: "";
+    position: absolute;
+    top: -15%;
+    right: -8%;
+    width: 50%;
+    height: 70%;
+    border-radius: 50%;
+    background: var(--primary);
+    filter: blur(28px);
+    opacity: 0.2;
+    pointer-events: none;
+    z-index: -1;
   }
 
   /* Glow effects */
