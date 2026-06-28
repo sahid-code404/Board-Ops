@@ -10,20 +10,6 @@ import { ShimmerSkeleton } from "@/components/glass/shimmer-skeleton";
 import { useAppStore } from "@/stores/use-app-store";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { Users, Utensils, Wallet, Receipt, TrendingUp, TrendingDown, Bell, ArrowUpRight, Activity, Clock } from "lucide-react";
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { motion } from "framer-motion";
 
 type DashboardData = {
@@ -56,7 +42,6 @@ type DashboardData = {
   isAdmin: boolean;
 };
 
-const PIE_COLORS = ["#8b5cf6", "#10b981", "#f59e0b", "#06b6d4", "#ec4899"];
 
 export function DashboardView() {
   const user = useAuthStore((s) => s.user);
@@ -205,120 +190,6 @@ export function DashboardView() {
             })}
           </div>
         </GlassCard>
-      </StaggerItem>
-
-      {/* Charts */}
-      <StaggerItem>
-        <div className="grid lg:grid-cols-3 gap-4">
-          <GlassCard className="p-4 md:p-6 lg:col-span-2" hover={false}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold">Meal Trends <span className="text-xs font-normal text-muted-foreground ml-1">· 7 days</span></h3>
-              <div className="flex items-center gap-3 text-xs">
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-primary" /> ON
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-muted-foreground" /> OFF
-                </span>
-              </div>
-            </div>
-            <ResponsiveContainer width="100%" height={240}>
-              <AreaChart data={data.trend}>
-                <defs>
-                  <linearGradient id="onGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.5} />
-                    <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis
-                  dataKey="date"
-                  stroke="var(--muted-foreground)"
-                  fontSize={11}
-                  tickFormatter={(d) => new Date(d).toLocaleDateString("en-US", { weekday: "short" })}
-                />
-                <YAxis stroke="var(--muted-foreground)" fontSize={11} />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--popover)",
-                    border: "1px solid var(--border)",
-                    borderRadius: 16,
-                    color: "var(--foreground)",
-                  }}
-                  labelFormatter={(d) => new Date(d).toLocaleDateString("en-US", { weekday: "long", day: "numeric" })}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="on"
-                  stroke="var(--primary)"
-                  strokeWidth={2}
-                  fill="url(#onGrad)"
-                  animationDuration={1200}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="off"
-                  stroke="var(--muted-foreground)"
-                  strokeWidth={2}
-                  strokeDasharray="4 4"
-                  fill="transparent"
-                  animationDuration={1200}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </GlassCard>
-
-          <GlassCard className="p-4 md:p-6" hover={false}>
-            <h3 className="font-semibold mb-4">Expenses <span className="text-xs font-normal text-muted-foreground ml-1">· this month</span></h3>
-            {data.expenseBreakdown.length > 0 ? (
-              <>
-                <ResponsiveContainer width="100%" height={180}>
-                  <PieChart>
-                    <Pie
-                      data={data.expenseBreakdown}
-                      dataKey="amount"
-                      nameKey="category"
-                      innerRadius={45}
-                      outerRadius={75}
-                      paddingAngle={3}
-                      animationDuration={1000}
-                    >
-                      {data.expenseBreakdown.map((_, i) => (
-                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        background: "var(--popover)",
-                        border: "1px solid var(--border)",
-                        borderRadius: 12,
-                      }}
-                      formatter={(v: number) => `₹${v.toLocaleString()}`}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="space-y-1.5 mt-2">
-                  {data.expenseBreakdown.slice(0, 4).map((e, i) => (
-                    <div key={e.category} className="flex items-center justify-between text-xs">
-                      <span className="flex items-center gap-2">
-                        <span
-                          className="h-2 w-2 rounded-full"
-                          style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}
-                        />
-                        <span className="text-muted-foreground">{e.category}</span>
-                      </span>
-                      <span className="font-medium">₹{e.amount.toLocaleString()}</span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="h-48 grid place-items-center text-sm text-muted-foreground">
-                No expenses this month
-              </div>
-            )}
-          </GlassCard>
-        </div>
       </StaggerItem>
 
       {/* Recent Activity (admin only) */}
