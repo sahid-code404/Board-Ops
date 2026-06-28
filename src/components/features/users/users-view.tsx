@@ -62,7 +62,6 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuthStore, type Role } from "@/stores/use-auth-store";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -283,15 +282,18 @@ export function UsersView() {
   });
 
   const kpis = useMemo(() => {
-    const total = users.length;
-    const active = users.filter((u) => u.status === "ACTIVE" && !u.deletedAt).length;
-    const pending = users.filter((u) => u.status === "PENDING").length;
-    const suspended = users.filter((u) => u.status === "SUSPENDED").length;
-    const inQueue = users.filter((u) => u.deletedAt).length;
+    // Exclude admins from all counts — these are resident-facing metrics
+    const residents = users.filter((u) => u.role !== "ADMIN");
+    const total = residents.filter((u) => !u.deletedAt).length;
+    const active = residents.filter((u) => u.status === "ACTIVE" && !u.deletedAt).length;
+    const pending = residents.filter((u) => u.status === "PENDING").length;
+    const suspended = residents.filter((u) => u.status === "SUSPENDED").length;
+    const inQueue = residents.filter((u) => u.deletedAt).length;
     return { total, active, pending, suspended, inQueue };
   }, [users]);
 
   const filteredUsers = useMemo(() => {
+    // Show all users including admins in the list, but filter by status
     if (status === "DELETED") return users.filter((u) => u.deletedAt);
     if (status === "ALL") return users.filter((u) => !u.deletedAt);
     return users.filter((u) => !u.deletedAt && u.status === status);
@@ -415,31 +417,37 @@ export function UsersView() {
 
       {/* Search + filter */}
       <StaggerItem>
-        <GlassCard className="p-3 md:p-4" hover={false}>
-          <div className="flex flex-col md:flex-row gap-3">
-            <div className="flex-1">
-              <GlassInput
-                placeholder="Search by name, email, phone, or room…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                icon={<Search />}
-              />
-            </div>
-            <Tabs value={status} onValueChange={(v) => setStatus(v as UserStatus | "ALL")}>
-              <TabsList className="bg-muted/40 h-11 p-1 overflow-x-auto no-scrollbar">
-                {STATUS_FILTERS.map((f) => (
-                  <TabsTrigger
+        <div className="space-y-3">
+          <GlassInput
+            placeholder="Search by name, email, phone, or room…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            icon={<Search />}
+          />
+          {/* Symmetrical scrollable filter pills — centered when they fit, scrollable when they don't */}
+          <div className="flex justify-center overflow-x-auto no-scrollbar pb-1">
+            <div className="flex items-center gap-2">
+              {STATUS_FILTERS.map((f) => {
+                const active = status === f.key;
+                return (
+                  <motion.button
                     key={f.key}
-                    value={f.key}
-                    className="rounded-2xl text-xs px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                    whileTap={{ scale: 0.96 }}
+                    onClick={() => setStatus(f.key)}
+                    className={cn(
+                      "flex items-center justify-center h-9 min-w-[80px] px-3 rounded-2xl text-xs font-medium transition-all whitespace-nowrap shrink-0",
+                      active
+                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                        : "glass-soft text-muted-foreground hover:text-foreground"
+                    )}
                   >
                     {f.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
+                  </motion.button>
+                );
+              })}
+            </div>
           </div>
-        </GlassCard>
+        </div>
       </StaggerItem>
 
       {/* User list */}
