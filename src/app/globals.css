@@ -103,17 +103,16 @@
   --sidebar-border: oklch(0.5 0.02 280 / 0.1);
   --sidebar-ring: oklch(0.55 0.22 295 / 0.5);
 
-  /* Apple liquid glass tokens — neutral white/transparent, NOT tinted by preset color.
-     Lower opacity so panels feel floating/translucent. Heavy blur for the frosted look. */
-  --glass-bg: oklch(1 0 0 / 0.72);
-  --glass-border: oklch(1 0 0 / 0.5);
-  --glass-shadow: 0 8px 32px oklch(0.2 0 0 0 / 0.12), 0 1px 2px oklch(0.2 0 0 0 / 0.06);
-  --glass-highlight: oklch(1 0 0 / 0.5);
+  /* glass-specific tokens — more opaque for better readability */
+  --glass-bg: oklch(1 0.008 280 / 0.92);
+  --glass-border: oklch(1 0 0 / 0.75);
+  --glass-shadow: 0 8px 32px oklch(0.3 0.05 280 / 0.14), 0 1px 2px oklch(0.3 0.05 280 / 0.08);
+  --glass-highlight: oklch(1 0 0 / 0.4);
 
-  --mesh-1: oklch(0.85 0.05 295 / 0.18);
-  --mesh-2: oklch(0.85 0.05 230 / 0.16);
-  --mesh-3: oklch(0.88 0.04 340 / 0.14);
-  --mesh-4: oklch(0.85 0.05 200 / 0.12);
+  --mesh-1: oklch(0.7 0.2 295 / 0.22);
+  --mesh-2: oklch(0.75 0.18 190 / 0.2);
+  --mesh-3: oklch(0.78 0.2 340 / 0.18);
+  --mesh-4: oklch(0.7 0.18 230 / 0.16);
 }
 
 /* ============ DARK MODE — deep graphite + neon glow ============ */
@@ -166,15 +165,15 @@
   --sidebar-border: oklch(1 0 0 / 0.08);
   --sidebar-ring: oklch(0.72 0.22 295 / 0.5);
 
-  --glass-bg: oklch(0.2 0 0 / 0.72);
-  --glass-border: oklch(1 0 0 / 0.12);
-  --glass-shadow: 0 8px 32px oklch(0 0 0 / 0.5), 0 1px 2px oklch(0 0 0 / 0.25);
-  --glass-highlight: oklch(1 0 0 / 0.08);
+  --glass-bg: oklch(0.19 0.025 280 / 0.9);
+  --glass-border: oklch(1 0 0 / 0.16);
+  --glass-shadow: 0 8px 32px oklch(0 0 0 / 0.55), 0 1px 2px oklch(0 0 0 / 0.3);
+  --glass-highlight: oklch(1 0 0 / 0.06);
 
-  --mesh-1: oklch(0.35 0.06 295 / 0.28);
-  --mesh-2: oklch(0.35 0.06 230 / 0.24);
-  --mesh-3: oklch(0.4 0.05 340 / 0.22);
-  --mesh-4: oklch(0.32 0.06 200 / 0.18);
+  --mesh-1: oklch(0.45 0.25 295 / 0.35);
+  --mesh-2: oklch(0.45 0.22 190 / 0.3);
+  --mesh-3: oklch(0.5 0.25 340 / 0.28);
+  --mesh-4: oklch(0.4 0.2 230 / 0.24);
 }
 
 @layer base {
@@ -239,29 +238,13 @@
 }
 
 @layer utilities {
-  /* Liquid Glass — matches the Kitchen MealCard aesthetic.
-     Rich layered glass with: diagonal gradient (depth), ambient white blob
-     (top-right glow), tinted border, soft shadow + inner highlight.
-     Uses NEUTRAL white tones (not the preset color) so the UI stays consistent
-     regardless of which preset the user picks. The preset color only appears
-     on actual primary-colored elements (buttons, active states, badges). */
+  /* Liquid glass surfaces — stronger blur + higher opacity for readability */
   .glass {
-    isolation: isolate;
-    background:
-      linear-gradient(
-        135deg,
-        oklch(1 0 0 / 0.15) 0%,
-        oklch(1 0 0 / 0.03) 55%,
-        transparent 100%
-      ),
-      var(--glass-bg);
-    backdrop-filter: blur(40px) saturate(180%);
-    -webkit-backdrop-filter: blur(40px) saturate(180%);
-    border: 1px solid oklch(1 0 0 / 0.4);
-    box-shadow:
-      0 8px 32px -10px oklch(0 0 0 / 0.15),
-      inset 0 1px 0 0 oklch(1 0 0 / 0.3),
-      var(--glass-shadow);
+    background: var(--glass-bg);
+    backdrop-filter: blur(32px) saturate(180%);
+    -webkit-backdrop-filter: blur(32px) saturate(180%);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
     position: relative;
   }
   .glass::before {
@@ -272,94 +255,27 @@
     background: linear-gradient(
       135deg,
       var(--glass-highlight) 0%,
-      transparent 40%,
-      transparent 60%,
-      oklch(1 0 0 / 0.04) 100%
+      transparent 35%,
+      transparent 65%,
+      oklch(1 0 0 / 0.03) 100%
     );
     pointer-events: none;
-    opacity: 0.5;
-    z-index: 1;
-  }
-  /* Ambient white blob — mirrors the MealCard's blurred top-right glow div.
-     Uses var(--glass-highlight) so it adapts to light/dark mode automatically.
-     Neutral so it adds depth without tinting the UI with the preset color. */
-  .glass::after {
-    content: "";
-    position: absolute;
-    top: -25%;
-    right: -15%;
-    width: 60%;
-    height: 80%;
-    border-radius: 50%;
-    background: var(--glass-highlight);
-    filter: blur(40px);
-    opacity: 0.2;
-    pointer-events: none;
-    z-index: -1;
+    opacity: 0.35;
   }
 
   .glass-strong {
-    isolation: isolate;
-    background:
-      linear-gradient(
-        135deg,
-        oklch(1 0 0 / 0.18) 0%,
-        oklch(1 0 0 / 0.04) 55%,
-        transparent 100%
-      ),
-      var(--glass-bg);
-    backdrop-filter: blur(56px) saturate(200%);
-    -webkit-backdrop-filter: blur(56px) saturate(200%);
-    border: 1px solid oklch(1 0 0 / 0.45);
-    box-shadow:
-      0 20px 60px -12px oklch(0 0 0 / 0.2),
-      inset 0 1px 0 0 oklch(1 0 0 / 0.35),
-      0 2px 4px oklch(0 0 0 / 0.08);
-    position: relative;
-  }
-  .glass-strong::after {
-    content: "";
-    position: absolute;
-    top: -25%;
-    right: -15%;
-    width: 60%;
-    height: 80%;
-    border-radius: 50%;
-    background: var(--glass-highlight);
-    filter: blur(48px);
-    opacity: 0.25;
-    pointer-events: none;
-    z-index: -1;
+    background: var(--glass-bg);
+    backdrop-filter: blur(48px) saturate(200%);
+    -webkit-backdrop-filter: blur(48px) saturate(200%);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 20px 60px oklch(0.3 0.05 280 / 0.2), 0 2px 4px oklch(0.3 0.05 280 / 0.08);
   }
 
   .glass-soft {
-    isolation: isolate;
-    background:
-      linear-gradient(
-        135deg,
-        oklch(1 0 0 / 0.1) 0%,
-        oklch(1 0 0 / 0.02) 55%,
-        transparent 100%
-      ),
-      color-mix(in oklch, var(--glass-bg) 75%, transparent);
-    backdrop-filter: blur(24px) saturate(160%);
-    -webkit-backdrop-filter: blur(24px) saturate(160%);
-    border: 1px solid oklch(1 0 0 / 0.3);
-    position: relative;
-  }
-  .glass-soft::after {
-    content: "";
-    position: absolute;
-    top: -20%;
-    right: -12%;
-    width: 50%;
-    height: 70%;
-    border-radius: 50%;
-    background: var(--glass-highlight);
-    filter: blur(32px);
-    opacity: 0.15;
-    pointer-events: none;
-    z-index: -1;
+    background: color-mix(in oklch, var(--glass-bg) 88%, transparent);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    border: 1px solid var(--glass-border);
   }
 
   /* Glow effects */
@@ -374,19 +290,6 @@
   }
   .glow-danger {
     box-shadow: 0 0 40px oklch(0.62 0.24 25 / 0.35);
-  }
-
-  /* Static glowing glass card — for prominent CTAs.
-     Neutral glass with a soft glow, NOT tinted by the preset color.
-     The button inside (variant="ghost" + text-primary) provides the accent color. */
-  .glow-glass {
-    background: var(--glass-bg) !important;
-    backdrop-filter: blur(40px) saturate(180%);
-    -webkit-backdrop-filter: blur(40px) saturate(180%);
-    border: 1px solid var(--glass-border) !important;
-    box-shadow:
-      0 8px 32px -8px oklch(0 0 0 / 0.15),
-      inset 0 1px 0 0 oklch(1 0 0 / 0.3) !important;
   }
 
   /* Shimmer for skeletons */
