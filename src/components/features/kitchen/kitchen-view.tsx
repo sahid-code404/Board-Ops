@@ -7,7 +7,6 @@ import { addDays, format, isSameDay } from "date-fns";
 import {
   ChevronLeft,
   ChevronRight,
-  Printer,
   RefreshCw,
   Utensils,
   UtensilsCrossed,
@@ -28,7 +27,6 @@ import { ShimmerSkeleton } from "@/components/glass/shimmer-skeleton";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { useAppStore } from "@/stores/use-app-store";
 import { api } from "@/lib/api-client";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────
@@ -112,7 +110,7 @@ export function KitchenView() {
 
   return (
     <StaggerGroup className="space-y-4 md:space-y-6">
-      {/* Action bar: date picker + print */}
+      {/* Action bar: date picker */}
       <StaggerItem>
         <div className="flex items-center justify-end gap-2 flex-wrap">
           <p className="text-sm text-muted-foreground hidden sm:flex items-center gap-1.5 mr-auto">
@@ -158,15 +156,6 @@ export function KitchenView() {
               Today
             </GlassButton>
           )}
-          <GlassButton
-            variant="primary"
-            size="md"
-            onClick={() => toast.success("Printing...")}
-            className="shrink-0"
-          >
-            <Printer className="h-4 w-4" />
-            Print
-          </GlassButton>
         </div>
       </StaggerItem>
 
@@ -218,62 +207,60 @@ export function KitchenView() {
         </StaggerItem>
       ) : (
         <>
-          {/* Percentage pills — horizontal pills with count on left, ring on right */}
-          <StaggerItem>
-            <div className="space-y-2.5">
-              {counts.map((m) => {
-                const pct = activeUsers > 0 ? Math.round((m.on / activeUsers) * 100) : 0;
-                return (
-                  <div
-                    key={m.id}
-                    className="glass-soft rounded-2xl px-4 py-3 flex items-center justify-between gap-3"
-                    style={{ borderColor: `${m.color}30` }}
-                  >
-                    {/* Left: icon + label + count */}
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <span className="text-2xl shrink-0">{m.icon}</span>
-                      <div className="min-w-0">
-                        <p className="text-[10px] uppercase tracking-wider font-semibold truncate" style={{ color: m.color }}>
-                          {m.displayName}
-                        </p>
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="text-xl font-bold tabular-nums">{m.on}</span>
-                          <span className="text-[11px] text-muted-foreground">of {activeUsers} residents</span>
-                        </div>
-                      </div>
+          {/* Combined percentage pill — all meals ON out of total possible */}
+          {(() => {
+            const totalMealsOn = counts.reduce((s, c) => s + c.on, 0);
+            const totalPossible = activeUsers * counts.length;
+            const pct = totalPossible > 0 ? Math.round((totalMealsOn / totalPossible) * 100) : 0;
+            return (
+              <StaggerItem>
+                <div className="glass-soft rounded-3xl px-5 py-4 flex items-center justify-between gap-4">
+                  {/* Left: label + count */}
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="grid place-items-center h-11 w-11 rounded-2xl bg-primary/15 shrink-0">
+                      <Utensils className="h-5 w-5 text-primary" />
                     </div>
-                    {/* Right: circular ring with percentage */}
-                    <div className="relative h-12 w-12 shrink-0">
-                      <svg className="absolute inset-0 -rotate-90" viewBox="0 0 48 48">
-                        <circle
-                          cx="24"
-                          cy="24"
-                          r="20"
-                          fill="none"
-                          stroke="var(--muted)"
-                          strokeWidth="4"
-                        />
-                        <circle
-                          cx="24"
-                          cy="24"
-                          r="20"
-                          fill="none"
-                          stroke={m.color}
-                          strokeWidth="4"
-                          strokeLinecap="round"
-                          strokeDasharray={`${(pct / 100) * 125.66} 125.66`}
-                          style={{ transition: "stroke-dasharray 0.8s ease" }}
-                        />
-                      </svg>
-                      <div className="absolute inset-0 grid place-items-center">
-                        <span className="text-xs font-bold tabular-nums">{pct}%</span>
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-wider font-semibold text-primary">
+                        Total Meals
+                      </p>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-2xl font-bold tabular-nums">{totalMealsOn}</span>
+                        <span className="text-xs text-muted-foreground">of {totalPossible} possible</span>
                       </div>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          </StaggerItem>
+                  {/* Right: circular ring with percentage */}
+                  <div className="relative h-14 w-14 shrink-0">
+                    <svg className="absolute inset-0 -rotate-90" viewBox="0 0 56 56">
+                      <circle
+                        cx="28"
+                        cy="28"
+                        r="24"
+                        fill="none"
+                        stroke="var(--muted)"
+                        strokeWidth="5"
+                      />
+                      <circle
+                        cx="28"
+                        cy="28"
+                        r="24"
+                        fill="none"
+                        stroke="var(--primary)"
+                        strokeWidth="5"
+                        strokeLinecap="round"
+                        strokeDasharray={`${(pct / 100) * 150.8} 150.8`}
+                        style={{ transition: "stroke-dasharray 0.8s ease" }}
+                      />
+                    </svg>
+                    <div className="absolute inset-0 grid place-items-center">
+                      <span className="text-sm font-bold tabular-nums">{pct}%</span>
+                    </div>
+                  </div>
+                </div>
+              </StaggerItem>
+            );
+          })()}
 
           {/* Per-meal cards */}
           <StaggerItem>
