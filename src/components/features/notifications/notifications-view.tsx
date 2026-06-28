@@ -186,9 +186,9 @@ export function NotificationsView() {
         </div>
       </StaggerItem>
 
-      {/* Filters — symmetrical equal-width pills */}
+      {/* Filters — horizontal scrollable row, symmetrical fixed-width pills */}
       <StaggerItem>
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1">
           {FILTERS.map((f) => {
             const active = filter === f.key;
             return (
@@ -197,7 +197,7 @@ export function NotificationsView() {
                 whileTap={{ scale: 0.96 }}
                 onClick={() => setFilter(f.key)}
                 className={cn(
-                  "relative flex items-center justify-center gap-1.5 py-2 px-2 rounded-2xl text-xs font-medium transition-all whitespace-nowrap",
+                  "relative flex items-center justify-center gap-1.5 h-9 min-w-[88px] px-3 rounded-2xl text-xs font-medium transition-all whitespace-nowrap shrink-0",
                   active
                     ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
                     : "glass-soft text-muted-foreground hover:text-foreground"
@@ -206,10 +206,10 @@ export function NotificationsView() {
                 <span>{f.label}</span>
                 {f.key === "UNREAD" && unreadCount > 0 && (
                   <span className={cn(
-                    "text-[10px] rounded-full px-1.5 py-0.5 leading-none font-bold",
+                    "text-[10px] rounded-full px-1.5 py-0.5 leading-none font-bold min-w-[18px] text-center",
                     active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-destructive text-white"
                   )}>
-                    {unreadCount}
+                    {unreadCount > 99 ? "99+" : unreadCount}
                   </span>
                 )}
               </motion.button>
@@ -248,36 +248,36 @@ export function NotificationsView() {
                     <GlassCard
                       hover
                       className={cn(
-                        "p-4 md:p-5 cursor-pointer",
+                        "p-4 cursor-pointer",
                         isUnread && "ring-1 ring-primary/30",
                         meta.ring
                       )}
                       onClick={() => handleNotifClick(n)}
                     >
-                      <div className="flex items-start gap-3 md:gap-4">
-                        <div className={cn("grid place-items-center h-11 w-11 rounded-2xl shrink-0", meta.bg, meta.fg)}>
-                          <Icon className="h-5 w-5" />
+                      <div className="flex items-start gap-3">
+                        {/* Fixed symmetrical icon */}
+                        <div className={cn("grid place-items-center h-10 w-10 rounded-xl shrink-0", meta.bg, meta.fg)}>
+                          <Icon className="h-[18px] w-[18px]" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <h3 className={cn("font-semibold truncate", isUnread && "text-foreground")}>
-                                  {n.title}
-                                </h3>
-                                {isUnread && (
-                                  <span className="h-2 w-2 rounded-full bg-primary shrink-0" aria-label="Unread" />
-                                )}
-                              </div>
-                              <p className={cn("text-sm mt-0.5", isUnread ? "text-foreground/80" : "text-muted-foreground")}>
-                                {n.description}
-                              </p>
-                            </div>
-                            <Badge variant="outline" className={cn("text-[10px] shrink-0", prio.className)}>
+                          {/* Title row */}
+                          <div className="flex items-center gap-2">
+                            {isUnread && (
+                              <span className="h-2 w-2 rounded-full bg-primary shrink-0" aria-label="Unread" />
+                            )}
+                            <h3 className={cn("font-medium text-sm truncate flex-1", isUnread ? "text-foreground" : "text-muted-foreground")}>
+                              {n.title}
+                            </h3>
+                            <Badge variant="outline" className={cn("text-[10px] shrink-0 h-5", prio.className)}>
                               {prio.label}
                             </Badge>
                           </div>
-                          <div className="flex items-center justify-between mt-3 gap-2">
+                          {/* Description */}
+                          <p className={cn("text-xs mt-1 line-clamp-2", isUnread ? "text-foreground/70" : "text-muted-foreground")}>
+                            {n.description}
+                          </p>
+                          {/* Footer row */}
+                          <div className="flex items-center justify-between mt-2.5 gap-2">
                             <span className="text-[11px] text-muted-foreground">
                               {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
                             </span>

@@ -2,12 +2,14 @@
 
 import { Bell, Search, Sun, Moon, Menu } from "lucide-react";
 import { useTheme } from "next-themes";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import { useAppStore } from "@/stores/use-app-store";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { GlassButton } from "@/components/glass/glass-button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { NAV_LABELS } from "./nav-config";
+import { api } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 
 const AVATAR_GRADIENTS = [
@@ -33,6 +35,11 @@ function initials(name: string) {
     .join("");
 }
 
+function formatBadge(count: number): string {
+  if (count > 99) return "99+";
+  return String(count);
+}
+
 export function TopBar() {
   const { resolvedTheme, setTheme } = useTheme();
   const view = useAppStore((s) => s.view);
@@ -40,9 +47,25 @@ export function TopBar() {
   const setCommandOpen = useAppStore((s) => s.setCommandOpen);
   const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
   const user = useAuthStore((s) => s.user);
+  const token = useAuthStore((s) => s.token);
   const isDark = resolvedTheme === "dark";
 
+  // Fetch unread notification count — refreshes every 30s
+  const { data: unreadCount = 0 } = useQuery({
+    queryKey: ["notifications", "unread-count"],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: { unreadCount: number } }>(
+        "/notifications?unread=true"
+      );
+      return res.data.unreadCount;
+    },
+    enabled: !!token,
+    refetchInterval: 30_000,
+    staleTime: 10_000,
+  });
+
   const label = NAV_LABELS[view] ?? "BoardOps";
+  const showBadge = unreadCount > 0;
 
   return (
     <header className="sticky top-0 z-30 safe-top px-2.5 sm:px-3 pt-2.5 sm:pt-3">
@@ -110,18 +133,31 @@ export function TopBar() {
           {isDark ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
         </motion.button>
 
-        {/* Notifications — routes to notifications page instantly */}
+        {/* Notifications — routes to notifications page, shows unread count badge */}
         <motion.button
           whileTap={{ scale: 0.9 }}
           onClick={() => setView("notifications")}
-          aria-label="Notifications"
+          aria-label={`Notifications${showBadge ? ` (${formatBadge(unreadCount)} unread)` : ""}`}
           className={cn(
             "relative grid place-items-center h-10 w-10 rounded-2xl glass-soft shrink-0 transition-colors",
             view === "notifications" ? "text-primary ring-2 ring-primary/50" : "text-foreground"
           )}
         >
           <Bell className="h-[18px] w-[18px]" />
-          <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-destructive ring-2 ring-background" />
+          <AnimatePresence>
+            {showBadge && (
+              <motion.span
+                key={unreadCount}
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0 }}
+                transition={{ type: "spring", stiffness: 500, damping: 25 }}
+                className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-white text-[10px] font-bold grid place-items-center ring-2 ring-background"
+              >
+                {formatBadge(unreadCount)}
+              </motion.span>
+            )}
+          </AnimatePresence>
         </motion.button>
 
         {/* Profile avatar — routes to profile page */}
