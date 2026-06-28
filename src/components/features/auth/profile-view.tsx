@@ -172,6 +172,7 @@ export function ProfileView() {
   const stored = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
   const setToken = useAuthStore((s) => s.setToken);
+  const logout = useAuthStore((s) => s.logout);
   const qc = useQueryClient();
   const { theme: resolvedTheme, setTheme } = useTheme();
   const isMobile = useIsMobile();
@@ -380,6 +381,36 @@ export function ProfileView() {
             { icon: Clock, label: "Last Login", value: lastLogin },
           ]}
         />
+      </StaggerItem>
+
+      {/* Sign out */}
+      <StaggerItem>
+        <GlassCard className="p-4 md:p-5" hover={false}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="grid place-items-center h-10 w-10 rounded-2xl bg-destructive/15 text-destructive shrink-0">
+                <LogOut className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-semibold text-sm">Sign Out</h3>
+                <p className="text-xs text-muted-foreground truncate">
+                  End your session on this device
+                </p>
+              </div>
+            </div>
+            <GlassButton
+              variant="danger"
+              size="sm"
+              onClick={() => {
+                logout();
+                toast.success("Signed out successfully");
+              }}
+            >
+              <LogOut className="h-4 w-4" />
+              Sign Out
+            </GlassButton>
+          </div>
+        </GlassCard>
       </StaggerItem>
 
       {/* Dialogs */}
