@@ -428,13 +428,14 @@ export function UsersView() {
           <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-1">
             {STATUS_FILTERS.map((f) => {
               const active = status === f.key;
+              const badge = f.key === "PENDING" && kpis.pending > 0 ? kpis.pending : null;
               return (
                 <motion.button
                   key={f.key}
                   whileTap={{ scale: 0.96 }}
                   onClick={() => setStatus(f.key)}
                   className={cn(
-                    "flex items-center justify-center h-8 px-2.5 rounded-xl text-[11px] font-medium transition-all whitespace-nowrap shrink-0",
+                    "flex items-center justify-center gap-1.5 h-8 px-2.5 rounded-xl text-[11px] font-medium transition-all whitespace-nowrap shrink-0",
                     active
                       ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
                       : "glass-soft text-muted-foreground hover:text-foreground"
@@ -442,10 +443,18 @@ export function UsersView() {
                 >
                   <span className="sm:hidden">{f.short}</span>
                   <span className="hidden sm:inline">{f.label}</span>
-                  </motion.button>
-                );
-              })}
-            </div>
+                  {badge !== null && (
+                    <span className={cn(
+                      "text-[9px] rounded-full px-1.5 py-0.5 leading-none font-bold min-w-[16px] text-center",
+                      active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-warning text-white"
+                    )}>
+                      {badge}
+                    </span>
+                  )}
+                </motion.button>
+              );
+            })}
+          </div>
         </div>
       </StaggerItem>
 

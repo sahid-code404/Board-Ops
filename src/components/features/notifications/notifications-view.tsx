@@ -56,13 +56,13 @@ const PRIORITY_META: Record<Priority, { label: string; className: string }> = {
   URGENT: { label: "Urgent", className: "bg-destructive/15 text-destructive" },
 };
 
-const FILTERS: { key: Filter; label: string }[] = [
-  { key: "ALL", label: "All" },
-  { key: "UNREAD", label: "Unread" },
-  { key: "INFO", label: "Info" },
-  { key: "SUCCESS", label: "Success" },
-  { key: "WARNING", label: "Warning" },
-  { key: "DANGER", label: "Alerts" },
+const FILTERS: { key: Filter; label: string; short: string }[] = [
+  { key: "ALL", label: "All", short: "All" },
+  { key: "UNREAD", label: "Unread", short: "Unread" },
+  { key: "INFO", label: "Info", short: "Info" },
+  { key: "SUCCESS", label: "Success", short: "Success" },
+  { key: "WARNING", label: "Warning", short: "Warning" },
+  { key: "DANGER", label: "Alerts", short: "Alerts" },
 ];
 
 // Defensive unwrap — handles both { success, data } and raw payloads.
@@ -186,30 +186,32 @@ export function NotificationsView() {
         </div>
       </StaggerItem>
 
-      {/* Filters — horizontal scrollable row, symmetrical fixed-width pills */}
+      {/* Filters — same design as users page: compact pills, short/long labels */}
       <StaggerItem>
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1">
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-1">
           {FILTERS.map((f) => {
             const active = filter === f.key;
+            const badge = f.key === "UNREAD" && unreadCount > 0 ? (unreadCount > 99 ? "99+" : unreadCount) : null;
             return (
               <motion.button
                 key={f.key}
                 whileTap={{ scale: 0.96 }}
                 onClick={() => setFilter(f.key)}
                 className={cn(
-                  "relative flex items-center justify-center gap-1.5 h-9 min-w-[88px] px-3 rounded-2xl text-xs font-medium transition-all whitespace-nowrap shrink-0",
+                  "flex items-center justify-center gap-1.5 h-8 px-2.5 rounded-xl text-[11px] font-medium transition-all whitespace-nowrap shrink-0",
                   active
                     ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
                     : "glass-soft text-muted-foreground hover:text-foreground"
                 )}
               >
-                <span>{f.label}</span>
-                {f.key === "UNREAD" && unreadCount > 0 && (
+                <span className="sm:hidden">{f.short}</span>
+                <span className="hidden sm:inline">{f.label}</span>
+                {badge !== null && (
                   <span className={cn(
-                    "text-[10px] rounded-full px-1.5 py-0.5 leading-none font-bold min-w-[18px] text-center",
+                    "text-[9px] rounded-full px-1.5 py-0.5 leading-none font-bold min-w-[16px] text-center",
                     active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-destructive text-white"
                   )}>
-                    {unreadCount > 99 ? "99+" : unreadCount}
+                    {badge}
                   </span>
                 )}
               </motion.button>
