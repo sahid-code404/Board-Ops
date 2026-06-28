@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { navForRole } from "./nav-config";
+import { navForRole, primaryNav } from "./nav-config";
 import { useAppStore } from "@/stores/use-app-store";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { cn } from "@/lib/utils";
@@ -16,7 +16,7 @@ export function MobileBottomNav() {
   const role = useAuthStore((s) => s.user?.role) ?? "USER";
   const allItems = navForRole(role);
   // Show 4 primary items + More button
-  const primaryItems = allItems.filter((n) => n.primary).slice(0, 4);
+  const primaryItems = primaryNav(role).slice(0, 4);
   const hasMore = allItems.length > primaryItems.length;
 
   return (
