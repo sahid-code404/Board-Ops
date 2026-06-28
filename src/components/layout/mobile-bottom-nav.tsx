@@ -5,29 +5,35 @@ import { navForRole } from "./nav-config";
 import { useAppStore } from "@/stores/use-app-store";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { cn } from "@/lib/utils";
+import { MoreHorizontal } from "lucide-react";
 
-/** Mobile bottom navigation bar — primary experience */
+/** Mobile bottom navigation bar — primary experience.
+ *  Shows up to 4 primary items + a "More" button that opens the sidebar. */
 export function MobileBottomNav() {
   const view = useAppStore((s) => s.view);
   const setView = useAppStore((s) => s.setView);
+  const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
   const role = useAuthStore((s) => s.user?.role) ?? "USER";
-  const items = navForRole(role).slice(0, 5);
+  const allItems = navForRole(role);
+  // Show 4 primary items + More button
+  const primaryItems = allItems.filter((n) => n.primary).slice(0, 4);
+  const hasMore = allItems.length > primaryItems.length;
 
   return (
     <nav
       className="md:hidden fixed bottom-0 left-0 right-0 z-40 safe-x safe-bottom"
       aria-label="Primary navigation"
     >
-      <div className="mx-auto max-w-md px-3 pb-2 pt-1">
-        <div className="glass-strong rounded-3xl px-2 py-2 flex items-center justify-around shadow-2xl">
-          {items.map((item) => {
+      <div className="mx-auto max-w-md px-2.5 sm:px-3 pb-2 pt-1">
+        <div className="glass-strong rounded-3xl px-1.5 py-1.5 flex items-center justify-around shadow-2xl">
+          {primaryItems.map((item) => {
             const active = view === item.view;
             const Icon = item.icon;
             return (
               <button
                 key={item.view}
                 onClick={() => setView(item.view)}
-                className="relative flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5 rounded-2xl"
+                className="relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2 rounded-2xl min-w-0"
                 aria-current={active ? "page" : undefined}
               >
                 {active && (
@@ -44,11 +50,11 @@ export function MobileBottomNav() {
                     active ? "text-primary" : "text-muted-foreground"
                   )}
                 >
-                  <Icon className="h-5 w-5" strokeWidth={active ? 2.5 : 2} />
+                  <Icon className="h-[18px] w-[18px]" strokeWidth={active ? 2.5 : 2} />
                 </motion.div>
                 <span
                   className={cn(
-                    "relative z-10 text-[10px] font-medium transition-colors",
+                    "relative z-10 text-[9px] font-medium transition-colors truncate max-w-full",
                     active ? "text-primary" : "text-muted-foreground"
                   )}
                 >
@@ -57,6 +63,20 @@ export function MobileBottomNav() {
               </button>
             );
           })}
+          {hasMore && (
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2 rounded-2xl min-w-0"
+              aria-label="More navigation"
+            >
+              <div className="relative z-10 text-muted-foreground">
+                <MoreHorizontal className="h-[18px] w-[18px]" />
+              </div>
+              <span className="relative z-10 text-[9px] font-medium text-muted-foreground">
+                More
+              </span>
+            </button>
+          )}
         </div>
       </div>
     </nav>

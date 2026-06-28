@@ -1,27 +1,14 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { navForRole, type NavItem } from "./nav-config";
+import { navForRole } from "./nav-config";
+import { groupNavItems } from "./nav-groups";
 import { useAppStore } from "@/stores/use-app-store";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { cn } from "@/lib/utils";
 import { Sparkles, ChevronRight } from "lucide-react";
 import { GlassButton } from "@/components/glass/glass-button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-
-function groupItems(items: NavItem[]) {
-  const groups: { title: string; items: NavItem[] }[] = [
-    { title: "Workspace", items: [] },
-    { title: "Finance", items: [] },
-    { title: "Administration", items: [] },
-  ];
-  items.forEach((i) => {
-    if (["dashboard", "calendar", "meals", "kitchen"].includes(i.view)) groups[0].items.push(i);
-    else if (["billing", "payments", "expenses"].includes(i.view)) groups[1].items.push(i);
-    else groups[2].items.push(i);
-  });
-  return groups.filter((g) => g.items.length > 0);
-}
 
 export function DesktopSidebar() {
   const view = useAppStore((s) => s.view);
@@ -30,7 +17,7 @@ export function DesktopSidebar() {
   const setNotificationsOpen = useAppStore((s) => s.setNotificationsOpen);
   const role = user?.role ?? "USER";
   const items = navForRole(role);
-  const groups = groupItems(items);
+  const groups = groupNavItems(items);
 
   return (
     <aside className="hidden md:flex fixed left-0 top-0 bottom-0 z-30 w-64 lg:w-72 flex-col safe-top safe-bottom">

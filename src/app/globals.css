@@ -183,6 +183,8 @@
   html {
     -webkit-tap-highlight-color: transparent;
     scroll-behavior: smooth;
+    /* Fluid root font size — scales from 14px (mobile) to 16px (desktop) */
+    font-size: clamp(14px, 0.9vw + 11px, 16px);
   }
   body {
     @apply bg-background text-foreground;
@@ -191,6 +193,18 @@
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     overflow-x: hidden;
+    /* Prevent text size adjustment on orientation change */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  /* Ensure all interactive elements meet 44px touch target on mobile */
+  @media (max-width: 768px) {
+    button,
+    [role="button"],
+    a {
+      touch-action: manipulation;
+    }
   }
 
   /* Custom scrollbar */

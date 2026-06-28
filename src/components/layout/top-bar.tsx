@@ -46,24 +46,25 @@ export function TopBar() {
   const label = NAV_LABELS[view] ?? "BoardOps";
 
   return (
-    <header className="sticky top-0 z-30 safe-top px-3 pt-3">
-      <div className="glass rounded-3xl px-3 md:px-5 py-2.5 flex items-center gap-2 md:gap-4">
-        <GlassButton
-          variant="ghost"
-          size="icon"
-          className="md:hidden"
+    <header className="sticky top-0 z-30 safe-top px-2.5 sm:px-3 pt-2.5 sm:pt-3">
+      <div className="glass rounded-2xl sm:rounded-3xl px-2.5 sm:px-3 md:px-5 py-2 sm:py-2.5 flex items-center gap-1.5 sm:gap-2 md:gap-4">
+        {/* Hamburger — mobile only, well-sized touch target */}
+        <motion.button
+          whileTap={{ scale: 0.9 }}
           onClick={() => setSidebarOpen(true)}
           aria-label="Open menu"
+          className="md:hidden grid place-items-center h-10 w-10 rounded-2xl glass-soft text-foreground shrink-0"
         >
           <Menu className="h-5 w-5" />
-        </GlassButton>
+        </motion.button>
 
+        {/* Title — scales fluidly */}
         <div className="flex-1 min-w-0">
           <motion.p
             key={view}
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
-            className="text-xs md:text-sm text-muted-foreground"
+            className="text-[10px] sm:text-xs md:text-sm text-muted-foreground leading-tight truncate"
           >
             {user?.role === "ADMIN" ? "Admin Console" : "Workspace"}
           </motion.p>
@@ -71,12 +72,21 @@ export function TopBar() {
             key={`${view}-title`}
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-base md:text-lg font-semibold leading-tight truncate"
+            className="text-sm sm:text-base md:text-lg font-semibold leading-tight truncate"
           >
             {label}
           </motion.h1>
         </div>
 
+        {/* Search button — icon on mobile, full on desktop */}
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setCommandOpen(true)}
+          aria-label="Search"
+          className="sm:hidden grid place-items-center h-10 w-10 rounded-2xl glass-soft text-muted-foreground hover:text-foreground shrink-0"
+        >
+          <Search className="h-[18px] w-[18px]" />
+        </motion.button>
         <GlassButton
           variant="secondary"
           size="sm"
@@ -90,35 +100,36 @@ export function TopBar() {
           </kbd>
         </GlassButton>
 
-        <GlassButton
-          variant="ghost"
-          size="icon"
+        {/* Theme toggle */}
+        <motion.button
+          whileTap={{ scale: 0.9 }}
           onClick={() => setTheme(isDark ? "light" : "dark")}
           aria-label="Toggle theme"
           suppressHydrationWarning
+          className="grid place-items-center h-10 w-10 rounded-2xl glass-soft text-foreground hover:text-primary transition-colors shrink-0"
         >
-          {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-        </GlassButton>
+          {isDark ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+        </motion.button>
 
-        <GlassButton
-          variant="ghost"
-          size="icon"
+        {/* Notifications */}
+        <motion.button
+          whileTap={{ scale: 0.9 }}
           onClick={() => setNotificationsOpen(true)}
           aria-label="Notifications"
-          className="relative"
+          className="relative grid place-items-center h-10 w-10 rounded-2xl glass-soft text-foreground shrink-0"
         >
-          <Bell className="h-5 w-5" />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive ring-2 ring-background" />
-        </GlassButton>
+          <Bell className="h-[18px] w-[18px]" />
+          <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-destructive ring-2 ring-background" />
+        </motion.button>
 
-        {/* Profile avatar button — routes to profile page */}
+        {/* Profile avatar — routes to profile page */}
         <motion.button
           whileTap={{ scale: 0.9 }}
           whileHover={{ scale: 1.06 }}
           onClick={() => setView("profile")}
           aria-label="Open profile"
           className={cn(
-            "relative grid place-items-center h-10 w-10 rounded-2xl overflow-hidden",
+            "relative grid place-items-center h-10 w-10 rounded-2xl overflow-hidden shrink-0",
             "ring-2 ring-border/50 hover:ring-primary/60 transition-all",
             view === "profile" && "ring-primary"
           )}
