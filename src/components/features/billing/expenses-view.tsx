@@ -79,13 +79,14 @@ type ExpenseCategory =
   | "UTILITIES"
   | "SALARY"
   | "MAINTENANCE"
-  | "GENERAL";
+  | "GENERAL"
+  | "CUSTOM";
 
 type Expense = {
   id: string;
   title: string;
   description: string | null;
-  category: ExpenseCategory;
+  category: string;
   amount: number;
   currency: string;
   expenseDate: string;
@@ -145,6 +146,13 @@ const CATEGORY_META: Record<
     colorVar: "var(--muted-foreground)",
     chartColor: "var(--muted-foreground)",
   },
+  CUSTOM: {
+    label: "Custom",
+    icon: <Plus className="h-3.5 w-3.5" />,
+    className: "bg-primary/15 text-primary border-primary/30",
+    colorVar: "var(--primary)",
+    chartColor: "var(--primary)",
+  },
 };
 
 const CATEGORY_ORDER: ExpenseCategory[] = [
@@ -153,10 +161,22 @@ const CATEGORY_ORDER: ExpenseCategory[] = [
   "SALARY",
   "MAINTENANCE",
   "GENERAL",
+  "CUSTOM",
 ];
 
 function formatINR(n: number) {
   return `₹${Math.round(n).toLocaleString("en-IN")}`;
+}
+
+/** Safely get category metadata — returns GENERAL meta for unknown/custom categories. */
+function getCatMeta(cat: string) {
+  return CATEGORY_META[cat as ExpenseCategory] || {
+    label: cat.charAt(0) + cat.slice(1).toLowerCase(),
+    icon: <Boxes className="h-3.5 w-3.5" />,
+    className: "bg-muted text-muted-foreground border-border",
+    colorVar: "var(--muted-foreground)",
+    chartColor: "var(--muted-foreground)",
+  };
 }
 
 function formatDate(iso: string) {
@@ -179,9 +199,7 @@ export function ExpensesView() {
     false;
   const qc = useQueryClient();
 
-  const [categoryFilter, setCategoryFilter] = useState<ExpenseCategory | "ALL">(
-    "ALL"
-  );
+  const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Expense | null>(null);
@@ -233,13 +251,7 @@ export function ExpensesView() {
       );
     });
     const total = thisMonth.reduce((s, e) => s + e.amount, 0);
-    const byCat: Record<ExpenseCategory, number> = {
-      GROCERY: 0,
-      UTILITIES: 0,
-      SALARY: 0,
-      MAINTENANCE: 0,
-      GENERAL: 0,
-    };
+    const byCat: Record<string, number> = {};
     thisMonth.forEach((e) => {
       byCat[e.category] = (byCat[e.category] || 0) + e.amount;
     });
@@ -332,8 +344,8 @@ export function ExpensesView() {
           <h3 className="font-semibold mb-4">Top Categories <span className="text-xs font-normal text-muted-foreground ml-1">· this month</span></h3>
           <div className="space-y-3">
             {(() => {
-              const sorted = CATEGORY_ORDER
-                .map((cat) => ({ cat, amount: byCategory[cat] || 0 }))
+              const sorted = Object.entries(byCategory)
+                .map(([cat, amount]) => ({ cat, amount }))
                 .filter((x) => x.amount > 0)
                 .sort((a, b) => b.amount - a.amount);
               if (sorted.length === 0) {
@@ -342,7 +354,7 @@ export function ExpensesView() {
               const maxAmount = sorted[0].amount;
               return sorted.map(({ cat, amount }) => {
                 const pct = maxAmount > 0 ? (amount / maxAmount) * 100 : 0;
-                const meta = CATEGORY_META[cat];
+                const meta = getCatMeta(cat);
                 return (
                   <div key={cat} className="space-y-1">
                     <div className="flex items-center justify-between text-xs">
@@ -382,10 +394,16 @@ export function ExpensesView() {
             icon={<Search />}
           />
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-            {(["ALL", ...CATEGORY_ORDER] as const).map((c) => {
+            {(() => {
+              // Build list: ALL + predefined categories (except CUSTOM) + any custom categories from expenses
+              const predefined = CATEGORY_ORDER.filter((c) => c !== "CUSTOM");
+              const customCats = [...new Set(expenses.map((e) => e.category))].filter(
+                (c) => !CATEGORY_ORDER.includes(c as ExpenseCategory)
+              );
+              const allCats = ["ALL", ...predefined, ...customCats] as const;
+              return allCats.map((c) => {
               const active = categoryFilter === c;
-              const meta =
-                c === "ALL" ? null : CATEGORY_META[c as ExpenseCategory];
+              const meta = c === "ALL" ? null : getCatMeta(c);
               return (
                 <button
                   key={c}
@@ -401,7 +419,8 @@ export function ExpensesView() {
                   {c === "ALL" ? "All Categories" : meta!.label}
                 </button>
               );
-            })}
+              });
+            })()}
           </div>
         </div>
       </StaggerItem>
@@ -472,11 +491,11 @@ export function ExpensesView() {
                           variant="outline"
                           className={cn(
                             "rounded-full",
-                            CATEGORY_META[exp.category].className
+                            getCatMeta(exp.category).className
                           )}
                         >
-                          {CATEGORY_META[exp.category].icon}
-                          {CATEGORY_META[exp.category].label}
+                          {getCatMeta(exp.category).icon}
+                          {getCatMeta(exp.category).label}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right font-semibold tabular-nums">
@@ -621,7 +640,7 @@ function ExpenseCard({
   canDelete: boolean;
   onDelete: () => void;
 }) {
-  const meta = CATEGORY_META[expense.category];
+  const meta = getCatMeta(expense.category);
   return (
     <motion.div
       whileTap={{ scale: 0.99 }}
@@ -708,6 +727,7 @@ function AddExpenseSheet({
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<ExpenseCategory>("GROCERY");
+  const [customCategory, setCustomCategory] = useState("");
   const [date, setDate] = useState(today);
   const [paidTo, setPaidTo] = useState("");
   const [description, setDescription] = useState("");
@@ -717,6 +737,7 @@ function AddExpenseSheet({
     setTitle("");
     setAmount("");
     setCategory("GROCERY");
+    setCustomCategory("");
     setDate(today);
     setPaidTo("");
     setDescription("");
@@ -734,13 +755,18 @@ function AddExpenseSheet({
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) next.amount = "Enter a valid amount";
     if (!date) next.date = "Date is required";
+    if (category === "CUSTOM" && customCategory.trim().length < 2) {
+      next.customCategory = "Enter a custom category name";
+    }
     setErrors(next);
     if (Object.keys(next).length > 0) return;
+
+    const finalCategory = category === "CUSTOM" ? customCategory.trim().toUpperCase().replace(/\s+/g, "_") : category;
 
     onSubmit({
       title: title.trim(),
       amount: amt,
-      category,
+      category: finalCategory,
       expenseDate: new Date(date).toISOString(),
       paidTo: paidTo.trim() || undefined,
       description: description.trim() || undefined,
@@ -803,6 +829,15 @@ function AddExpenseSheet({
                   ))}
                 </SelectContent>
               </Select>
+              {category === "CUSTOM" && (
+                <GlassInput
+                  placeholder="Enter custom category name…"
+                  value={customCategory}
+                  onChange={(e) => setCustomCategory(e.target.value)}
+                  error={errors.customCategory}
+                  icon={<PencilLine className="h-4 w-4" />}
+                />
+              )}
             </div>
           </div>
 
