@@ -8,7 +8,7 @@ export async function GET() {
   try {
     const user = await requireAuth();
     const meals = await db.mealConfiguration.findMany({
-      where: user.role === "USER" ? { status: "ACTIVE" } : undefined,
+      where: { status: { not: "ARCHIVED" } },
       orderBy: [{ displayOrder: "asc" }, { createdAt: "asc" }],
     });
     return ok(meals);

@@ -84,7 +84,7 @@ type MealConfiguration = {
   icon: string;
   color: string;
   mealType: string; // REGULAR | SPECIAL | GUEST_ONLY | FESTIVAL | CUSTOM
-  status: string; // ACTIVE | INACTIVE | ARCHIVED
+  status: string; // ACTIVE | INACTIVE
   displayOrder: number;
   defaultState: string; // ON | OFF
   defaultVisibility: string; // VISIBLE | HIDDEN
@@ -627,7 +627,6 @@ function MealConfigCard({
     meal.cutoffTime,
     meal.cutoffOffsetMinutes
   );
-  const archived = meal.status === "ARCHIVED";
   const inactive = meal.status === "INACTIVE";
 
   return (
@@ -638,7 +637,7 @@ function MealConfigCard({
     >
       <GlassCard
         className="p-4 md:p-5 h-full flex flex-col relative overflow-hidden"
-        glow={archived ? "none" : "primary"}
+        glow="primary"
       >
         {/* Color accent */}
         <div
@@ -677,11 +676,7 @@ function MealConfigCard({
 
         {/* Status badges */}
         <div className="flex items-center gap-1.5 flex-wrap mb-3">
-          {archived ? (
-            <Badge variant="secondary" className="text-[10px]">
-              <Trash2 className="h-2.5 w-2.5" /> Deleted
-            </Badge>
-          ) : inactive ? (
+          {inactive ? (
             <Badge variant="secondary" className="text-[10px]">
               Inactive
             </Badge>
@@ -730,7 +725,7 @@ function MealConfigCard({
         </div>
 
         {/* Actions */}
-        {isAdmin && !archived && (
+        {isAdmin && (
           <div className="mt-auto flex items-center gap-2">
             <GlassButton
               variant="secondary"
@@ -931,7 +926,6 @@ export function MealsConfigView() {
             <SelectItem value="ALL">All status</SelectItem>
             <SelectItem value="ACTIVE">Active</SelectItem>
             <SelectItem value="INACTIVE">Inactive</SelectItem>
-            <SelectItem value="ARCHIVED">Archived</SelectItem>
           </SelectContent>
         </Select>
       </div>
