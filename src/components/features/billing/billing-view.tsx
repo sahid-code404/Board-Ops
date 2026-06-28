@@ -315,6 +315,20 @@ export function BillingView() {
     onError: (e: Error) => toast.error(e.message || "Failed to restore bill"),
   });
 
+  const restoreAllMutation = useMutation({
+    mutationFn: async () => {
+      const results = await Promise.all(
+        deletedBills.map((b) => api.post(`/bills/${b.id}/restore`).catch(() => null))
+      );
+      return results.filter((r) => r !== null).length;
+    },
+    onSuccess: (count) => {
+      toast.success(`${count} bills restored successfully`);
+      qc.invalidateQueries({ queryKey: ["bills"] });
+    },
+    onError: (e: Error) => toast.error(e.message || "Failed to restore bills"),
+  });
+
   // ── Derived KPIs ──
   const kpis = useMemo(() => {
     const active = bills.filter((b) => b.status !== "VOID");
@@ -495,7 +509,11 @@ export function BillingView() {
                   {badge !== null && (
                     <span className={cn(
                       "text-[9px] rounded-full px-1.5 py-0.5 leading-none font-bold min-w-[16px] text-center",
-                      active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-warning text-white"
+                      active && s !== "DELETED"
+                        ? "bg-primary-foreground/20 text-primary-foreground"
+                        : active && s === "DELETED"
+                          ? "bg-primary-foreground/20 text-primary-foreground"
+                          : "bg-destructive text-white"
                     )}>
                       {badge}
                     </span>
@@ -504,8 +522,8 @@ export function BillingView() {
               );
             })}
           </div>
-          {/* Delete All — below the sorting bar, slim ghost button */}
-          {isAdmin && bills.length > 0 && (
+          {/* Action buttons below sorting bar */}
+          {isAdmin && statusFilter !== "DELETED" && bills.length > 0 && (
             <div className="flex justify-end pt-1">
               <button
                 onClick={() => setDeleteAllOpen(true)}
@@ -513,6 +531,19 @@ export function BillingView() {
               >
                 <Trash2 className="h-3 w-3" />
                 Delete All ({bills.length})
+              </button>
+            </div>
+          )}
+          {/* Restore All — only in deletion queue */}
+          {isAdmin && statusFilter === "DELETED" && deletedBills.length > 0 && (
+            <div className="flex justify-end pt-1">
+              <button
+                onClick={() => restoreAllMutation.mutate()}
+                disabled={restoreAllMutation.isPending}
+                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-success/70 hover:text-success transition-colors"
+              >
+                <RotateCcw className="h-3 w-3" />
+                {restoreAllMutation.isPending ? "Restoring…" : `Restore All (${deletedBills.length})`}
               </button>
             </div>
           )}
