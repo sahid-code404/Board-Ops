@@ -292,6 +292,19 @@
     box-shadow: 0 0 40px oklch(0.62 0.24 25 / 0.35);
   }
 
+  /* Slow breathing pulse for prominent CTAs — keeps the glow alive without being distracting */
+  @keyframes pulse-slow {
+    0%, 100% {
+      box-shadow: 0 0 30px oklch(0.55 0.22 295 / 0.3), 0 0 60px oklch(0.55 0.22 295 / 0.12);
+    }
+    50% {
+      box-shadow: 0 0 50px oklch(0.55 0.22 295 / 0.5), 0 0 100px oklch(0.55 0.22 295 / 0.2);
+    }
+  }
+  .animate-pulse-slow {
+    animation: pulse-slow 2.8s ease-in-out infinite;
+  }
+
   /* Shimmer for skeletons */
   .shimmer {
     background: linear-gradient(
