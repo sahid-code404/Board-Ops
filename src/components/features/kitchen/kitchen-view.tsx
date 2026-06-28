@@ -167,9 +167,9 @@ export function KitchenView() {
         </div>
       </StaggerItem>
 
-      {/* KPI cards */}
+      {/* KPI cards — always 3 in a single horizontal row, stretches evenly on desktop */}
       <StaggerItem>
-        <div className="grid-kpi gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <KpiCard
             icon={Utensils}
             label="Total Meals"
