@@ -57,7 +57,7 @@ export async function POST(req: Request) {
         description: `${meal.displayName} on ${data.serviceDate.toDateString()} was changed (${data.action}). Reason: ${data.reason}`,
         type: "WARNING",
         priority: "HIGH",
-        route: "calendar",
+        route: "meals",
       });
       await logAudit({
         actorId: admin.id,
@@ -116,7 +116,7 @@ export async function POST(req: Request) {
       description: `${meal.displayName} on ${data.serviceDate.toDateString()} was changed (${data.action}). Reason: ${data.reason}`,
       type: "WARNING",
       priority: "HIGH",
-      route: "calendar",
+      route: "meals",
     });
     await logAudit({
       actorId: admin.id,

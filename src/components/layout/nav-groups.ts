@@ -12,7 +12,7 @@ export function groupNavItems(items: NavItem[]): NavGroup[] {
     { title: "Administration", items: [] },
   ];
   items.forEach((i) => {
-    if (["dashboard", "calendar", "meals", "kitchen"].includes(i.view)) groups[0].items.push(i);
+    if (["dashboard", "meals", "kitchen"].includes(i.view)) groups[0].items.push(i);
     else if (["billing", "payments", "expenses"].includes(i.view)) groups[1].items.push(i);
     else groups[2].items.push(i);
   });
