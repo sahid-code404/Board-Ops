@@ -52,6 +52,11 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const month = Number(body.month ?? new Date().getMonth());
     const year = Number(body.year ?? new Date().getFullYear());
+    // Optional custom due date from the admin; falls back to 10th of next month
+    const customDueDate = body.dueDate ? new Date(body.dueDate) : null;
+    const dueDate = customDueDate && !isNaN(customDueDate.getTime())
+      ? customDueDate
+      : new Date(year, month + 1, 10);
 
     const activeUsers = await db.user.findMany({
       where: { status: "ACTIVE", role: "USER" },
@@ -103,7 +108,6 @@ export async function POST(req: Request) {
       );
       const otherCharges = roomRent + cleaning;
       const totalAmount = mealCharges + otherCharges;
-      const dueDate = new Date(year, month + 1, 10);
 
       const snapshot = JSON.stringify({ counts, rates: rateMap, roomRent, cleaning });
 

@@ -222,6 +222,12 @@ export function BillingView() {
   const [generateOpen, setGenerateOpen] = useState(false);
   const [genMonth, setGenMonth] = useState<number>(new Date().getMonth());
   const [genYear, setGenYear] = useState<number>(new Date().getFullYear());
+  // Default due date = 10th of next month (matches the backend default)
+  const defaultDueDate = (() => {
+    const d = new Date(genYear, genMonth + 1, 10);
+    return d.toISOString().slice(0, 10);
+  })();
+  const [genDueDate, setGenDueDate] = useState<string>(defaultDueDate);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const [voidTarget, setVoidTarget] = useState<Bill | null>(null);
   const now = new Date();
@@ -254,7 +260,7 @@ export function BillingView() {
     mutationFn: () =>
       api.post<ApiResponse<{ generated: number; month: number; year: number }>>(
         "/bills",
-        { month: genMonth, year: genYear }
+        { month: genMonth, year: genYear, dueDate: genDueDate || undefined }
       ),
     onSuccess: (r) => {
       toast.success(`Generated ${r.data.generated} bills for ${MONTHS[genMonth]} ${genYear}`);
@@ -666,6 +672,21 @@ export function BillingView() {
               </Select>
             </div>
           </div>
+          {/* Due date picker */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground ml-1">
+              Due Date
+            </label>
+            <GlassInput
+              type="date"
+              value={genDueDate}
+              onChange={(e) => setGenDueDate(e.target.value)}
+              icon={<Calendar className="h-4 w-4" />}
+            />
+            <p className="text-[11px] text-muted-foreground ml-1">
+              Defaults to the 10th of next month. All generated bills will use this due date.
+            </p>
+          </div>
           <DialogFooter>
             <GlassButton
               variant="ghost"
@@ -958,19 +979,12 @@ function BillRow({
                   </span>
                 )}
               </div>
-              {/* Dates — generated + due */}
-              {!isDeleted && (bill.generatedAt || bill.dueDate) && (
+              {/* Due date only */}
+              {!isDeleted && bill.dueDate && (
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-muted-foreground">
-                  {bill.generatedAt && (
-                    <span className="inline-flex items-center gap-1">
-                      <Calendar className="h-3 w-3" /> Generated {formatDate(bill.generatedAt)}
-                    </span>
-                  )}
-                  {bill.dueDate && (
-                    <span className="inline-flex items-center gap-1">
-                      <Clock className="h-3 w-3" /> Due {formatDate(bill.dueDate)}
-                    </span>
-                  )}
+                  <span className="inline-flex items-center gap-1">
+                    <Clock className="h-3 w-3" /> Due {formatDate(bill.dueDate)}
+                  </span>
                 </div>
               )}
             </div>
