@@ -225,7 +225,7 @@ export function ProfileView() {
     return (
       <div className="space-y-4">
         <ShimmerSkeleton className="h-44" />
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid-cards gap-4">
           <ShimmerSkeleton className="h-48" />
           <ShimmerSkeleton className="h-48" />
         </div>
@@ -297,7 +297,7 @@ export function ProfileView() {
 
       {/* Quick action cards */}
       <StaggerItem>
-        <div className="grid grid-cols-1 gap-3">
+        <div className="grid-cards gap-3">
           <QuickActionCard
             icon={KeyRound}
             title="Change Password"
@@ -328,7 +328,7 @@ export function ProfileView() {
       </StaggerItem>
 
       {/* Info Cards */}
-      <div className="grid grid-cols-1 gap-4">
+      <div className="grid-cards gap-4">
         <StaggerItem>
           <InfoCard
             title="Contact"

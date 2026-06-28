@@ -407,7 +407,7 @@ export function UsersView() {
     <StaggerGroup className="space-y-4 pb-6">
       {/* KPIs */}
       <StaggerItem>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid-kpi gap-3">
           <KpiCard label="Total Users" value={kpis.total} icon={UsersIcon} color="primary" />
           <KpiCard label="Active" value={kpis.active} icon={UserCheck} color="success" />
           <KpiCard label="Pending Approval" value={kpis.pending} icon={UserPlus} color="warning" />

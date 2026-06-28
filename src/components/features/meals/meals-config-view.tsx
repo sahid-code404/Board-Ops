@@ -788,7 +788,7 @@ function MealConfigCard({
 
 function ConfigSkeleton() {
   return (
-    <div className="grid grid-cols-1 gap-4">
+    <div className="grid-cards gap-4">
       {Array.from({ length: 6 }).map((_, i) => (
         <ShimmerSkeleton key={i} className="h-56" />
       ))}
@@ -1102,7 +1102,7 @@ export function MealsConfigView() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              <StaggerGroup className="grid grid-cols-1 gap-4">
+              <StaggerGroup className="grid-cards gap-4">
                 {filtered.map((m) => (
                   <StaggerItem key={m.id} className="h-full">
                     <MealConfigCard

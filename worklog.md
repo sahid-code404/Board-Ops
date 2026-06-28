@@ -1249,3 +1249,90 @@ Stage Summary:
 - Settings view: Each SettingRow is now a vertical stack (input/textarea/switch on top, full-width Save button below). The Save button is `w-full` so it spans the row regardless of dirty state (was `md:w-32` fixed-width on desktop, content-width on mobile — the latter looked awkward as a tiny left-aligned button below the input).
 - SessionsSheet in profile-view retains its `sm:max-w-md` — appropriate because Sheets are overlays not constrained by AppShell, and `sm:max-w-md` gives full-width on phone + 448px cap on tablet/desktop (matching the app's centered design).
 - Lint clean (0 errors). Dev server healthy, no compile errors. Only 5 specified files were modified.
+
+---
+Task ID: DYNAMIC-GRIDS
+Agent: dynamic-grids-agent
+Task: Replace all fixed grid-cols-2/3 KPI and content grids with auto-fit utility classes (.grid-kpi / .grid-cards)
+
+Work Log:
+- Read worklog.md tail for recent context (MOBILE-FIRST-A/B/C — app container was max-w-md (448px), now widened to max-w-6xl (1152px) per the new AppShell change). All KPI/content grids from the mobile-first task were locked to fixed 2/3 columns — they need to dynamically add columns now that there's much more horizontal space on tablet/desktop.
+- Verified the 3 new utility classes exist in `/home/z/my-project/src/app/globals.css` (lines 344-356): `.grid-kpi` (minmax 150px), `.grid-cards` (minmax 280px), `.grid-cards-sm` (minmax 220px) — all `repeat(auto-fit, minmax(min(Npx, 100%), 1fr))`.
+- Ran `rg "grid grid-cols-[123] gap-[34]"` against `src/components/features/` to enumerate every fixed grid that matched the patterns. Found 39 matches across 12 files. Then read each match with surrounding context (12-30 lines around each) to classify it as: (a) KPI grid (contains KpiCard/StatCard or motion.button cards with icon+number+label), (b) content card grid (contains MealCard/MealConfigCard/VariableCard/QuickActionCard/InfoCard or layout grids), (c) form field grid (contains GlassInput/Select/Textarea), or (d) small UI element grid (PRESETS theme swatches, RADIUS_OPTIONS, mini-app preview color swatches).
+- Loaded-skeleton grids were classified by what they mirror (e.g. the kitchen skeleton's 3-col grid mirrors the KpiCard grid → use .grid-kpi; the 6-card content skeleton mirrors MealCard grid → use .grid-cards).
+
+Edits to `src/components/features/dashboard/dashboard-view.tsx`:
+- Loading skeleton KPI grid `grid grid-cols-2 gap-3` → `grid-kpi gap-3` (line 63).
+- Loading skeleton content grid `grid grid-cols-1 gap-4` → `grid-cards gap-4` (line 68 — mirrors Recent Activity).
+- KPI grid (motion.button cards, isAdmin 4-KPI / non-admin 4-KPI) `grid grid-cols-2 gap-3` → `grid-kpi gap-3` (line 110).
+
+Edits to `src/components/features/billing/billing-view.tsx`:
+- Loading skeleton KPI grid `grid grid-cols-2 gap-3` → `grid-kpi gap-3` (line 371).
+- KPI grid (Total Billed / Total Received / Pending / Refunded KpiCards) `grid grid-cols-2 gap-3` → `grid-kpi gap-3` (line 448).
+- Left unchanged: line 624 `grid grid-cols-2 gap-3` containing Month + Year Selects (form field grid).
+
+Edits to `src/components/features/billing/payments-view.tsx`:
+- Loading skeleton KPI grid `grid grid-cols-2 gap-3` → `grid-kpi gap-3` (line 456).
+- KPI grid (Total Approved / Pending / Rejected / Today KpiCards) `grid grid-cols-2 gap-3` → `grid-kpi gap-3` (line 535).
+
+Edits to `src/components/features/billing/expenses-view.tsx`:
+- Loading skeleton KPI grid `grid grid-cols-2 gap-3` → `grid-kpi gap-3` (line 411).
+- KPI grid (Total Expenses / Total Entries KpiCards) `grid grid-cols-2 gap-3` → `grid-kpi gap-3` (line 489).
+- Left unchanged: line 1155 `grid grid-cols-2 gap-3` containing Quantity + Unit GlassInput/Select (form field grid).
+
+Edits to `src/components/features/users/users-view.tsx`:
+- KPI grid (Total Users / Active / Pending Approval / Suspended KpiCards) `grid grid-cols-2 gap-3` → `grid-kpi gap-3` (line 410).
+- Left unchanged: line 605 `grid grid-cols-2 gap-3` containing Email + Phone GlassInputs (form field grid), line 620 `grid grid-cols-2 gap-3` containing Room + Gender GlassInput/Select (form field grid).
+
+Edits to `src/components/features/kitchen/kitchen-view.tsx`:
+- KPI grid (Total Meals / Guests / Meals OFF KpiCards) `grid grid-cols-3 gap-3` → `grid-kpi gap-3` (line 172).
+- Per-meal content card grid (MealCard components) `grid grid-cols-1 gap-3` → `grid-cards gap-3` (line 220).
+- KitchenSkeleton KPI grid `grid grid-cols-3 gap-3` → `grid-kpi gap-3` (line 402 — mirrors the KPI grid).
+- KitchenSkeleton content card grid `grid grid-cols-1 gap-3` → `grid-cards gap-3` (line 408 — mirrors the MealCard grid).
+
+Edits to `src/components/features/variables/variables-view.tsx`:
+- Stats bar KPI grid (StatCard: Total / System / Custom / Active) `grid grid-cols-2 gap-3` → `grid-kpi gap-3` (line 278).
+- AccordionContent variable card grid (VariableCard) `grid grid-cols-1 gap-3 pb-3 pt-1` → `grid-cards gap-3 pb-3 pt-1` (line 408 — kept the `pb-3 pt-1` classes).
+- VariablesSkeleton stats grid `grid grid-cols-2 gap-3` → `grid-kpi gap-3` (line 929 — mirrors the stats bar).
+- Left unchanged: line 851 `grid grid-cols-2 gap-3` containing Unit + Category GlassInput/Select (form field grid).
+
+Edits to `src/components/features/meals/meals-config-view.tsx`:
+- ConfigSkeleton meal card grid `grid grid-cols-1 gap-4` → `grid-cards gap-4` (line 791 — mirrors the MealConfigCard list).
+- Main meal config cards list `StaggerGroup className="grid grid-cols-1 gap-4"` → `grid-cards gap-4` (line 1105).
+- Left unchanged: 5 form field grids (line 318 Identity section with GlassInput, line 420 Type + status with Select, line 459 Times with GlassInput, line 480 Cutoff with Select, line 539 Defaults with Switch).
+- Left unchanged: line 361 `grid grid-cols-8 gap-1.5` (time slot picker — 8-col small UI grid, not in scope).
+
+Edits to `src/components/features/auth/profile-view.tsx`:
+- Loading skeleton content grid `grid grid-cols-1 gap-4` → `grid-cards gap-4` (line 228 — mirrors Info Cards).
+- Quick action cards grid (QuickActionCard: Change Password / Sessions / etc.) `grid grid-cols-1 gap-3` → `grid-cards gap-3` (line 300).
+- Info Cards grid (InfoCard: Contact + Preferences) `grid grid-cols-1 gap-4` → `grid-cards gap-4` (line 331).
+- Left unchanged: line 758 `grid grid-cols-2 gap-3` containing Phone + Room GlassInputs (form field grid), line 792 `grid grid-cols-2 gap-3` containing Theme + Language Selects (form field grid).
+
+Edits to `src/components/features/personalization/personalization-view.tsx`:
+- Loading skeleton content grid `grid grid-cols-1 gap-4` → `grid-cards gap-4` (line 137 — mirrors the main Controls + Preview layout).
+- Main layout grid (Controls left + Live Preview right) `grid grid-cols-1 gap-4` → `grid-cards gap-4` (line 176 — on desktop the 280px minmax will let Controls and Preview sit side-by-side again at ~576px each inside the 1152px container).
+- Left unchanged: line 186 `grid grid-cols-2 gap-3` (PRESETS theme cards — 8 small color swatch + name cards, preserved per MOBILE-FIRST-C; conservative call since these are inside the Controls column which itself auto-fits, and 2-col still reads cleanly), line 258 `grid grid-cols-5 gap-2` (RADIUS_OPTIONS — 5 small radius buttons), line 346 `grid grid-cols-2 gap-2` (mini-app preview KPI swatches — demo UI), line 433 `grid grid-cols-3 gap-2` (color swatches — small UI elements).
+
+Edits to `src/components/features/settings/settings-view.tsx`:
+- No edits — the only fixed grid in this file is line 498 (Category + Type Selects — form field grid). Verified by `rg "grid grid-cols" settings-view.tsx` → single match, kept as-is.
+
+Edits to `src/components/features/notifications/notifications-view.tsx`:
+- No edits — `rg "grid grid-cols" notifications-view.tsx` returned 0 matches. No fixed grids in this file.
+
+Final verification grep — `rg "grid grid-cols-[123] gap-[34]" src/components/features/` now returns only 14 matches, all of which are intentionally-preserved form field grids (GlassInput/Select pairs) or the personalization PRESETS grid. Specifically:
+- 8 form field grids: expenses-view.tsx:1155 (Quantity+Unit), billing-view.tsx:624 (Month+Year), settings-view.tsx:498 (Category+Type), variables-view.tsx:851 (Unit+Category), meals-config-view.tsx:318/420/459/480/539 (5 form sections), profile-view.tsx:758 (Phone+Room), profile-view.tsx:792 (Theme+Language), users-view.tsx:605 (Email+Phone), users-view.tsx:620 (Room+Gender).
+- 1 preserved small UI grid: personalization-view.tsx:186 (PRESETS theme cards).
+
+Verification:
+- `cd /home/z/my-project && bun run lint` → 0 errors, 1 pre-existing warning in variables-view.tsx (`react-hooks/incompatible-library` on `form.watch` at line 734 — pre-existing, called out as acceptable in the task spec).
+- `tail -25 dev.log` → healthy dev server: multiple `✓ Compiled in <X>ms` lines and `GET /api/... 200` lines (users / notifications / kitchen / dashboard / payments / expenses). No compile errors, no runtime errors. All 11 edited files hot-reloaded cleanly.
+- Did NOT modify: globals.css (already had the 3 new utility classes — verified), any API routes, any layout components, any component logic, state, mutations, queries, content/text, icon sizes, color classes, animation classes, or any files outside the 12 listed target files.
+
+Stage Summary:
+- All KPI stat grids across the app (dashboard, billing, payments, expenses, users, kitchen, variables) now use `.grid-kpi gap-3` — `repeat(auto-fit, minmax(min(150px, 100%), 1fr))`. On mobile (~375px) → 2 cols; on tablet (~768px) → 3-4 cols; on desktop (1152px container) → 4-6 cols. Each KPI card now dynamically resizes to fill available horizontal space instead of being locked to 2 or 3 columns.
+- All larger content card grids (kitchen MealCard, variables VariableCard, meals-config MealConfigCard, profile QuickActionCard, profile InfoCard) now use `.grid-cards gap-3` or `.grid-cards gap-4` — `repeat(auto-fit, minmax(min(280px, 100%), 1fr))`. On mobile → 1 col; on tablet → 2 cols; on desktop → 3-4 cols. Cards now flow into multiple columns on wider screens instead of stacking vertically.
+- Personalization main layout grid (Controls + Live Preview) now uses `.grid-cards gap-4` — on desktop, Controls and Preview sit side-by-side again at ~576px each (which was the original design intent before the mobile-first task collapsed it to 1 col). On mobile/tablet portrait they stack vertically.
+- All loading skeletons that mirror KPI/content grids were updated to use the same `.grid-kpi` / `.grid-cards` class as their real-grid counterpart, so the loading state matches the final layout (skeleton columns scale with viewport width too).
+- All form field grids (GlassInput/Select/Textarea pairs like Email+Phone, Month+Year, Quantity+Unit, Phone+Room, Theme+Language, Category+Type, Unit+Category) were left as `grid grid-cols-2 gap-3` — form inputs stay side-by-side at 2 columns since they're narrow fields, not auto-sizing cards.
+- Small UI element grids (PRESETS theme swatches, RADIUS_OPTIONS, color swatches, mini-app preview) were left unchanged — they're compact UI elements that already fit cleanly in their containers.
+- File size delta is minimal — each edit only shortened class strings (replacing `grid grid-cols-N` with `grid-kpi`/`grid-cards`), no logic added or removed. No non-target files modified. Lint clean (0 errors). Dev server healthy.

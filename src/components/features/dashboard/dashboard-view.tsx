@@ -60,12 +60,12 @@ export function DashboardView() {
   if (isLoading || !data) {
     return (
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid-kpi gap-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <ShimmerSkeleton key={i} className="h-32" />
           ))}
         </div>
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid-cards gap-4">
           <ShimmerSkeleton className="h-72" />
           <ShimmerSkeleton className="h-72" />
         </div>
@@ -107,7 +107,7 @@ export function DashboardView() {
 
       {/* KPIs */}
       <StaggerItem>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid-kpi gap-3">
           {kpis.map((kpi) => {
             const Icon = kpi.icon;
             return (

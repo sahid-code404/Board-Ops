@@ -339,6 +339,21 @@
     scrollbar-width: none;
   }
 
+  /* Auto-fit grids — dynamically add/remove columns based on available width.
+     Cards stretch to fill the row evenly (auto-fit, not auto-fill). */
+  .grid-kpi {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  }
+  .grid-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  }
+  .grid-cards-sm {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  }
+
   /* Reduce motion */
   @media (prefers-reduced-motion: reduce) {
     *,

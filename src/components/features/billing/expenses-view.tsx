@@ -408,7 +408,7 @@ export function ExpensesView() {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid-kpi gap-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <ShimmerSkeleton key={i} className="h-32" />
           ))}
@@ -486,7 +486,7 @@ export function ExpensesView() {
 
       {/* KPIs */}
       <StaggerItem>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid-kpi gap-3">
           <KpiCard
             label={`Total Expenses · ${new Date(selectedYear, selectedMonth).toLocaleDateString("en-US", { month: "short" })}`}
             value={totalThisMonth}

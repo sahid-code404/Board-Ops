@@ -78,8 +78,8 @@ export function TopBar() {
   const showBadge = unreadCount > 0;
 
   return (
-    <header className="sticky top-0 z-30 safe-top px-3 pt-3">
-      <div className="glass rounded-3xl px-3 py-2.5 flex items-center gap-2">
+    <header className="sticky top-0 z-30 safe-top px-3 sm:px-4 lg:px-6 pt-3">
+      <div className="mx-auto max-w-6xl glass rounded-3xl px-3 py-2.5 flex items-center gap-2">
         {/* Hamburger — always visible (mobile-first on all screens) */}
         <motion.button
           whileTap={{ scale: 0.9 }}

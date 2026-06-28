@@ -453,7 +453,7 @@ export function PaymentsView() {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid-kpi gap-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <ShimmerSkeleton key={i} className="h-32" />
           ))}
@@ -532,7 +532,7 @@ export function PaymentsView() {
 
       {/* KPIs */}
       <StaggerItem>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid-kpi gap-3">
           <KpiCard
             label="Total Approved"
             value={kpis.totalApproved}

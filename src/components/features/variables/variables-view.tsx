@@ -275,7 +275,7 @@ export function VariablesView() {
 
       {/* Stats bar */}
       <StaggerItem>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid-kpi gap-3">
           <StatCard
             icon={Database}
             label="Total"
@@ -405,7 +405,7 @@ export function VariablesView() {
                   </div>
                 </AccordionTrigger>
                 <AccordionContent>
-                  <div className="grid grid-cols-1 gap-3 pb-3 pt-1">
+                  <div className="grid-cards gap-3 pb-3 pt-1">
                     {vars.map((v) => (
                       <VariableCard
                         key={v.id}
@@ -926,7 +926,7 @@ function VariablesSkeleton() {
   return (
     <div className="space-y-4">
       <ShimmerSkeleton className="h-28" />
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid-kpi gap-3">
         <ShimmerSkeleton className="h-20" />
         <ShimmerSkeleton className="h-20" />
         <ShimmerSkeleton className="h-20" />

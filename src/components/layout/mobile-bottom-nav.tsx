@@ -24,7 +24,7 @@ export function MobileBottomNav() {
       className="fixed bottom-0 left-0 right-0 z-40 safe-x safe-bottom"
       aria-label="Primary navigation"
     >
-      <div className="mx-auto max-w-md px-2.5 sm:px-3 pb-2 pt-1">
+      <div className="mx-auto max-w-6xl px-2.5 sm:px-4 lg:px-6 pb-2 pt-1">
         <div className="glass-strong rounded-3xl px-1.5 py-1.5 flex items-center justify-around shadow-2xl">
           {primaryItems.map((item) => {
             const active = view === item.view;

@@ -169,7 +169,7 @@ export function KitchenView() {
 
       {/* KPI cards */}
       <StaggerItem>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid-kpi gap-3">
           <KpiCard
             icon={Utensils}
             label="Total Meals"
@@ -217,7 +217,7 @@ export function KitchenView() {
         <>
           {/* Per-meal cards */}
           <StaggerItem>
-            <div className="grid grid-cols-1 gap-3">
+            <div className="grid-cards gap-3">
               {counts.map((m) => (
                 <MealCard key={m.id} meal={m} />
               ))}
@@ -399,13 +399,13 @@ function KitchenSkeleton() {
   return (
     <div className="space-y-4">
       <ShimmerSkeleton className="h-32" />
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid-kpi gap-3">
         <ShimmerSkeleton className="h-28" />
         <ShimmerSkeleton className="h-28" />
         <ShimmerSkeleton className="h-28" />
       </div>
       <ShimmerSkeleton className="h-32" />
-      <div className="grid grid-cols-1 gap-3">
+      <div className="grid-cards gap-3">
         {Array.from({ length: 6 }).map((_, i) => (
           <ShimmerSkeleton key={i} className="h-44" />
         ))}

@@ -134,7 +134,7 @@ export function PersonalizationView() {
     return (
       <div className="space-y-4">
         <ShimmerSkeleton className="h-40" />
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid-cards gap-4">
           <ShimmerSkeleton className="h-64" />
           <ShimmerSkeleton className="h-64" />
         </div>
@@ -173,7 +173,7 @@ export function PersonalizationView() {
         </GlassCard>
       </StaggerItem>
 
-      <div className="grid grid-cols-1 gap-4">
+      <div className="grid-cards gap-4">
         {/* Left: Controls */}
         <div className="space-y-4">
           {/* Preset Themes */}
