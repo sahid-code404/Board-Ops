@@ -2,18 +2,32 @@ import { db } from "@/lib/db";
 import { requireAuth, requireRole } from "@/lib/session";
 import { ok, err, handleApiError } from "@/lib/api-response";
 import { logAudit } from "@/lib/audit";
+import { purgeExpiredExpenses } from "@/lib/user-cleanup";
 import { z } from "zod";
 
+/** GET /api/expenses — list expenses (admins see all; USER sees their own APPROVED ones).
+ *  Optional `category`, `month`/`year` query params filter the list.
+ *  Optional `includeDeleted=true` shows soft-deleted expenses (deletion queue).
+ *  Soft-deleted expenses (in 7-day queue) are excluded by default. */
 export async function GET(req: Request) {
   try {
+    // Purge expenses whose 7-day grace period has expired
+    await purgeExpiredExpenses();
+
     const user = await requireAuth();
     const url = new URL(req.url);
     const limit = Number(url.searchParams.get("limit") || 200);
     const category = url.searchParams.get("category");
     const month = url.searchParams.get("month");
     const year = url.searchParams.get("year");
+    const includeDeleted = url.searchParams.get("includeDeleted") === "true";
 
     const where: Record<string, unknown> = {};
+    if (!includeDeleted) {
+      where.deletedAt = null;
+    } else {
+      where.deletedAt = { not: null };
+    }
     if (category) where.category = category;
     if (user.role === "USER") where.status = "APPROVED";
     if (month !== null && month !== undefined && year) {

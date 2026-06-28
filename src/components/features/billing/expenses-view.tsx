@@ -21,10 +21,14 @@ import {
   ChevronLeft,
   ChevronRight,
   MoreVertical,
+  RotateCcw,
+  AlertTriangle,
+  Clock,
 } from "lucide-react";
 
 import { api } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
+import { formatDeletionCountdown } from "@/lib/user-cleanup";
 import { useAuthStore } from "@/stores/use-auth-store";
 
 import { GlassCard } from "@/components/glass/glass-card";
@@ -96,6 +100,8 @@ type Expense = {
   expenseDate: string;
   paidTo: string | null;
   status: string;
+  deletedAt: string | null;
+  deletionReason: string | null;
   user: { name: string } | null;
 };
 
@@ -227,9 +233,13 @@ function formatQuantity(qty: number, unit: string): string {
   return `${qty} ${unit}`;
 }
 
-/** An expense is locked when its status is LOCKED or it belongs to a past month. */
+/**
+ * An expense is locked when its status is LOCKED, it's in the deletion queue,
+ * or it belongs to a past month (bills may have been generated against it).
+ */
 function isExpenseLocked(expense: Expense): boolean {
   if (expense.status === "LOCKED") return true;
+  if (expense.deletedAt) return true; // in deletion queue — can't edit
   const expDate = new Date(expense.expenseDate);
   const now = new Date();
   const expYM = expDate.getFullYear() * 12 + expDate.getMonth();
@@ -251,6 +261,8 @@ export function ExpensesView() {
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Expense | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Expense | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [showDeleted, setShowDeleted] = useState(false);
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -263,6 +275,24 @@ export function ExpensesView() {
       });
       return r.data;
     },
+  });
+
+  // Soft-deleted expenses for the Deletion Queue (admin only). The backend
+  // returns ONLY deleted rows when includeDeleted=true is set.
+  const { data: deletedExpenses = [] } = useQuery({
+    queryKey: ["expenses", "deleted", { month: selectedMonth, year: selectedYear }],
+    queryFn: async () => {
+      const r = await api.get<ApiResponse<Expense[]>>("/expenses", {
+        params: {
+          month: selectedMonth,
+          year: selectedYear,
+          includeDeleted: "true",
+          limit: 500,
+        },
+      });
+      return r.data;
+    },
+    enabled: isAdmin,
   });
 
   const addMutation = useMutation({
@@ -311,14 +341,30 @@ export function ExpensesView() {
   }
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) =>
-      api.delete<ApiResponse<{ success: boolean }>>(`/expenses/${id}`),
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      await api.delete(`/expenses/${id}`, {
+        body: JSON.stringify({ reason: reason || undefined }),
+      });
+    },
     onSuccess: () => {
-      toast.success("Expense deleted");
+      toast.success("Expense scheduled for deletion — permanently removed in 7 days");
       setDeleteTarget(null);
+      setDeleteReason("");
       qc.invalidateQueries({ queryKey: ["expenses"] });
     },
     onError: (e: Error) => toast.error(e.message || "Failed to delete expense"),
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const r = await api.post<ApiResponse<Expense>>(`/expenses/${id}/restore`);
+      return r.data;
+    },
+    onSuccess: () => {
+      toast.success("Expense restored successfully");
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+    },
+    onError: (e: Error) => toast.error(e.message || "Failed to restore expense"),
   });
 
   // KPIs + breakdown — data is already filtered by selected month from the API
@@ -335,9 +381,15 @@ export function ExpensesView() {
     };
   }, [expenses]);
 
+  // When showDeleted is true, the list source swaps to the soft-deleted rows
+  // (which the backend returns only via ?includeDeleted=true). Category filter
+  // is intentionally ignored in that mode since deleted rows can be of any
+  // category and the queue is meant to be a flat review surface.
+  const sourceExpenses = showDeleted ? deletedExpenses : expenses;
+
   const filtered = useMemo(() => {
-    let result = expenses;
-    if (categoryFilter !== "ALL") {
+    let result = sourceExpenses;
+    if (!showDeleted && categoryFilter !== "ALL") {
       result = result.filter((e) => e.category === categoryFilter);
     }
     if (search.trim()) {
@@ -351,7 +403,7 @@ export function ExpensesView() {
       );
     }
     return result;
-  }, [expenses, categoryFilter, search]);
+  }, [sourceExpenses, categoryFilter, search, showDeleted]);
 
   if (isLoading) {
     return (
@@ -518,12 +570,17 @@ export function ExpensesView() {
               );
               const allCats = ["ALL", ...predefined, ...customCats] as const;
               return allCats.map((c) => {
-              const active = categoryFilter === c;
+              const active = !showDeleted && categoryFilter === c;
               const meta = c === "ALL" ? null : getCatMeta(c);
               return (
                 <button
                   key={c}
-                  onClick={() => setCategoryFilter(c)}
+                  onClick={() => {
+                    // Selecting a category pill exits the deletion-queue view
+                    // so the category filter takes effect immediately.
+                    setShowDeleted(false);
+                    setCategoryFilter(c);
+                  }}
                   className={cn(
                     "inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium rounded-full whitespace-nowrap transition-all",
                     active
@@ -538,6 +595,35 @@ export function ExpensesView() {
               });
             })()}
           </div>
+          {/* Deletion Queue pill — admin only */}
+          {isAdmin && (
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+              <button
+                onClick={() => setShowDeleted(!showDeleted)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium rounded-full whitespace-nowrap transition-all",
+                  showDeleted
+                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                    : "glass-soft text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Deletion Queue
+                {deletedExpenses.length > 0 && (
+                  <span
+                    className={cn(
+                      "text-[9px] rounded-full px-1.5 py-0.5 leading-none font-bold min-w-[16px] text-center",
+                      showDeleted
+                        ? "bg-primary-foreground/20 text-primary-foreground"
+                        : "bg-destructive text-white"
+                    )}
+                  >
+                    {deletedExpenses.length}
+                  </span>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </StaggerItem>
 
@@ -552,9 +638,11 @@ export function ExpensesView() {
               <div>
                 <p className="font-medium">No expenses found</p>
                 <p className="text-sm text-muted-foreground">
-                  {isAdmin
-                    ? "Add your first expense to start tracking spending."
-                    : "There are no expenses in this category yet."}
+                  {showDeleted
+                    ? "No expenses in the deletion queue."
+                    : isAdmin
+                      ? "Add your first expense to start tracking spending."
+                      : "There are no expenses in this category yet."}
                 </p>
               </div>
             </div>
@@ -576,6 +664,7 @@ export function ExpensesView() {
                     canManage={isAdmin}
                     onEdit={() => openEditForm(exp)}
                     onDelete={() => setDeleteTarget(exp)}
+                    onRestore={() => restoreMutation.mutate(exp.id)}
                   />
                 </motion.div>
               ))}
@@ -593,36 +682,58 @@ export function ExpensesView() {
         expense={editTarget}
       />
 
-      {/* Delete confirm */}
+      {/* Delete confirm — schedules a soft-delete with a 7-day grace period */}
       <AlertDialog
         open={!!deleteTarget}
-        onOpenChange={(o) => !o && setDeleteTarget(null)}
+        onOpenChange={(o) => {
+          if (!o) {
+            setDeleteTarget(null);
+            setDeleteReason("");
+          }
+        }}
       >
         <AlertDialogContent className="rounded-3xl">
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete expense?</AlertDialogTitle>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Delete this expense?
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {deleteTarget && (
                 <>
-                  Permanently delete{" "}
+                  This will schedule{" "}
                   <span className="font-medium text-foreground">
                     {deleteTarget.title}
                   </span>{" "}
-                  ({formatINR(deleteTarget.amount)})? This cannot be undone.
+                  ({formatINR(deleteTarget.amount)}) for deletion. It will be
+                  permanently removed after{" "}
+                  <span className="font-medium text-foreground">7 days</span>.
+                  You can restore it from the Deletion Queue before then.
                 </>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <GlassTextarea
+            label="Reason (optional)"
+            rows={2}
+            placeholder="Why is this expense being deleted?"
+            value={deleteReason}
+            onChange={(e) => setDeleteReason(e.target.value)}
+          />
           <AlertDialogFooter>
             <AlertDialogCancel className="rounded-2xl">Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="rounded-2xl bg-destructive text-white hover:bg-destructive/90"
               onClick={() =>
-                deleteTarget && deleteMutation.mutate(deleteTarget.id)
+                deleteTarget &&
+                deleteMutation.mutate({
+                  id: deleteTarget.id,
+                  reason: deleteReason,
+                })
               }
               disabled={deleteMutation.isPending}
             >
-              {deleteMutation.isPending ? "Deleting…" : "Delete"}
+              {deleteMutation.isPending ? "Deleting…" : "Delete Expense"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -692,13 +803,16 @@ function ExpenseRow({
   canManage,
   onEdit,
   onDelete,
+  onRestore,
 }: {
   expense: Expense;
   canManage: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  onRestore: () => void;
 }) {
   const meta = getCatMeta(expense.category);
+  const isDeleted = !!expense.deletedAt;
   const locked = isExpenseLocked(expense);
   const qty = formatQuantity(expense.quantity, expense.unit);
 
@@ -709,7 +823,11 @@ function ExpenseRow({
     onClick: () => void;
     variant?: "destructive";
   }[] = [];
-  if (canManage && !locked) {
+  if (isDeleted) {
+    if (canManage) {
+      actions.push({ label: "Restore Expense", icon: RotateCcw, onClick: onRestore });
+    }
+  } else if (canManage && !locked) {
     actions.push({ label: "Edit Expense", icon: PencilLine, onClick: onEdit });
     actions.push({
       label: "Delete Expense",
@@ -742,24 +860,37 @@ function ExpenseRow({
                 <h3
                   className={cn(
                     "font-semibold truncate",
-                    locked && "text-muted-foreground"
+                    (locked || isDeleted) && "text-muted-foreground",
+                    isDeleted && "line-through"
                   )}
                 >
                   {expense.title}
                 </h3>
-                <Badge
-                  variant="outline"
-                  className={cn("text-[10px]", meta.className)}
-                >
-                  {meta.label}
-                </Badge>
-                {locked && (
+                {isDeleted ? (
                   <Badge
                     variant="outline"
-                    className="text-[10px] bg-muted/60 text-muted-foreground border-border/60"
+                    className="text-[10px] bg-destructive/15 text-destructive border-destructive/30"
                   >
-                    🔒 Locked
+                    <Clock className="h-2.5 w-2.5" />{" "}
+                    {formatDeletionCountdown(new Date(expense.deletedAt!))}
                   </Badge>
+                ) : (
+                  <>
+                    <Badge
+                      variant="outline"
+                      className={cn("text-[10px]", meta.className)}
+                    >
+                      {meta.label}
+                    </Badge>
+                    {locked && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] bg-muted/60 text-muted-foreground border-border/60"
+                      >
+                        🔒 Locked
+                      </Badge>
+                    )}
+                  </>
                 )}
               </div>
               <div className="flex flex-col sm:flex-row sm:items-center gap-x-3 gap-y-0.5 mt-1.5 text-xs text-muted-foreground">
@@ -791,6 +922,12 @@ function ExpenseRow({
                   </span>
                 </span>
               </div>
+              {isDeleted && expense.deletionReason && (
+                <div className="mt-1.5 text-[11px] text-destructive/80 flex items-start gap-1">
+                  <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                  <span>Reason: {expense.deletionReason}</span>
+                </div>
+              )}
             </div>
 
             {/* Dropdown — only render if there are actions */}
