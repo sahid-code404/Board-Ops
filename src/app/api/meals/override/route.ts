@@ -16,7 +16,7 @@ const overrideSchema = z.object({
 
 export async function POST(req: Request) {
   try {
-    const admin = await requireRole("SUPER_ADMIN", "ADMIN");
+    const admin = await requireRole("ADMIN");
     const body = await req.json();
     const data = overrideSchema.parse(body);
 

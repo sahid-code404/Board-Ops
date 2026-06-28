@@ -84,9 +84,7 @@ const STATUS_META: Record<string, { label: string; className: string }> = {
 };
 
 const ROLE_META: Record<Role, { label: string; className: string }> = {
-  SUPER_ADMIN: { label: "Super Admin", className: "bg-primary/15 text-primary" },
   ADMIN: { label: "Admin", className: "bg-primary/15 text-primary" },
-  MANAGER: { label: "Manager", className: "bg-info/15 text-info" },
   USER: { label: "Resident", className: "bg-muted text-muted-foreground" },
 };
 

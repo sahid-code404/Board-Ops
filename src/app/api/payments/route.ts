@@ -51,7 +51,7 @@ export async function POST(req: Request) {
 
     // notify admins
     const admins = await db.user.findMany({
-      where: { role: { in: ["SUPER_ADMIN", "ADMIN"] }, status: "ACTIVE" },
+      where: { role: { in: ["ADMIN"] }, status: "ACTIVE" },
     });
     for (const a of admins) {
       await createNotification({

@@ -65,7 +65,7 @@ export function TopBar() {
             animate={{ opacity: 1, x: 0 }}
             className="text-xs md:text-sm text-muted-foreground"
           >
-            {user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" ? "Admin Console" : "Workspace"}
+            {user?.role === "ADMIN" ? "Admin Console" : "Workspace"}
           </motion.p>
           <motion.h1
             key={`${view}-title`}

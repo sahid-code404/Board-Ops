@@ -97,7 +97,7 @@ async function unwrap<T>(promise: Promise<unknown>): Promise<T> {
 
 export function SettingsView() {
   const role = useAuthStore((s) => s.user?.role);
-  const isAdmin = role === "SUPER_ADMIN" || role === "ADMIN";
+  const isAdmin = role === "ADMIN";
   const qc = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
   const [activeCat, setActiveCat] = useState<SettingCategory>("FEATURE_FLAG");
@@ -284,7 +284,7 @@ export function SettingsView() {
                               onDelete={() => deleteMutation.mutate(s.key)}
                               saving={updateMutation.isPending}
                               deleting={deleteMutation.isPending}
-                              canDelete={role === "SUPER_ADMIN"}
+                              canDelete={role === "ADMIN"}
                             />
                           </motion.div>
                         ))}

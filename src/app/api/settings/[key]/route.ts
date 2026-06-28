@@ -8,7 +8,7 @@ export async function DELETE(
   ctx: { params: Promise<{ key: string }> }
 ) {
   try {
-    const user = await requireRole("SUPER_ADMIN");
+    const user = await requireRole("ADMIN");
     const { key } = await ctx.params;
     const existing = await db.setting.findUnique({ where: { key } });
     if (!existing) return err("Setting not found", 404);

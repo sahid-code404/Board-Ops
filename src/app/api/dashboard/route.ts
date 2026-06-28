@@ -9,7 +9,7 @@ export async function GET() {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    const isAdmin = user.role === "SUPER_ADMIN" || user.role === "ADMIN";
+    const isAdmin = user.role === "ADMIN";
 
     // ── Today's meals for current user ──
     const meals = await db.mealConfiguration.findMany({

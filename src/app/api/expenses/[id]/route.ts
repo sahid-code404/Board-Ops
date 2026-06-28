@@ -8,7 +8,7 @@ export async function DELETE(
   ctx: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireRole("SUPER_ADMIN", "ADMIN");
+    const user = await requireRole("ADMIN");
     const { id } = await ctx.params;
     const existing = await db.expense.findUnique({ where: { id } });
     if (!existing) return err("Expense not found", 404);

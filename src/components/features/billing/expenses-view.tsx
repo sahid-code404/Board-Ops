@@ -184,9 +184,9 @@ function formatDate(iso: string) {
 export function ExpensesView() {
   const user = useAuthStore((s) => s.user);
   const isAdmin =
-    user?.role === "SUPER_ADMIN" ||
     user?.role === "ADMIN" ||
-    user?.role === "MANAGER";
+    user?.role === "ADMIN" ||
+    false;
   const qc = useQueryClient();
 
   const [categoryFilter, setCategoryFilter] = useState<ExpenseCategory | "ALL">(

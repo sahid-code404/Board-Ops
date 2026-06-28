@@ -184,7 +184,7 @@ function formatDateTime(iso: string) {
 
 export function PaymentsView() {
   const user = useAuthStore((s) => s.user);
-  const isAdmin = user?.role === "SUPER_ADMIN" || user?.role === "ADMIN";
+  const isAdmin = user?.role === "ADMIN";
   const qc = useQueryClient();
 
   const [search, setSearch] = useState("");

@@ -171,7 +171,7 @@ type CreateForm = z.infer<typeof createSchema>;
 export function VariablesView() {
   const user = useAuthStore((s) => s.user);
   const queryClient = useQueryClient();
-  const isAdmin = user?.role === "SUPER_ADMIN" || user?.role === "ADMIN";
+  const isAdmin = user?.role === "ADMIN";
 
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("ALL");

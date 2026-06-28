@@ -26,7 +26,7 @@ export async function GET(req: Request) {
 /** POST /api/bills/generate — generate bills for current period for all active users */
 export async function POST(req: Request) {
   try {
-    const user = await requireRole("SUPER_ADMIN", "ADMIN");
+    const user = await requireRole("ADMIN");
     const body = await req.json().catch(() => ({}));
     const month = Number(body.month ?? new Date().getMonth());
     const year = Number(body.year ?? new Date().getFullYear());

@@ -778,7 +778,7 @@ export function MealsConfigView() {
   const user = useAuthStore((s) => s.user);
   const isMobile = useIsMobile();
   const isAdmin =
-    user?.role === "SUPER_ADMIN" || user?.role === "ADMIN";
+    user?.role === "ADMIN";
 
   const [search, setSearch] = React.useState("");
   const [typeFilter, setTypeFilter] = React.useState<string>("ALL");

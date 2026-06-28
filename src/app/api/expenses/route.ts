@@ -41,7 +41,7 @@ const createSchema = z.object({
 
 export async function POST(req: Request) {
   try {
-    const user = await requireRole("SUPER_ADMIN", "ADMIN", "MANAGER");
+    const user = await requireRole("ADMIN");
     const body = await req.json();
     const data = createSchema.parse(body);
     const expense = await db.expense.create({

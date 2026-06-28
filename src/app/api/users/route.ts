@@ -4,7 +4,7 @@ import { ok, handleApiError } from "@/lib/api-response";
 
 export async function GET(req: Request) {
   try {
-    const user = await requireRole("SUPER_ADMIN", "ADMIN");
+    const user = await requireRole("ADMIN");
     const url = new URL(req.url);
     const status = url.searchParams.get("status");
     const search = url.searchParams.get("q");

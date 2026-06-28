@@ -178,7 +178,7 @@ function formatDate(iso: string | null) {
 export function BillingView() {
   const user = useAuthStore((s) => s.user);
   const isAdmin =
-    user?.role === "SUPER_ADMIN" || user?.role === "ADMIN";
+    user?.role === "ADMIN";
 
   const qc = useQueryClient();
   const [search, setSearch] = useState("");

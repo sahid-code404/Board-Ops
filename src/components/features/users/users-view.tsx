@@ -94,9 +94,7 @@ const STATUS_META: Record<UserStatus, { label: string; className: string }> = {
 };
 
 const ROLE_META: Record<Role, { label: string; className: string }> = {
-  SUPER_ADMIN: { label: "Super Admin", className: "bg-primary/15 text-primary" },
   ADMIN: { label: "Admin", className: "bg-primary/15 text-primary" },
-  MANAGER: { label: "Manager", className: "bg-info/15 text-info" },
   USER: { label: "Resident", className: "bg-muted text-muted-foreground" },
 };
 
@@ -143,7 +141,7 @@ function gradientFor(name: string) {
 
 export function UsersView() {
   const role = useAuthStore((s) => s.user?.role);
-  const isAdmin = role === "SUPER_ADMIN" || role === "ADMIN";
+  const isAdmin = role === "ADMIN";
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<UserStatus | "ALL">("ALL");
@@ -350,7 +348,7 @@ export function UsersView() {
                   <UserRow
                     user={u}
                     onAction={(action) => handleAction(u, action)}
-                    canEditRole={role === "SUPER_ADMIN" || (role === "ADMIN" && u.role !== "SUPER_ADMIN")}
+                    canEditRole={role === "ADMIN" && u.role !== "ADMIN"}
                   />
                 </motion.div>
               ))}
@@ -416,9 +414,7 @@ export function UsersView() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="USER">Resident</SelectItem>
-                  <SelectItem value="MANAGER">Manager</SelectItem>
                   <SelectItem value="ADMIN">Admin</SelectItem>
-                  <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
                 </SelectContent>
               </Select>
             </div>

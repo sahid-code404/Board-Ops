@@ -16,15 +16,13 @@ export async function PATCH(
   ctx: { params: Promise<{ id: string }> }
 ) {
   try {
-    const admin = await requireRole("SUPER_ADMIN", "ADMIN");
+    const admin = await requireRole("ADMIN");
     const { id } = await ctx.params;
     const body = await req.json();
     const { action, role, reason } = actionSchema.parse(body);
 
     const user = await db.user.findUnique({ where: { id } });
     if (!user) return err("User not found", 404);
-    if (user.role === "SUPER_ADMIN" && admin.role !== "SUPER_ADMIN")
-      return err("Cannot modify a Super Admin", 403);
 
     let newStatus = user.status;
     let newRole = user.role;

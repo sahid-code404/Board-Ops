@@ -9,7 +9,7 @@ export async function GET(
   ctx: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireRole("SUPER_ADMIN", "ADMIN");
+    await requireRole("ADMIN");
     const { id } = await ctx.params;
     const meal = await db.mealConfiguration.findUnique({ where: { id } });
     if (!meal) return err("Meal not found", 404);
@@ -42,7 +42,7 @@ export async function PUT(
   ctx: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireRole("SUPER_ADMIN", "ADMIN");
+    const user = await requireRole("ADMIN");
     const { id } = await ctx.params;
     const body = await req.json();
     const data = updateSchema.parse(body);
@@ -73,7 +73,7 @@ export async function DELETE(
   ctx: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireRole("SUPER_ADMIN", "ADMIN");
+    const user = await requireRole("ADMIN");
     const { id } = await ctx.params;
     const existing = await db.mealConfiguration.findUnique({ where: { id } });
     if (!existing) return err("Meal not found", 404);

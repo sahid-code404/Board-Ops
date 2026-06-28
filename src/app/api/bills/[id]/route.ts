@@ -8,7 +8,7 @@ export async function GET(
   ctx: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireRole("SUPER_ADMIN", "ADMIN");
+    await requireRole("ADMIN");
     const { id } = await ctx.params;
     const bill = await db.bill.findUnique({
       where: { id },
@@ -29,7 +29,7 @@ export async function DELETE(
   ctx: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireRole("SUPER_ADMIN", "ADMIN");
+    const user = await requireRole("ADMIN");
     const { id } = await ctx.params;
     const existing = await db.bill.findUnique({ where: { id } });
     if (!existing) return err("Bill not found", 404);

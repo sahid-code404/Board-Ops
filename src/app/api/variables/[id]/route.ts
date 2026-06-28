@@ -9,7 +9,7 @@ export async function PUT(
   ctx: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireRole("SUPER_ADMIN", "ADMIN");
+    const user = await requireRole("ADMIN");
     const { id } = await ctx.params;
     const body = await req.json();
     const schema = z.object({
@@ -48,7 +48,7 @@ export async function DELETE(
   ctx: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireRole("SUPER_ADMIN", "ADMIN");
+    const user = await requireRole("ADMIN");
     const { id } = await ctx.params;
     const existing = await db.variable.findUnique({ where: { id } });
     if (!existing) return err("Variable not found", 404);

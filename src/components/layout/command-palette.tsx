@@ -38,18 +38,18 @@ type PaletteItem = {
 };
 
 const ITEMS: PaletteItem[] = [
-  { view: "dashboard", label: "Dashboard", icon: LayoutDashboard, keywords: ["home", "overview"], roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "USER"], group: "Workspace" },
-  { view: "calendar", label: "Meal Calendar", icon: CalendarDays, keywords: ["calendar", "schedule", "month"], roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "USER"], group: "Workspace" },
-  { view: "meals", label: "Meal Configuration", icon: UtensilsCrossed, keywords: ["meals", "config", "menu"], roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "USER"], group: "Workspace" },
-  { view: "kitchen", label: "Kitchen Dashboard", icon: ChefHat, keywords: ["kitchen", "chef", "counts"], roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"], group: "Workspace" },
-  { view: "billing", label: "Billing & Invoices", icon: Wallet, keywords: ["billing", "invoice", "bills"], roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "USER"], group: "Finance" },
-  { view: "payments", label: "Payments & Wallet", icon: Wallet, keywords: ["payment", "wallet", "pay"], roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "USER"], group: "Finance" },
-  { view: "expenses", label: "Expenses & Procurement", icon: Receipt, keywords: ["expense", "procurement", "spend"], roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"], group: "Finance" },
-  { view: "variables", label: "Variable Engine", icon: Sigma, keywords: ["variable", "rate", "config"], roles: ["SUPER_ADMIN", "ADMIN"], group: "Admin" },
-  { view: "notifications", label: "Notifications", icon: Bell, keywords: ["notification", "alert", "bell"], roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "USER"], group: "Admin" },
-  { view: "users", label: "User Management", icon: Users, keywords: ["user", "member", "account"], roles: ["SUPER_ADMIN", "ADMIN"], group: "Admin" },
-  { view: "settings", label: "System Settings", icon: Settings, keywords: ["setting", "config", "feature", "flag"], roles: ["SUPER_ADMIN", "ADMIN"], group: "Admin" },
-  { view: "profile", label: "My Profile", icon: User, keywords: ["profile", "me", "account"], roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "USER"], group: "Account" },
+  { view: "dashboard", label: "Dashboard", icon: LayoutDashboard, keywords: ["home", "overview"], roles: ["ADMIN", "USER"], group: "Workspace" },
+  { view: "calendar", label: "Meal Calendar", icon: CalendarDays, keywords: ["calendar", "schedule", "month"], roles: ["ADMIN", "USER"], group: "Workspace" },
+  { view: "meals", label: "Meal Configuration", icon: UtensilsCrossed, keywords: ["meals", "config", "menu"], roles: ["ADMIN", "USER"], group: "Workspace" },
+  { view: "kitchen", label: "Kitchen Dashboard", icon: ChefHat, keywords: ["kitchen", "chef", "counts"], roles: ["ADMIN"], group: "Workspace" },
+  { view: "billing", label: "Billing & Invoices", icon: Wallet, keywords: ["billing", "invoice", "bills"], roles: ["ADMIN", "USER"], group: "Finance" },
+  { view: "payments", label: "Payments & Wallet", icon: Wallet, keywords: ["payment", "wallet", "pay"], roles: ["ADMIN", "USER"], group: "Finance" },
+  { view: "expenses", label: "Expenses & Procurement", icon: Receipt, keywords: ["expense", "procurement", "spend"], roles: ["ADMIN"], group: "Finance" },
+  { view: "variables", label: "Variable Engine", icon: Sigma, keywords: ["variable", "rate", "config"], roles: ["ADMIN"], group: "Admin" },
+  { view: "notifications", label: "Notifications", icon: Bell, keywords: ["notification", "alert", "bell"], roles: ["ADMIN", "USER"], group: "Admin" },
+  { view: "users", label: "User Management", icon: Users, keywords: ["user", "member", "account"], roles: ["ADMIN"], group: "Admin" },
+  { view: "settings", label: "System Settings", icon: Settings, keywords: ["setting", "config", "feature", "flag"], roles: ["ADMIN"], group: "Admin" },
+  { view: "profile", label: "My Profile", icon: User, keywords: ["profile", "me", "account"], roles: ["ADMIN", "USER"], group: "Account" },
 ];
 
 const GROUP_ORDER: PaletteItem["group"][] = ["Workspace", "Finance", "Admin", "Account"];

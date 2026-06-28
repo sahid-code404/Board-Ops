@@ -28,17 +28,17 @@ export type NavItem = {
 };
 
 export const NAV_ITEMS: NavItem[] = [
-  { view: "dashboard", label: "Home", icon: LayoutDashboard, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "USER"], primary: true, rail: true },
-  { view: "calendar", label: "Calendar", icon: CalendarDays, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "USER"], primary: true, rail: true },
-  { view: "meals", label: "Meals", icon: UtensilsCrossed, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "USER"], primary: true, rail: true },
-  { view: "kitchen", label: "Kitchen", icon: ChefHat, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"], primary: true, rail: true },
-  { view: "billing", label: "Billing", icon: Wallet, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "USER"], primary: true, rail: true },
-  { view: "payments", label: "Payments", icon: Wallet, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "USER"], rail: true },
-  { view: "expenses", label: "Expenses", icon: Receipt, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"], rail: true },
-  { view: "variables", label: "Variables", icon: Sigma, roles: ["SUPER_ADMIN", "ADMIN"], rail: true },
-  { view: "users", label: "Users", icon: Users, roles: ["SUPER_ADMIN", "ADMIN"], rail: true },
-  { view: "notifications", label: "Notifications", icon: Bell, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "USER"], rail: true },
-  { view: "settings", label: "Settings", icon: Settings, roles: ["SUPER_ADMIN", "ADMIN"], rail: true },
+  { view: "dashboard", label: "Home", icon: LayoutDashboard, roles: ["ADMIN", "USER"], primary: true, rail: true },
+  { view: "calendar", label: "Calendar", icon: CalendarDays, roles: ["ADMIN", "USER"], primary: true, rail: true },
+  { view: "meals", label: "Meals", icon: UtensilsCrossed, roles: ["ADMIN", "USER"], primary: true, rail: true },
+  { view: "kitchen", label: "Kitchen", icon: ChefHat, roles: ["ADMIN"], primary: true, rail: true },
+  { view: "billing", label: "Billing", icon: Wallet, roles: ["ADMIN", "USER"], primary: true, rail: true },
+  { view: "payments", label: "Payments", icon: Wallet, roles: ["ADMIN", "USER"], rail: true },
+  { view: "expenses", label: "Expenses", icon: Receipt, roles: ["ADMIN"], rail: true },
+  { view: "variables", label: "Variables", icon: Sigma, roles: ["ADMIN"], rail: true },
+  { view: "users", label: "Users", icon: Users, roles: ["ADMIN"], rail: true },
+  { view: "notifications", label: "Notifications", icon: Bell, roles: ["ADMIN", "USER"], rail: true },
+  { view: "settings", label: "Settings", icon: Settings, roles: ["ADMIN"], rail: true },
 ];
 
 export const NAV_LABELS: Record<ViewKey, string> = {

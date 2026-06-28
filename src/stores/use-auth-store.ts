@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export type Role = "SUPER_ADMIN" | "ADMIN" | "MANAGER" | "USER";
+export type Role = "ADMIN" | "USER";
 
 export type CurrentUser = {
   id: string;

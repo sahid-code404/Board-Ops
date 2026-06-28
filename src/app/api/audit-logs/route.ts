@@ -4,7 +4,7 @@ import { ok, handleApiError } from "@/lib/api-response";
 
 export async function GET(req: Request) {
   try {
-    await requireRole("SUPER_ADMIN", "ADMIN");
+    await requireRole("ADMIN");
     const url = new URL(req.url);
     const limit = Number(url.searchParams.get("limit") || 50);
     const entity = url.searchParams.get("entity");

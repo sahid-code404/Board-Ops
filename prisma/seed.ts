@@ -32,9 +32,7 @@ async function main() {
 
   // ── Roles ──
   const roles = [
-    { name: "SUPER_ADMIN", description: "Full system access", isSystem: true },
-    { name: "ADMIN", description: "Manage users, meals, billing, settings", isSystem: true },
-    { name: "MANAGER", description: "Manage operations, kitchen, expenses", isSystem: true },
+    { name: "ADMIN", description: "Full system access — manage users, meals, billing, settings", isSystem: true },
     { name: "USER", description: "Standard resident/user", isSystem: true },
   ];
   for (const r of roles) {
@@ -56,7 +54,7 @@ async function main() {
       email: adminEmail,
       phone: "+919876543210",
       passwordHash: adminPass,
-      role: "SUPER_ADMIN",
+      role: "ADMIN",
       status: "ACTIVE",
       room: "Office",
       timezone: "Asia/Kolkata",

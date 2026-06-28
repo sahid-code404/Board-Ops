@@ -8,7 +8,7 @@ export async function GET(req: Request) {
     const user = await requireAuth();
     const url = new URL(req.url);
     const category = url.searchParams.get("category");
-    const includePrivate = user.role === "SUPER_ADMIN" || user.role === "ADMIN";
+    const includePrivate = user.role === "ADMIN";
 
     const where = {
       ...(category ? { category } : {}),
@@ -32,7 +32,7 @@ const upsertSchema = z.object({
 
 export async function POST(req: Request) {
   try {
-    await requireRole("SUPER_ADMIN", "ADMIN");
+    await requireRole("ADMIN");
     const body = await req.json();
     const data = upsertSchema.parse(body);
     const setting = await db.setting.upsert({

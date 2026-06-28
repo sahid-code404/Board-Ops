@@ -5,7 +5,7 @@ import { z } from "zod";
 
 export async function GET() {
   try {
-    await requireRole("SUPER_ADMIN", "ADMIN", "MANAGER");
+    await requireRole("ADMIN");
     const staff = await db.staffRecord.findMany({
       orderBy: { createdAt: "desc" },
     });
@@ -26,7 +26,7 @@ const createSchema = z.object({
 
 export async function POST(req: Request) {
   try {
-    await requireRole("SUPER_ADMIN", "ADMIN");
+    await requireRole("ADMIN");
     const body = await req.json();
     const data = createSchema.parse(body);
     const staff = await db.staffRecord.create({

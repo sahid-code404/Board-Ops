@@ -10,7 +10,7 @@ export async function PATCH(
   ctx: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireRole("SUPER_ADMIN", "ADMIN");
+    const user = await requireRole("ADMIN");
     const { id } = await ctx.params;
     const body = await req.json().catch(() => ({}));
     const action = body.action || "APPROVE";
