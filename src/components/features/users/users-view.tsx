@@ -112,13 +112,13 @@ const ROLE_META: Record<Role, { label: string; className: string }> = {
   USER: { label: "Resident", className: "bg-muted text-muted-foreground" },
 };
 
-const STATUS_FILTERS: { key: UserStatus | "ALL" | "DELETED"; label: string }[] = [
-  { key: "ALL", label: "All" },
-  { key: "PENDING", label: "Pending" },
-  { key: "ACTIVE", label: "Active" },
-  { key: "SUSPENDED", label: "Suspended" },
-  { key: "ARCHIVED", label: "Archived" },
-  { key: "DELETED", label: "Deletion Queue" },
+const STATUS_FILTERS: { key: UserStatus | "ALL" | "DELETED"; label: string; short: string }[] = [
+  { key: "ALL", label: "All", short: "All" },
+  { key: "PENDING", label: "Pending", short: "Pending" },
+  { key: "ACTIVE", label: "Active", short: "Active" },
+  { key: "SUSPENDED", label: "Suspended", short: "Suspended" },
+  { key: "ARCHIVED", label: "Archived", short: "Archived" },
+  { key: "DELETED", label: "Deletion Queue", short: "Queue" },
 ];
 
 const ACTIONS_NEED_REASON: Action[] = ["SUSPEND", "DEACTIVATE", "ARCHIVE"];
@@ -180,11 +180,11 @@ export function UsersView() {
   const [deleteReason, setDeleteReason] = useState("");
 
   const { data: users = [], isLoading } = useQuery({
-    queryKey: ["users", { search, status }],
+    queryKey: ["users", { search }],
     queryFn: () =>
       unwrap<ManagedUser[]>(
         api.get("/users", {
-          params: { q: search, status: status === "ALL" || status === "DELETED" ? undefined : status },
+          params: { q: search || undefined },
         })
       ),
     enabled: isAdmin,
@@ -282,9 +282,10 @@ export function UsersView() {
   });
 
   const kpis = useMemo(() => {
-    // Exclude admins from all counts — these are resident-facing metrics
+    // Total Users includes everyone (admins + residents, excluding deleted)
+    const total = users.filter((u) => !u.deletedAt).length;
+    // Active/Pending/Suspended exclude admins — these are resident-facing metrics
     const residents = users.filter((u) => u.role !== "ADMIN");
-    const total = residents.filter((u) => !u.deletedAt).length;
     const active = residents.filter((u) => u.status === "ACTIVE" && !u.deletedAt).length;
     const pending = residents.filter((u) => u.status === "PENDING").length;
     const suspended = residents.filter((u) => u.status === "SUSPENDED").length;
@@ -293,7 +294,6 @@ export function UsersView() {
   }, [users]);
 
   const filteredUsers = useMemo(() => {
-    // Show all users including admins in the list, but filter by status
     if (status === "DELETED") return users.filter((u) => u.deletedAt);
     if (status === "ALL") return users.filter((u) => !u.deletedAt);
     return users.filter((u) => !u.deletedAt && u.status === status);
@@ -424,29 +424,28 @@ export function UsersView() {
             onChange={(e) => setSearch(e.target.value)}
             icon={<Search />}
           />
-          {/* Symmetrical scrollable filter pills — centered when they fit, scrollable when they don't */}
-          <div className="flex justify-center overflow-x-auto no-scrollbar pb-1">
-            <div className="flex items-center gap-2">
-              {STATUS_FILTERS.map((f) => {
-                const active = status === f.key;
-                return (
-                  <motion.button
-                    key={f.key}
-                    whileTap={{ scale: 0.96 }}
-                    onClick={() => setStatus(f.key)}
-                    className={cn(
-                      "flex items-center justify-center h-9 min-w-[80px] px-3 rounded-2xl text-xs font-medium transition-all whitespace-nowrap shrink-0",
-                      active
-                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
-                        : "glass-soft text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {f.label}
+          {/* Filter pills — scrollable, all visible left-to-right */}
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-1">
+            {STATUS_FILTERS.map((f) => {
+              const active = status === f.key;
+              return (
+                <motion.button
+                  key={f.key}
+                  whileTap={{ scale: 0.96 }}
+                  onClick={() => setStatus(f.key)}
+                  className={cn(
+                    "flex items-center justify-center h-8 px-2.5 rounded-xl text-[11px] font-medium transition-all whitespace-nowrap shrink-0",
+                    active
+                      ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                      : "glass-soft text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <span className="sm:hidden">{f.short}</span>
+                  <span className="hidden sm:inline">{f.label}</span>
                   </motion.button>
                 );
               })}
             </div>
-          </div>
         </div>
       </StaggerItem>
 
