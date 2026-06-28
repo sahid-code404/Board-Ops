@@ -8,9 +8,6 @@ import {
   RotateCcw,
   Save,
   Sparkles,
-  Sun,
-  Moon,
-  Monitor,
   Smartphone,
   Tablet,
   Type,
@@ -96,12 +93,6 @@ export function PersonalizationView() {
 
   const updateRadius = (value: string) => {
     const updated = { ...local, radius: value };
-    setLocal(updated);
-    previewTheme(updated);
-  };
-
-  const updateMode = (mode: "system" | "light" | "dark") => {
-    const updated = { ...local, mode };
     setLocal(updated);
     previewTheme(updated);
   };
@@ -256,44 +247,6 @@ export function PersonalizationView() {
                   value={local.primaryForeground}
                   onChange={(v) => updateColor("primaryForeground", v)}
                 />
-              </div>
-            </GlassCard>
-          </StaggerItem>
-
-          {/* Theme Mode */}
-          <StaggerItem>
-            <GlassCard className="p-5 md:p-6" hover={false}>
-              <div className="flex items-center gap-2 mb-4">
-                <Sun className="h-5 w-5 text-primary" />
-                <h3 className="font-semibold">Default Theme Mode</h3>
-              </div>
-              <p className="text-xs text-muted-foreground mb-4">
-                The theme new users see by default. Individual users can still override this in their profile.
-              </p>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { value: "light" as const, label: "Light", icon: Sun },
-                  { value: "dark" as const, label: "Dark", icon: Moon },
-                  { value: "system" as const, label: "System", icon: Monitor },
-                ].map((opt) => {
-                  const active = local.mode === opt.value;
-                  return (
-                    <motion.button
-                      key={opt.value}
-                      whileTap={{ scale: 0.96 }}
-                      onClick={() => updateMode(opt.value)}
-                      className={cn(
-                        "flex flex-col items-center gap-2 py-3 rounded-2xl border-2 transition-all",
-                        active ? "border-primary bg-primary/10" : "border-border/40 glass-soft"
-                      )}
-                    >
-                      <opt.icon className={cn("h-5 w-5", active ? "text-primary" : "text-muted-foreground")} />
-                      <span className={cn("text-xs font-medium", active ? "text-primary" : "text-muted-foreground")}>
-                        {opt.label}
-                      </span>
-                    </motion.button>
-                  );
-                })}
               </div>
             </GlassCard>
           </StaggerItem>

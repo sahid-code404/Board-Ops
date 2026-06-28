@@ -57,17 +57,7 @@ export function ThemeConfigProvider({ children }: { children: ReactNode }) {
   const applyTheme = useCallback((config: ThemeConfig) => {
     if (typeof document === "undefined") return;
     const root = document.documentElement;
-
-    // Apply the theme mode (light/dark/system) — this actually toggles the .dark class
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const shouldUseDark = config.mode === "dark" || (config.mode === "system" && prefersDark);
-    if (shouldUseDark) {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-    }
-
-    // Override the --primary token in both :root and .dark
+    // Only apply CSS variables for colors/radius — next-themes handles the .dark class
     root.style.setProperty("--primary", hexToOklch(config.primary));
     root.style.setProperty("--primary-foreground", config.primaryForeground || readableForeground(config.primary));
     root.style.setProperty("--accent", hexToOklch(config.accent));
@@ -76,7 +66,6 @@ export function ThemeConfigProvider({ children }: { children: ReactNode }) {
     root.style.setProperty("--sidebar-primary", hexToOklch(config.primary));
     root.style.setProperty("--sidebar-ring", hexToOklch(config.primary));
     root.style.setProperty("--radius", config.radius);
-    // Also set a CSS variable for the chart-1 so charts pick up the accent
     root.style.setProperty("--chart-1", hexToOklch(config.primary));
   }, []);
 

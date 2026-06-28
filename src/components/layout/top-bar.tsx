@@ -42,7 +42,7 @@ function formatBadge(count: number): string {
 }
 
 export function TopBar() {
-  const { resolvedTheme, setTheme } = useTheme();
+  const { resolvedTheme, theme, setTheme } = useTheme();
   const view = useAppStore((s) => s.view);
   const setView = useAppStore((s) => s.setView);
   const setCommandOpen = useAppStore((s) => s.setCommandOpen);
@@ -124,7 +124,7 @@ export function TopBar() {
         </GlassButton>
 
         {/* Theme switcher — overlay with Light/Dark/System */}
-        <ThemeSwitcher isDark={isDark} onThemeChange={setTheme} currentTheme={resolvedTheme || "system"} />
+        <ThemeSwitcher isDark={isDark} onThemeChange={setTheme} currentTheme={theme || "system"} />
 
         {/* Notifications — routes to notifications page, shows unread count badge */}
         <motion.button
