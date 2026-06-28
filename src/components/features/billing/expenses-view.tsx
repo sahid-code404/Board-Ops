@@ -14,7 +14,6 @@ import {
   Users,
   Wrench,
   Boxes,
-  TrendingDown,
   Calendar,
   Receipt,
   User,
@@ -295,7 +294,7 @@ export function ExpensesView() {
 
       {/* KPIs */}
       <StaggerItem>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <div className="grid grid-cols-2 gap-3 md:gap-4">
           <KpiCard
             label="Total This Month"
             value={totalThisMonth}
@@ -309,21 +308,53 @@ export function ExpensesView() {
             icon={<Receipt className="h-5 w-5" />}
             color="info"
           />
-          <KpiCard
-            label="Top Category"
-            value={topCategoryAmount(byCategory)}
-            icon={<TrendingDown className="h-5 w-5" />}
-            color="warning"
-            prefix="₹"
-            suffixLabel={topCategoryName(byCategory)}
-          />
-          <KpiCard
-            label="Categories Active"
-            value={activeCategories(byCategory)}
-            icon={<Boxes className="h-5 w-5" />}
-            color="success"
-          />
         </div>
+      </StaggerItem>
+
+      {/* Top Categories — horizontal bars sorted high to low */}
+      <StaggerItem>
+        <GlassCard className="p-4 md:p-6" hover={false}>
+          <h3 className="font-semibold mb-4">Top Categories <span className="text-xs font-normal text-muted-foreground ml-1">· this month</span></h3>
+          <div className="space-y-3">
+            {(() => {
+              const sorted = CATEGORY_ORDER
+                .map((cat) => ({ cat, amount: byCategory[cat] || 0 }))
+                .filter((x) => x.amount > 0)
+                .sort((a, b) => b.amount - a.amount);
+              if (sorted.length === 0) {
+                return <p className="text-sm text-muted-foreground text-center py-4">No expenses this month</p>;
+              }
+              const maxAmount = sorted[0].amount;
+              return sorted.map(({ cat, amount }) => {
+                const pct = maxAmount > 0 ? (amount / maxAmount) * 100 : 0;
+                const meta = CATEGORY_META[cat];
+                return (
+                  <div key={cat} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <span
+                          className="h-2 w-2 rounded-full"
+                          style={{ background: meta.chartColor }}
+                        />
+                        {meta.label}
+                      </span>
+                      <span className="font-medium tabular-nums">₹{amount.toLocaleString("en-IN")}</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${pct}%` }}
+                        transition={{ duration: 0.8, ease: "easeOut" }}
+                        className="h-full rounded-full"
+                        style={{ background: meta.chartColor }}
+                      />
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        </GlassCard>
       </StaggerItem>
 
       {/* Filters */}
@@ -810,26 +841,3 @@ function AddExpenseSheet({
 // Helpers
 // ─────────────────────────────────────────────────────────────
 
-function topCategoryName(byCat: Record<ExpenseCategory, number>): string {
-  let max = 0;
-  let name = "—";
-  CATEGORY_ORDER.forEach((c) => {
-    if ((byCat[c] || 0) > max) {
-      max = byCat[c] || 0;
-      name = CATEGORY_META[c].label;
-    }
-  });
-  return name;
-}
-
-function topCategoryAmount(byCat: Record<ExpenseCategory, number>): number {
-  let max = 0;
-  CATEGORY_ORDER.forEach((c) => {
-    if ((byCat[c] || 0) > max) max = byCat[c] || 0;
-  });
-  return max;
-}
-
-function activeCategories(byCat: Record<ExpenseCategory, number>): number {
-  return CATEGORY_ORDER.filter((c) => (byCat[c] || 0) > 0).length;
-}
