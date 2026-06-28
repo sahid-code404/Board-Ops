@@ -6,7 +6,8 @@ import { purgeExpiredBills, getDeletionDate } from "@/lib/user-cleanup";
 
 /** GET /api/bills — list bills (user sees own; admin sees all).
  *  Optional `month` and `year` query params filter by billing period.
- *  Soft-deleted bills (in 7-day queue) are excluded. */
+ *  Optional `includeDeleted=true` shows soft-deleted bills (deletion queue).
+ *  Soft-deleted bills (in 7-day queue) are excluded by default. */
 export async function GET(req: Request) {
   try {
     // Purge bills whose 7-day grace period has expired
@@ -15,8 +16,14 @@ export async function GET(req: Request) {
     const user = await requireAuth();
     const url = new URL(req.url);
     const limit = Number(url.searchParams.get("limit") || 200);
+    const includeDeleted = url.searchParams.get("includeDeleted") === "true";
 
-    const where: Record<string, unknown> = { deletedAt: null };
+    const where: Record<string, unknown> = {};
+    if (!includeDeleted) {
+      where.deletedAt = null;
+    } else {
+      where.deletedAt = { not: null };
+    }
     if (user.role === "USER") {
       where.userId = user.id;
     }

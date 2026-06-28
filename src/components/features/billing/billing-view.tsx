@@ -22,12 +22,14 @@ import {
   ChevronRight,
   Trash2,
   AlertTriangle,
+  RotateCcw,
 } from "lucide-react";
 
 import { api } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { useAppStore } from "@/stores/use-app-store";
+import { formatDeletionCountdown } from "@/lib/user-cleanup";
 
 import { GlassCard } from "@/components/glass/glass-card";
 import { GlassButton } from "@/components/glass/glass-button";
@@ -85,7 +87,8 @@ type BillStatus =
   | "PARTIALLY_PAID"
   | "PAID"
   | "OVERDUE"
-  | "VOID";
+  | "VOID"
+  | "DELETED";
 
 type Bill = {
   id: string;
@@ -101,6 +104,7 @@ type Bill = {
   dueDate: string | null;
   generatedAt: string | null;
   createdAt: string;
+  deletedAt: string | null;
   user: { name: string; email: string; room: string | null; avatarUrl: string | null };
 };
 
@@ -167,6 +171,11 @@ const BILL_STATUS_STYLES: Record<
       "bg-muted text-muted-foreground border-border",
     label: "Void",
   },
+  DELETED: {
+    className:
+      "bg-destructive/15 text-destructive border-destructive/30",
+    label: "Deleted",
+  },
 };
 
 function BillStatusBadge({ status }: { status: BillStatus }) {
@@ -207,7 +216,7 @@ export function BillingView() {
 
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<BillStatus | "ALL">("ALL");
+  const [statusFilter, setStatusFilter] = useState<BillStatus | "ALL" | "DELETED">("ALL");
   const [generateOpen, setGenerateOpen] = useState(false);
   const [genMonth, setGenMonth] = useState<number>(new Date().getMonth());
   const [genYear, setGenYear] = useState<number>(new Date().getFullYear());
@@ -225,6 +234,18 @@ export function BillingView() {
       });
       return r.data;
     },
+  });
+
+  // Fetch soft-deleted bills (deletion queue) — admin only
+  const { data: deletedBills = [] } = useQuery({
+    queryKey: ["bills", "deleted", { month: selectedMonth, year: selectedYear }],
+    queryFn: async () => {
+      const r = await api.get<ApiResponse<Bill[]>>("/bills", {
+        params: { month: selectedMonth, year: selectedYear, includeDeleted: "true" },
+      });
+      return r.data;
+    },
+    enabled: isAdmin,
   });
 
   const generateMutation = useMutation({
@@ -282,6 +303,18 @@ export function BillingView() {
     onError: (e: Error) => toast.error(e.message || "Failed to delete bills"),
   });
 
+  const restoreMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const r = await api.post<ApiResponse<Bill>>(`/bills/${id}/restore`);
+      return r.data;
+    },
+    onSuccess: () => {
+      toast.success("Bill restored successfully");
+      qc.invalidateQueries({ queryKey: ["bills"] });
+    },
+    onError: (e: Error) => toast.error(e.message || "Failed to restore bill"),
+  });
+
   // ── Derived KPIs ──
   const kpis = useMemo(() => {
     const active = bills.filter((b) => b.status !== "VOID");
@@ -293,10 +326,13 @@ export function BillingView() {
   }, [bills]);
 
   // ── Filtered list ──
+  // Use deleted bills when filter is DELETED, otherwise use active bills
+  const sourceBills = statusFilter === "DELETED" ? deletedBills : bills;
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return bills.filter((b) => {
-      if (statusFilter !== "ALL" && b.status !== statusFilter) return false;
+    return sourceBills.filter((b) => {
+      if (statusFilter !== "ALL" && statusFilter !== "DELETED" && b.status !== statusFilter) return false;
       if (!q) return true;
       return (
         b.user.name?.toLowerCase().includes(q) ||
@@ -304,7 +340,7 @@ export function BillingView() {
         (b.user.room || "").toLowerCase().includes(q)
       );
     });
-  }, [bills, search, statusFilter]);
+  }, [sourceBills, search, statusFilter]);
 
   if (isLoading) {
     return (
@@ -438,9 +474,12 @@ export function BillingView() {
                 "PAID",
                 "OVERDUE",
                 "VOID",
+                ...(isAdmin ? ["DELETED" as const] : []),
               ] as const
             ).map((s) => {
               const active = statusFilter === s;
+              const label = s === "DELETED" ? "Deletion Queue" : s === "ALL" ? "All" : BILL_STATUS_STYLES[s as BillStatus]?.label || s;
+              const badge = s === "DELETED" && deletedBills.length > 0 ? deletedBills.length : null;
               return (
                 <button
                   key={s}
@@ -452,7 +491,15 @@ export function BillingView() {
                       : "glass-soft text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  {s === "ALL" ? "All" : BILL_STATUS_STYLES[s].label}
+                  {label}
+                  {badge !== null && (
+                    <span className={cn(
+                      "text-[9px] rounded-full px-1.5 py-0.5 leading-none font-bold min-w-[16px] text-center",
+                      active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-warning text-white"
+                    )}>
+                      {badge}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -514,6 +561,7 @@ export function BillingView() {
                       onView={() => setSelectedBill(bill)}
                       onVoid={() => setVoidTarget(bill)}
                       onDelete={() => setDeleteTarget(bill)}
+                      onRestore={() => restoreMutation.mutate(bill.id)}
                     />
                   </StaggerItem>
                 ))}
@@ -875,18 +923,21 @@ function BillCard({
   onView,
   onVoid,
   onDelete,
+  onRestore,
 }: {
   bill: Bill;
   isAdmin: boolean;
   onView: () => void;
   onVoid: () => void;
   onDelete: () => void;
+  onRestore?: () => void;
 }) {
+  const isDeleted = !!bill.deletedAt;
   return (
     <motion.div
       whileTap={{ scale: 0.99 }}
-      className="glass rounded-3xl p-4 cursor-pointer"
-      onClick={onView}
+      className={cn("glass rounded-3xl p-4", isDeleted ? "cursor-default opacity-75" : "cursor-pointer")}
+      onClick={isDeleted ? undefined : onView}
     >
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -907,7 +958,13 @@ function BillCard({
             </p>
           </div>
         </div>
-        <BillStatusBadge status={bill.status} />
+        {isDeleted ? (
+          <Badge variant="outline" className="text-[10px] bg-destructive/15 text-destructive border-destructive/30 shrink-0">
+            <Clock className="h-2.5 w-2.5" /> {formatDeletionCountdown(new Date(bill.deletedAt!))}
+          </Badge>
+        ) : (
+          <BillStatusBadge status={bill.status} />
+        )}
       </div>
       <div className="grid grid-cols-3 gap-2 text-center">
         <div className="glass-soft rounded-2xl py-2">
@@ -930,33 +987,55 @@ function BillCard({
         </div>
       </div>
       <div className="flex items-center justify-between mt-3">
-        <span className="text-xs text-muted-foreground flex items-center gap-1">
-          <Clock className="h-3 w-3" />
-          Due {formatDate(bill.dueDate)}
-        </span>
+        {isDeleted ? (
+          <span className="text-xs text-destructive/80 flex items-center gap-1">
+            <AlertTriangle className="h-3 w-3" />
+            Scheduled for deletion
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            Due {formatDate(bill.dueDate)}
+          </span>
+        )}
         <div className="flex items-center gap-1">
-          <GlassButton variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onView(); }}>
-            <Eye className="h-3.5 w-3.5" /> View
-          </GlassButton>
-          {isAdmin && bill.status !== "VOID" && (
-            <GlassButton
-              variant="ghost"
-              size="sm"
-              className="text-destructive"
-              onClick={(e) => { e.stopPropagation(); onVoid(); }}
-            >
-              <Ban className="h-3.5 w-3.5" />
-            </GlassButton>
-          )}
-          {isAdmin && (
-            <GlassButton
-              variant="ghost"
-              size="sm"
-              className="text-destructive"
-              onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </GlassButton>
+          {isDeleted ? (
+            isAdmin && onRestore && (
+              <GlassButton
+                variant="ghost"
+                size="sm"
+                className="text-success hover:text-success"
+                onClick={(e) => { e.stopPropagation(); onRestore(); }}
+              >
+                <RotateCcw className="h-3.5 w-3.5" /> Restore
+              </GlassButton>
+            )
+          ) : (
+            <>
+              <GlassButton variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onView(); }}>
+                <Eye className="h-3.5 w-3.5" /> View
+              </GlassButton>
+              {isAdmin && bill.status !== "VOID" && (
+                <GlassButton
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive"
+                  onClick={(e) => { e.stopPropagation(); onVoid(); }}
+                >
+                  <Ban className="h-3.5 w-3.5" />
+                </GlassButton>
+              )}
+              {isAdmin && (
+                <GlassButton
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive"
+                  onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </GlassButton>
+              )}
+            </>
           )}
         </div>
       </div>
