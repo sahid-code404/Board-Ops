@@ -189,11 +189,16 @@ export function SettingsView() {
 
   return (
     <StaggerGroup className="space-y-4 pb-6">
-      {/* Action bar */}
+      {/* Action bar — centered glowing CTA */}
       <StaggerItem>
-        <div className="flex items-center justify-end gap-3">
-          <GlassButton variant="primary" size="md" onClick={() => setAddOpen(true)} className="shrink-0">
-            <Plus className="h-4 w-4" />
+        <div className="flex items-center justify-center">
+          <GlassButton
+            variant="primary"
+            size="lg"
+            onClick={() => setAddOpen(true)}
+            className="shrink-0 glow-primary animate-pulse-slow"
+          >
+            <Plus className="h-5 w-5" />
             Add Setting
           </GlassButton>
         </div>

@@ -428,15 +428,16 @@ export function BillingView() {
         </div>
       </StaggerItem>
 
-      {/* Compact action bar */}
+      {/* Compact action bar — centered glowing CTA */}
       {isAdmin && (
         <StaggerItem>
-          <div className="flex items-center justify-end gap-3">
+          <div className="flex items-center justify-center">
             <GlassButton
+              size="lg"
               onClick={() => setGenerateOpen(true)}
-              className="shrink-0"
+              className="shrink-0 glow-primary animate-pulse-slow"
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-5 w-5" />
               Generate Bills
             </GlassButton>
           </div>
