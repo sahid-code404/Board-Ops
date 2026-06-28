@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
+import { addDays, format, isSameDay } from "date-fns";
 import {
   Wallet,
   CheckCircle2,
@@ -19,6 +20,10 @@ import {
   Search,
   ArrowUpRight,
   ArrowDownRight,
+  ChevronLeft,
+  ChevronRight,
+  Calendar,
+  RotateCcw,
 } from "lucide-react";
 
 import { api } from "@/lib/api-client";
@@ -178,6 +183,24 @@ function formatDateTime(iso: string) {
   });
 }
 
+/** Returns { top, bottom } for the date picker.
+ *  - Today/Yesterday/Tomorrow: top = relative label, bottom = "EEE, d MMM"
+ *  - Other dates: top = "d MMM" (date only), bottom = "EEE" (day name only, no duplicate) */
+function getDatePickerLabels(d: Date): { top: string; bottom: string } {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(d);
+  target.setHours(0, 0, 0, 0);
+  const diffMs = target.getTime() - today.getTime();
+  const diffDays = Math.round(diffMs / (24 * 60 * 60 * 1000));
+
+  if (diffDays === 0) return { top: "Today", bottom: format(target, "EEE, d MMM") };
+  if (diffDays === -1) return { top: "Yesterday", bottom: format(target, "EEE, d MMM") };
+  if (diffDays === 1) return { top: "Tomorrow", bottom: format(target, "EEE, d MMM") };
+  // Far dates: top = date only, bottom = day name only (no duplicate)
+  return { top: format(target, "d MMM"), bottom: format(target, "EEE") };
+}
+
 // ─────────────────────────────────────────────────────────────
 // Main view
 // ─────────────────────────────────────────────────────────────
@@ -187,9 +210,13 @@ export function PaymentsView() {
   const isAdmin = user?.role === "ADMIN";
   const qc = useQueryClient();
 
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const dateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`;
+  const datePickerLabels = getDatePickerLabels(selectedDate);
+  const isToday = isSameDay(selectedDate, new Date());
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<PaymentStatus | "ALL">("ALL");
-  const [methodFilter, setMethodFilter] = useState<PaymentMethod | "ALL">("ALL");
 
   const [submitOpen, setSubmitOpen] = useState(false);
   const [actionTarget, setActionTarget] = useState<{
@@ -197,10 +224,20 @@ export function PaymentsView() {
     action: "APPROVE" | "REJECT";
   } | null>(null);
 
-  const { data: payments = [], isLoading } = useQuery({
-    queryKey: ["payments"],
+  // Fetch ALL payments for KPIs (not affected by date picker)
+  const { data: allPayments = [] } = useQuery({
+    queryKey: ["payments", "all"],
     queryFn: async () => {
       const r = await api.get<ApiResponse<Payment[]>>("/payments");
+      return r.data;
+    },
+  });
+
+  // Fetch date-filtered payments for the list
+  const { data: payments = [], isLoading } = useQuery({
+    queryKey: ["payments", dateStr],
+    queryFn: async () => {
+      const r = await api.get<ApiResponse<Payment[]>>("/payments", { params: { date: dateStr } });
       return r.data;
     },
   });
@@ -243,31 +280,21 @@ export function PaymentsView() {
     onError: (e: Error) => toast.error(e.message || "Action failed"),
   });
 
-  // KPIs
+  // KPIs — computed from ALL payments (not affected by date picker)
   const kpis = useMemo(() => {
-    const approved = payments.filter((p) => p.status === "APPROVED");
+    const approved = allPayments.filter((p) => p.status === "APPROVED");
     const totalApproved = approved.reduce((s, p) => s + p.amount, 0);
-    const pending = payments.filter((p) => p.status === "PENDING").length;
-    const rejected = payments.filter((p) => p.status === "REJECTED").length;
-    const now = new Date();
-    const monthTotal = approved
-      .filter((p) => {
-        const d = new Date(p.createdAt);
-        return (
-          d.getMonth() === now.getMonth() &&
-          d.getFullYear() === now.getFullYear()
-        );
-      })
-      .reduce((s, p) => s + p.amount, 0);
-    return { totalApproved, pending, rejected, monthTotal };
-  }, [payments]);
+    const pending = allPayments.filter((p) => p.status === "PENDING").length;
+    const rejected = allPayments.filter((p) => p.status === "REJECTED").length;
+    const refunded = allPayments.filter((p) => p.status === "REFUNDED").length;
+    return { totalApproved, pending, rejected, refunded };
+  }, [allPayments]);
 
-  // Filtered list
+  // Filtered list — search + status filter pills only
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return payments.filter((p) => {
       if (statusFilter !== "ALL" && p.status !== statusFilter) return false;
-      if (methodFilter !== "ALL" && p.method !== methodFilter) return false;
       if (!q) return true;
       return (
         p.user.name?.toLowerCase().includes(q) ||
@@ -275,9 +302,9 @@ export function PaymentsView() {
         (p.reference || "").toLowerCase().includes(q)
       );
     });
-  }, [payments, search, statusFilter, methodFilter]);
+  }, [payments, search, statusFilter]);
 
-  const pendingPayments = payments.filter((p) => p.status === "PENDING");
+  const pendingPayments = allPayments.filter((p) => p.status === "PENDING");
 
   if (isLoading) {
     return (
@@ -299,6 +326,50 @@ export function PaymentsView() {
 
   return (
     <StaggerGroup className="space-y-4 md:space-y-6">
+      {/* Day picker — wide capsule with centered text + circular arrows */}
+      <StaggerItem>
+        <div className="flex items-center justify-center gap-4">
+          {/* Left arrow — circular */}
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => setSelectedDate((d) => addDays(d, -1))}
+            aria-label="Previous day"
+            className="grid place-items-center h-10 w-10 rounded-full glass-strong shrink-0 ring-1 ring-border/40 hover:ring-primary/40 transition-all"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </motion.button>
+
+          {/* Date capsule — wide, centered text with relative day label */}
+          <button
+            onClick={() => !isToday && setSelectedDate(new Date())}
+            className="flex-1 max-w-[280px] flex items-center justify-center gap-2.5 glass-soft rounded-full px-6 py-2.5 transition-all hover:ring-1 hover:ring-primary/30"
+          >
+            <Calendar className="h-4 w-4 text-primary shrink-0" />
+            <div className="leading-tight text-center">
+              <p className="text-sm font-bold text-primary">
+                {datePickerLabels.top}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {datePickerLabels.bottom}
+              </p>
+            </div>
+            {!isToday && (
+              <RotateCcw className="h-3 w-3 text-muted-foreground shrink-0" />
+            )}
+          </button>
+
+          {/* Right arrow — circular */}
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => setSelectedDate((d) => addDays(d, 1))}
+            aria-label="Next day"
+            className="grid place-items-center h-10 w-10 rounded-full glass-strong shrink-0 ring-1 ring-border/40 hover:ring-primary/40 transition-all"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </motion.button>
+        </div>
+      </StaggerItem>
+
       {/* Action bar */}
       <StaggerItem>
         <div className="flex items-center justify-end gap-3">
@@ -343,11 +414,10 @@ export function PaymentsView() {
             color="danger"
           />
           <KpiCard
-            label="This Month"
-            value={kpis.monthTotal}
-            icon={<Wallet className="h-5 w-5" />}
+            label="Refunded"
+            value={kpis.refunded}
+            icon={<RotateCcw className="h-5 w-5" />}
             color="info"
-            prefix="₹"
           />
         </div>
       </StaggerItem>
@@ -393,57 +463,46 @@ export function PaymentsView() {
         </StaggerItem>
       )}
 
-      {/* Filters */}
+      {/* Search + Filter pills (expenses-style) */}
       <StaggerItem>
-        <GlassCard className="p-3 md:p-4" hover={false}>
-          <div className="flex flex-col md:flex-row gap-3">
-            <div className="flex-1 min-w-0">
-              <GlassInput
-                placeholder="Search by name, email, reference…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                icon={<Search />}
-              />
-            </div>
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-              {(
-                ["ALL", "APPROVED", "PENDING", "REJECTED", "REFUNDED"] as const
-              ).map((s) => {
-                const active = statusFilter === s;
-                return (
-                  <button
-                    key={s}
-                    onClick={() => setStatusFilter(s)}
-                    className={cn(
-                      "px-3.5 py-2 text-xs font-medium rounded-full whitespace-nowrap transition-all",
-                      active
-                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
-                        : "glass-soft text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {s === "ALL" ? "All" : STATUS_STYLES[s].label}
-                  </button>
-                );
-              })}
-            </div>
-            <Select
-              value={methodFilter}
-              onValueChange={(v) => setMethodFilter(v as PaymentMethod | "ALL")}
-            >
-              <SelectTrigger className="w-full md:w-40 h-11 rounded-2xl">
-                <SelectValue placeholder="Method" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">All Methods</SelectItem>
-                {Object.entries(METHOD_META).map(([k, m]) => (
-                  <SelectItem key={k} value={k}>
-                    {m.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        <div className="space-y-3">
+          <GlassInput
+            placeholder="Search by name, email, reference…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            icon={<Search />}
+          />
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-1">
+            {(
+              ["ALL", "PENDING", "APPROVED", "REJECTED", "REFUNDED"] as const
+            ).map((s) => {
+              const active = statusFilter === s;
+              const badge = s === "PENDING" && kpis.pending > 0 ? kpis.pending : null;
+              return (
+                <button
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  className={cn(
+                    "inline-flex items-center h-8 px-2.5 rounded-xl text-[11px] gap-1.5 font-medium whitespace-nowrap transition-all",
+                    active
+                      ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                      : "glass-soft text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {s === "ALL" ? "All" : STATUS_STYLES[s].label}
+                  {badge !== null && (
+                    <span className={cn(
+                      "text-[9px] rounded-full px-1.5 py-0.5 leading-none font-bold min-w-[16px] text-center",
+                      active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-warning text-white"
+                    )}>
+                      {badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
-        </GlassCard>
+        </div>
       </StaggerItem>
 
       {/* List */}

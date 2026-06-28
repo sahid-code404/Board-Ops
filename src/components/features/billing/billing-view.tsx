@@ -18,6 +18,8 @@ import {
   CheckCircle2,
   Clock,
   IndianRupee,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 import { api } from "@/lib/api-client";
@@ -190,11 +192,16 @@ export function BillingView() {
   const [genYear, setGenYear] = useState<number>(new Date().getFullYear());
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const [voidTarget, setVoidTarget] = useState<Bill | null>(null);
+  const now = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
 
   const { data: bills = [], isLoading } = useQuery({
-    queryKey: ["bills"],
+    queryKey: ["bills", { month: selectedMonth, year: selectedYear }],
     queryFn: async () => {
-      const r = await api.get<ApiResponse<Bill[]>>("/bills");
+      const r = await api.get<ApiResponse<Bill[]>>("/bills", {
+        params: { month: selectedMonth, year: selectedYear },
+      });
       return r.data;
     },
   });
@@ -268,6 +275,49 @@ export function BillingView() {
 
   return (
     <StaggerGroup className="space-y-4 md:space-y-5">
+      {/* Month picker — centered, capsule design (matches expenses page) */}
+      <StaggerItem>
+        <div className="flex items-center justify-center gap-4">
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => {
+              const d = new Date(selectedYear, selectedMonth - 1, 1);
+              setSelectedMonth(d.getMonth());
+              setSelectedYear(d.getFullYear());
+            }}
+            aria-label="Previous month"
+            className="grid place-items-center h-10 w-10 rounded-full glass-strong shrink-0 ring-1 ring-border/40 hover:ring-primary/40 transition-all"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </motion.button>
+
+          <div className="flex-1 max-w-[280px] flex items-center justify-center gap-2.5 glass-soft rounded-full px-6 py-2.5">
+            <Calendar className="h-4 w-4 text-primary shrink-0" />
+            <div className="leading-tight text-center">
+              <p className="text-sm font-bold text-primary">
+                {new Date(selectedYear, selectedMonth).toLocaleDateString("en-US", { month: "long" })}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {selectedYear}
+              </p>
+            </div>
+          </div>
+
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => {
+              const d = new Date(selectedYear, selectedMonth + 1, 1);
+              setSelectedMonth(d.getMonth());
+              setSelectedYear(d.getFullYear());
+            }}
+            aria-label="Next month"
+            className="grid place-items-center h-10 w-10 rounded-full glass-strong shrink-0 ring-1 ring-border/40 hover:ring-primary/40 transition-all"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </motion.button>
+        </div>
+      </StaggerItem>
+
       {/* Compact action bar — no duplicate title (TopBar already shows it) */}
       {isAdmin && (
         <StaggerItem>
@@ -319,48 +369,44 @@ export function BillingView() {
         </div>
       </StaggerItem>
 
-      {/* Filters */}
+      {/* Search + Filter pills (expenses-style design) */}
       <StaggerItem>
-        <GlassCard className="p-3 md:p-4" hover={false}>
-          <div className="flex flex-col md:flex-row gap-3 md:items-center">
-            <div className="flex-1 min-w-0">
-              <GlassInput
-                placeholder="Search by name, email, room…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                icon={<Search />}
-              />
-            </div>
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-              {(
-                [
-                  "ALL",
-                  "GENERATED",
-                  "PARTIALLY_PAID",
-                  "PAID",
-                  "OVERDUE",
-                  "VOID",
-                ] as const
-              ).map((s) => {
-                const active = statusFilter === s;
-                return (
-                  <button
-                    key={s}
-                    onClick={() => setStatusFilter(s)}
-                    className={cn(
-                      "px-3.5 py-2 text-xs font-medium rounded-full whitespace-nowrap transition-all",
-                      active
-                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
-                        : "glass-soft text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {s === "ALL" ? "All" : BILL_STATUS_STYLES[s].label}
-                  </button>
-                );
-              })}
-            </div>
+        <div className="space-y-3">
+          <GlassInput
+            placeholder="Search by name, email, room…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            icon={<Search />}
+          />
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+            {(
+              [
+                "ALL",
+                "GENERATED",
+                "PARTIALLY_PAID",
+                "PAID",
+                "OVERDUE",
+                "VOID",
+              ] as const
+            ).map((s) => {
+              const active = statusFilter === s;
+              return (
+                <button
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  className={cn(
+                    "inline-flex items-center gap-1 h-8 px-2.5 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all",
+                    active
+                      ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                      : "glass-soft text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {s === "ALL" ? "All" : BILL_STATUS_STYLES[s].label}
+                </button>
+              );
+            })}
           </div>
-        </GlassCard>
+        </div>
       </StaggerItem>
 
       {/* List */}

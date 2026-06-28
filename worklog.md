@@ -593,3 +593,102 @@ Stage Summary:
 - Past-month expenses are visibly locked (no edit/delete buttons, 🔒 badge shown) — mirrors the server-side enforcement in PUT/DELETE /api/expenses/[id]
 - Month picker is the first thing the user sees, making month navigation the primary action before adding expenses
 - Lint clean (0 errors)
+
+---
+Task ID: BILL-FIX
+Agent: billing-fix-agent
+Task: Add month picker + expenses-style filter redesign to Billing page
+
+Work Log:
+- Read worklog.md + /agent-ctx/ records for context. Inspected existing billing-view.tsx (898 lines), expenses-view.tsx (1128 lines) for the canonical month picker + filter pill pattern, and the existing /api/bills GET/POST route.
+
+Changes to `src/components/features/billing/billing-view.tsx`:
+1. Imports: added `ChevronLeft` + `ChevronRight` to the lucide-react block (`Calendar` was already imported — reused for both the new picker and existing BillCard).
+2. State: added `now`, `selectedMonth` (defaults to `now.getMonth()`), `selectedYear` (defaults to `now.getFullYear()`).
+3. Query: changed `queryKey` from `["bills"]` to `["bills", { month: selectedMonth, year: selectedYear }]`. `queryFn` now sends `params: { month: selectedMonth, year: selectedYear }` to `/api/bills`.
+4. Layout: inserted a NEW month-picker StaggerItem as the FIRST element (above the existing admin action bar). Centered `flex items-center justify-center gap-4`:
+   - Left circular `motion.button` (h-10 w-10 rounded-full glass-strong ring-1 ring-border/40 hover:ring-primary/40) with ChevronLeft — onClick does `new Date(selectedYear, selectedMonth - 1, 1)` and sets both states.
+   - Center capsule: `glass-soft rounded-full px-6 py-2.5` with Calendar icon + two-line stack (top: month name `text-sm font-bold text-primary`; bottom: year `text-[11px] text-muted-foreground`). Uses `toLocaleDateString("en-US", { month: "long" })`.
+   - Right circular `motion.button` with ChevronRight — onClick does `new Date(selectedYear, selectedMonth + 1, 1)`.
+5. Replaced the old GlassCard-wrapped search/filter bar with the expenses-style design:
+   - Full-width `GlassInput` (Search icon, "Search by name, email, room…") in a `space-y-3` div.
+   - Below it: horizontally scrollable filter pills (`flex items-center gap-2 overflow-x-auto no-scrollbar`). Each pill: `inline-flex items-center gap-1 h-8 px-2.5 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all`. Active = `bg-primary text-primary-foreground shadow-md shadow-primary/30`. Inactive = `glass-soft text-muted-foreground hover:text-foreground`. Pills: All, Generated, Partially Paid, Paid, Overdue, Void.
+6. KPIs already derive from `bills` via `useMemo([bills])`, so they automatically reflect the month-filtered data — no other change needed.
+
+Changes to `src/app/api/bills/route.ts` GET handler:
+- Switched from `where = user.role === "USER" ? { userId } : undefined` to a mutable `where: Record<string, unknown>`. Still gates `userId` for USER role.
+- Reads `month` and `year` from `url.searchParams`. If both provided (`month !== null && year`), sets `where.periodMonth = Number(month)` and `where.periodYear = Number(year)`.
+- Backward compatible: when params are absent, the query behaves exactly as before (returns all bills subject to the existing `take: limit` default of 20).
+
+Preserved (no changes):
+- Generate Bills dialog (month/year selects + Sparkles submit icon)
+- Void confirm AlertDialog
+- Bill detail Dialog with payment history (admin-only)
+- Mobile BillCard + desktop Table rendering
+- KpiCard component + glow colors
+- `formatINR`, `formatMonthYear`, `formatDate`, `BILL_STATUS_STYLES`, `BillStatusBadge` helpers
+
+Verification:
+- `bun run lint` → 0 errors (1 pre-existing informational warning in variables-view.tsx from a prior task, unrelated)
+- `dev.log` shows clean recompilation (`✓ Compiled in 197ms`) and `GET /api/bills 200` succeeding
+
+Stage Summary:
+- Billing page now opens with a centered month-picker capsule identical to the expenses page, making month navigation the primary action
+- Bills API now filters by `periodMonth` + `periodYear` when those params are passed, so KPIs and the list reflect only the selected billing period
+- Search/filter bar matches the expenses page exactly (full-width GlassInput + scrollable h-8 px-2.5 rounded-xl text-[11px] pills) for visual consistency across the Finance section
+- All existing functionality (generate, void, detail dialog, payment history, RBAC gating) preserved
+- Lint clean (0 errors)
+
+---
+Task ID: PAY-FIX
+Agent: payments-fix-agent
+Task: Add Day Picker + expenses-style filter redesign + date-filtered KPIs to Payments page
+
+Work Log:
+- Read worklog.md (641 lines) + /agent-ctx/ records (EXP-REWRITE, UX-1, 5d-billing) for context. Inspected existing payments-view.tsx (989 lines), kitchen-view.tsx (for the canonical Day Picker + getDatePickerLabels helper), and expenses-view.tsx (for the canonical search + filter pills pattern). Also read existing /api/payments GET route.
+
+Changes to `src/components/features/billing/payments-view.tsx`:
+1. Imports: added `addDays, format, isSameDay` from `date-fns` and `ChevronLeft, ChevronRight, Calendar, RotateCcw` from `lucide-react`.
+2. Helper: copied `getDatePickerLabels(d)` verbatim from kitchen-view.tsx — returns `{ top, bottom }` where today/yesterday/tomorrow map to relative labels + "EEE, d MMM", and far dates show "d MMM" on top + "EEE" on the bottom (no duplicate day name).
+3. State: added `selectedDate` (`useState<Date>(new Date())`). Derived `dateStr` (YYYY-MM-DD via the exact pattern the task spec gave), `datePickerLabels`, and `isToday` (via `isSameDay`).
+4. Query: changed `queryKey` from `["payments"]` to `["payments", dateStr]`. `queryFn` now sends `params: { date: dateStr }` to `GET /api/payments`. Kept `isLoading` for the skeleton state.
+5. KPIs: removed the redundant month filter inside the KPI memo (was filtering approved payments by `now.getMonth/getFullYear` — no longer needed since `payments` is already filtered to the selected day). Replaced the 4th KPI card "This Month" (₹) with "Refunded" (count, RotateCcw icon, info color) so the 4 KPIs map cleanly to the 4 status filter pills (excluding All).
+6. Layout: inserted a NEW Day Picker StaggerItem as the FIRST element (above the existing action bar). Centered `flex items-center justify-center gap-4`:
+   - Left circular `motion.button` (h-10 w-10 rounded-full glass-strong ring-1 ring-border/40 hover:ring-primary/40) with ChevronLeft — `setSelectedDate((d) => addDays(d, -1))`.
+   - Center glass-soft capsule button (max-w-[280px] rounded-full px-6 py-2.5) with `Calendar` icon + two-line stack (top: relative label/day, `text-sm font-bold text-primary`; bottom: "EEE, d MMM" or day name, `text-[11px] text-muted-foreground`). Clicking it jumps back to today unless already on today — a small `RotateCcw` icon appears as a hint when not on today.
+   - Right circular `motion.button` with ChevronRight — `setSelectedDate((d) => addDays(d, 1))`.
+7. Replaced the old GlassCard-wrapped search/filter bar (which had a GlassInput + status pills + a Method `Select` dropdown) with the expenses-style design:
+   - Full-width `GlassInput` (Search icon, "Search by name, email, reference…") in a `space-y-3` div.
+   - Below it: horizontally scrollable filter pills (`flex items-center gap-2 overflow-x-auto no-scrollbar`). Each pill uses the exact classes requested: `inline-flex items-center h-8 px-2.5 rounded-xl text-[11px] gap-1 font-medium whitespace-nowrap transition-all`. Active = `bg-primary text-primary-foreground shadow-md shadow-primary/30`. Inactive = `glass-soft text-muted-foreground hover:text-foreground` (same as expenses-view).
+   - 5 pills in the requested order: All, Pending, Approved, Rejected, Refunded.
+8. Removed the now-unused `methodFilter` state and the Method `Select` dropdown from the filter bar (the Select component import is retained — it's still used inside `SubmitPaymentDialog` for Method and bill selection).
+
+Changes to `src/app/api/payments/route.ts` GET handler:
+- Typed `where` as `{ userId?: string; createdAt?: { gte: Date; lte: Date } }` (was previously untyped `userId | undefined`).
+- Reads `date` from `url.searchParams`. If present, parses it and sets `where.createdAt = { gte: start, lte: end }` where start = 00:00:00.000 and end = 23:59:59.999 of that calendar day (using `d.getFullYear/getMonth/getDate` — exact pattern from the task spec).
+- Backward compatible: when `date` is omitted, `where.createdAt` stays undefined and the query returns all payments (subject to the existing `take: limit` default of 20).
+- Preserved the existing USER-scope rule (`where.userId = user.id` for residents) — composes cleanly with the new createdAt filter.
+
+Preserved (no changes):
+- Submit Payment dialog (amount/method/bill/reference/notes fields, outstanding-bills Select)
+- Approve/Reject AlertDialog confirm with success/destructive variants
+- Admin Pending Approvals card with inline Approve/Reject buttons (now scoped to the selected day)
+- Mobile PaymentCard + desktop Table rendering
+- KpiCard component + glow colors
+- `formatINR`, `formatDate`, `formatDateTime`, `STATUS_STYLES`, `METHOD_META` helpers
+- POST `/api/payments` and PATCH `/api/payments/[id]` routes (no date logic needed there)
+
+Verification:
+- `bun run lint` → 0 errors (1 pre-existing informational warning in variables-view.tsx from a prior task, unrelated)
+- dev.log shows clean recompilations and the new date filter working end-to-end:
+  - `GET /api/payments?date=2026-06-28 200 in 13ms`
+  - `GET /api/payments?date=2026-06-27 200` (previous day)
+  - `GET /api/payments?date=2026-06-29 200` (next day)
+
+Stage Summary:
+- Payments page now opens with a centered Day Picker capsule identical to the kitchen page, making day navigation the primary action
+- Payments API now filters by `createdAt` calendar-day range when `date` is passed, so KPIs and the list reflect only the selected day's transactions
+- Search/filter bar matches the expenses page exactly (full-width GlassInput + scrollable h-8 px-2.5 rounded-xl text-[11px] pills) for visual consistency across the Finance section
+- KPIs simplified to remove the redundant in-month filter and now show 4 distinct status counts/sums for the selected day
+- All existing functionality (submit, approve/reject, RBAC gating, pending approvals card, dialog/sheet forms) preserved
+- Lint clean (0 errors)

@@ -3,14 +3,24 @@ import { requireAuth, requireRole } from "@/lib/session";
 import { ok, err, handleApiError } from "@/lib/api-response";
 import { logAudit } from "@/lib/audit";
 
-/** GET /api/bills — list bills (user sees own; admin sees all) */
+/** GET /api/bills — list bills (user sees own; admin sees all).
+ *  Optional `month` and `year` query params filter by billing period. */
 export async function GET(req: Request) {
   try {
     const user = await requireAuth();
     const url = new URL(req.url);
     const limit = Number(url.searchParams.get("limit") || 20);
 
-    const where = user.role === "USER" ? { userId: user.id } : undefined;
+    const where: Record<string, unknown> = {};
+    if (user.role === "USER") {
+      where.userId = user.id;
+    }
+    const month = url.searchParams.get("month");
+    const year = url.searchParams.get("year");
+    if (month !== null && year) {
+      where.periodMonth = Number(month);
+      where.periodYear = Number(year);
+    }
     const bills = await db.bill.findMany({
       where,
       orderBy: { createdAt: "desc" },

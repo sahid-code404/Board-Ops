@@ -10,7 +10,19 @@ export async function GET(req: Request) {
     const user = await requireAuth();
     const url = new URL(req.url);
     const limit = Number(url.searchParams.get("limit") || 20);
-    const where = user.role === "USER" ? { userId: user.id } : undefined;
+    const where: { userId?: string; createdAt?: { gte: Date; lte: Date } } =
+      user.role === "USER" ? { userId: user.id } : {};
+
+    // Optional date filter (YYYY-MM-DD). Filters payments where createdAt falls
+    // within that calendar day. When omitted, all payments are returned (back-compat).
+    const date = url.searchParams.get("date");
+    if (date) {
+      const d = new Date(date);
+      const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+      const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+      where.createdAt = { gte: start, lte: end };
+    }
+
     const payments = await db.payment.findMany({
       where,
       orderBy: { createdAt: "desc" },
