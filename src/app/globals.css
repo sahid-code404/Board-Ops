@@ -103,11 +103,14 @@
   --sidebar-border: oklch(0.5 0.02 280 / 0.1);
   --sidebar-ring: oklch(0.55 0.22 295 / 0.5);
 
-  /* glass-specific tokens — more opaque for better readability */
-  --glass-bg: oklch(1 0.008 280 / 0.92);
-  --glass-border: oklch(1 0 0 / 0.75);
-  --glass-shadow: 0 8px 32px oklch(0.3 0.05 280 / 0.14), 0 1px 2px oklch(0.3 0.05 280 / 0.08);
-  --glass-highlight: oklch(1 0 0 / 0.4);
+  /* glass-specific tokens — reduced opacity for a brighter, more transparent feel */
+  --glass-bg: oklch(1 0.008 280 / 0.75);
+  --glass-border: oklch(1 0 0 / 0.6);
+  --glass-shadow: 0 8px 32px oklch(0.3 0.05 280 / 0.1), 0 1px 2px oklch(0.3 0.05 280 / 0.06);
+  --glass-highlight: oklch(1 0 0 / 0.5);
+  /* Subtle neutral edge glow — gives panels/widgets/pills a soft glowing border.
+     Neutral white so it doesn't tint the UI with the preset color. */
+  --glass-edge-glow: 0 0 0 1px oklch(1 0 0 / 0.15), 0 0 16px -4px oklch(1 0 0 / 0.25);
 
   --mesh-1: oklch(0.7 0.2 295 / 0.22);
   --mesh-2: oklch(0.75 0.18 190 / 0.2);
@@ -165,10 +168,12 @@
   --sidebar-border: oklch(1 0 0 / 0.08);
   --sidebar-ring: oklch(0.72 0.22 295 / 0.5);
 
-  --glass-bg: oklch(0.19 0.025 280 / 0.9);
-  --glass-border: oklch(1 0 0 / 0.16);
-  --glass-shadow: 0 8px 32px oklch(0 0 0 / 0.55), 0 1px 2px oklch(0 0 0 / 0.3);
-  --glass-highlight: oklch(1 0 0 / 0.06);
+  --glass-bg: oklch(0.19 0.025 280 / 0.72);
+  --glass-border: oklch(1 0 0 / 0.14);
+  --glass-shadow: 0 8px 32px oklch(0 0 0 / 0.45), 0 1px 2px oklch(0 0 0 / 0.25);
+  --glass-highlight: oklch(1 0 0 / 0.1);
+  /* Subtle neutral edge glow for dark mode — soft light glow on borders */
+  --glass-edge-glow: 0 0 0 1px oklch(1 0 0 / 0.08), 0 0 16px -4px oklch(1 0 0 / 0.12);
 
   --mesh-1: oklch(0.45 0.25 295 / 0.35);
   --mesh-2: oklch(0.45 0.22 190 / 0.3);
@@ -238,13 +243,14 @@
 }
 
 @layer utilities {
-  /* Liquid glass surfaces — stronger blur + higher opacity for readability */
+  /* Liquid glass surfaces — translucent + soft edge glow on every panel/widget/pill.
+     Reduced opacity for a brighter, more transparent feel. */
   .glass {
     background: var(--glass-bg);
     backdrop-filter: blur(32px) saturate(180%);
     -webkit-backdrop-filter: blur(32px) saturate(180%);
     border: 1px solid var(--glass-border);
-    box-shadow: var(--glass-shadow);
+    box-shadow: var(--glass-edge-glow), var(--glass-shadow);
     position: relative;
   }
   .glass::before {
@@ -268,14 +274,15 @@
     backdrop-filter: blur(48px) saturate(200%);
     -webkit-backdrop-filter: blur(48px) saturate(200%);
     border: 1px solid var(--glass-border);
-    box-shadow: 0 20px 60px oklch(0.3 0.05 280 / 0.2), 0 2px 4px oklch(0.3 0.05 280 / 0.08);
+    box-shadow: var(--glass-edge-glow), 0 20px 60px oklch(0.3 0.05 280 / 0.18), 0 2px 4px oklch(0.3 0.05 280 / 0.08);
   }
 
   .glass-soft {
-    background: color-mix(in oklch, var(--glass-bg) 88%, transparent);
+    background: color-mix(in oklch, var(--glass-bg) 80%, transparent);
     backdrop-filter: blur(20px) saturate(160%);
     -webkit-backdrop-filter: blur(20px) saturate(160%);
     border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-edge-glow);
   }
 
   /* Glow effects */
