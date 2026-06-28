@@ -48,8 +48,18 @@ export function TopBar() {
   const setCommandOpen = useAppStore((s) => s.setCommandOpen);
   const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
   const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
   const token = useAuthStore((s) => s.token);
   const isDark = resolvedTheme === "dark";
+
+  // When theme changes via topbar, sync to user's profile so Profile page stays in sync
+  const handleThemeChange = (t: string) => {
+    setTheme(t);
+    if (user) {
+      setUser({ ...user, theme: t });
+      api.put("/auth/profile", { theme: t }).catch(() => {});
+    }
+  };
 
   // Fetch unread notification count — refreshes every 30s
   const { data: unreadCount = 0 } = useQuery({
@@ -124,7 +134,7 @@ export function TopBar() {
         </GlassButton>
 
         {/* Theme switcher — overlay with Light/Dark/System */}
-        <ThemeSwitcher isDark={isDark} onThemeChange={setTheme} currentTheme={theme || "system"} />
+        <ThemeSwitcher isDark={isDark} onThemeChange={handleThemeChange} currentTheme={theme || "system"} />
 
         {/* Notifications — routes to notifications page, shows unread count badge */}
         <motion.button

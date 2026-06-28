@@ -327,51 +327,6 @@ export function ProfileView() {
         </div>
       </StaggerItem>
 
-      {/* Theme switcher — individual preference, visible for ALL users */}
-      <StaggerItem>
-        <GlassCard className="p-4 md:p-6" hover={false}>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="grid place-items-center h-9 w-9 rounded-xl bg-primary/15 text-primary shrink-0">
-              <Palette className="h-4 w-4" />
-            </div>
-            <h3 className="font-semibold text-sm">Appearance</h3>
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { value: "light", label: "Light", icon: Sun },
-              { value: "dark", label: "Dark", icon: Moon },
-              { value: "system", label: "System", icon: Monitor },
-            ].map((opt) => {
-              const currentTheme = me.theme || "system";
-              const active = currentTheme === opt.value;
-              const Icon = opt.icon;
-              return (
-                <motion.button
-                  key={opt.value}
-                  whileTap={{ scale: 0.96 }}
-                  onClick={() => {
-                    setTheme(opt.value);
-                    // Also persist to user's profile
-                    api.put("/auth/profile", { theme: opt.value }).catch(() => {});
-                    if (me) setUser({ ...me, theme: opt.value });
-                  }}
-                  className={cn(
-                    "flex flex-col items-center gap-2 py-3 rounded-2xl border-2 transition-all",
-                    active ? "border-primary bg-primary/10" : "border-border/40 glass-soft"
-                  )}
-                >
-                  <Icon className={cn("h-5 w-5", active ? "text-primary" : "text-muted-foreground")} />
-                  <span className={cn("text-xs font-medium", active ? "text-primary" : "text-muted-foreground")}>
-                    {opt.label}
-                  </span>
-                  {active && <Check className="absolute top-1.5 right-1.5 h-3 w-3 text-primary" />}
-                </motion.button>
-              );
-            })}
-          </div>
-        </GlassCard>
-      </StaggerItem>
-
       {/* Info Cards */}
       <div className="grid md:grid-cols-2 gap-4">
         <StaggerItem>
@@ -397,16 +352,51 @@ export function ProfileView() {
             icon={Palette}
             color="success"
             rows={[
-              {
-                icon: Palette,
-                label: "Theme",
-                value: me.theme === "dark" ? "Dark" : me.theme === "light" ? "Light" : "System",
-              },
               { icon: Languages, label: "Language", value: LANGUAGES.find((l) => l.value === (me.language || "en"))?.label || "English" },
               { icon: Globe, label: "Timezone", value: me.timezone || "UTC" },
               { icon: Clock, label: "Last Login", value: lastLogin },
             ]}
-          />
+          >
+            {/* Theme selector — inside Preferences card */}
+            <div className="py-3 border-t border-border/30">
+              <div className="flex items-center gap-2 mb-2.5 text-sm text-muted-foreground">
+                <Palette className="h-3.5 w-3.5" />
+                <span>Theme</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { value: "light", label: "Light", icon: Sun },
+                  { value: "dark", label: "Dark", icon: Moon },
+                  { value: "system", label: "System", icon: Monitor },
+                ].map((opt) => {
+                  const currentTheme = me.theme || "system";
+                  const active = currentTheme === opt.value;
+                  const Icon = opt.icon;
+                  return (
+                    <motion.button
+                      key={opt.value}
+                      whileTap={{ scale: 0.96 }}
+                      onClick={() => {
+                        setTheme(opt.value);
+                        api.put("/auth/profile", { theme: opt.value }).catch(() => {});
+                        if (me) setUser({ ...me, theme: opt.value });
+                      }}
+                      className={cn(
+                        "relative flex flex-col items-center gap-1.5 py-2.5 rounded-xl border-2 transition-all",
+                        active ? "border-primary bg-primary/10" : "border-border/40 glass-soft"
+                      )}
+                    >
+                      <Icon className={cn("h-4 w-4", active ? "text-primary" : "text-muted-foreground")} />
+                      <span className={cn("text-[11px] font-medium", active ? "text-primary" : "text-muted-foreground")}>
+                        {opt.label}
+                      </span>
+                      {active && <Check className="absolute top-1 right-1 h-3 w-3 text-primary" />}
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </div>
+          </InfoCard>
         </StaggerItem>
       </div>
 
@@ -618,11 +608,13 @@ function InfoCard({
   icon: Icon,
   color,
   rows,
+  children,
 }: {
   title: string;
   icon: typeof Mail;
   color: "primary" | "success" | "warning";
   rows: { icon: typeof Mail; label: string; value: string }[];
+  children?: React.ReactNode;
 }) {
   const colorClass = {
     primary: "bg-primary/15 text-primary",
@@ -653,6 +645,7 @@ function InfoCard({
             </div>
           );
         })}
+        {children}
       </div>
     </GlassCard>
   );
