@@ -134,7 +134,11 @@ export function TopBar() {
         </GlassButton>
 
         {/* Theme switcher — overlay with Light/Dark/System */}
-        <ThemeSwitcher isDark={isDark} onThemeChange={handleThemeChange} currentTheme={theme || "system"} />
+        <ThemeSwitcher
+          isDark={isDark}
+          onThemeChange={handleThemeChange}
+          currentTheme={user?.theme || theme || "system"}
+        />
 
         {/* Notifications — routes to notifications page, shows unread count badge */}
         <motion.button
@@ -234,12 +238,23 @@ function ThemeSwitcher({
     <div ref={ref} className="relative shrink-0">
       <motion.button
         whileTap={{ scale: 0.9 }}
+        whileHover={{ scale: 1.05 }}
         onClick={() => setOpen(!open)}
         aria-label="Theme switcher"
         suppressHydrationWarning
         className="grid place-items-center h-10 w-10 rounded-2xl glass-soft text-foreground hover:text-primary transition-colors"
       >
-        {isDark ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={isDark ? "sun" : "moon"}
+            initial={{ rotate: -90, opacity: 0, scale: 0.5 }}
+            animate={{ rotate: 0, opacity: 1, scale: 1 }}
+            exit={{ rotate: 90, opacity: 0, scale: 0.5 }}
+            transition={{ duration: 0.2 }}
+          >
+            {isDark ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+          </motion.div>
+        </AnimatePresence>
       </motion.button>
       <AnimatePresence>
         {open && (
@@ -248,27 +263,44 @@ function ThemeSwitcher({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: -8 }}
             transition={{ type: "spring", stiffness: 400, damping: 28 }}
-            className="absolute right-0 top-12 z-50 glass-strong rounded-2xl p-1.5 min-w-[140px] shadow-xl"
+            className="absolute right-0 top-12 z-50 glass-strong rounded-2xl p-1.5 min-w-[150px] shadow-xl"
           >
-            {options.map((opt) => {
+            {options.map((opt, i) => {
               const active = currentTheme === opt.value;
               const Icon = opt.icon;
               return (
-                <button
+                <motion.button
                   key={opt.value}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={() => {
                     onThemeChange(opt.value);
                     setOpen(false);
                   }}
                   className={cn(
-                    "w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-colors",
-                    active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+                    "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all",
+                    active
+                      ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
                   )}
                 >
                   <Icon className="h-4 w-4" />
                   <span className="flex-1 text-left">{opt.label}</span>
-                  {active && <Check className="h-4 w-4" />}
-                </button>
+                  <AnimatePresence>
+                    {active && (
+                      <motion.div
+                        initial={{ scale: 0, rotate: -180 }}
+                        animate={{ scale: 1, rotate: 0 }}
+                        exit={{ scale: 0, rotate: 180 }}
+                        transition={{ type: "spring", stiffness: 500, damping: 20 }}
+                      >
+                        <Check className="h-5 w-5" strokeWidth={3} />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.button>
               );
             })}
           </motion.div>

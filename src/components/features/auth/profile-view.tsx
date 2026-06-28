@@ -375,7 +375,8 @@ export function ProfileView() {
                   return (
                     <motion.button
                       key={opt.value}
-                      whileTap={{ scale: 0.96 }}
+                      whileTap={{ scale: 0.94 }}
+                      whileHover={{ scale: 1.03 }}
                       onClick={() => {
                         setTheme(opt.value);
                         api.put("/auth/profile", { theme: opt.value }).catch(() => {});
@@ -383,14 +384,33 @@ export function ProfileView() {
                       }}
                       className={cn(
                         "relative flex flex-col items-center gap-1.5 py-2.5 rounded-xl border-2 transition-all",
-                        active ? "border-primary bg-primary/10" : "border-border/40 glass-soft"
+                        active
+                          ? "border-primary bg-primary/15 shadow-md shadow-primary/20"
+                          : "border-border/40 glass-soft"
                       )}
                     >
-                      <Icon className={cn("h-4 w-4", active ? "text-primary" : "text-muted-foreground")} />
+                      <motion.div
+                        animate={{ scale: active ? 1.1 : 1, rotate: active ? 0 : 0 }}
+                        transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                      >
+                        <Icon className={cn("h-5 w-5", active ? "text-primary" : "text-muted-foreground")} />
+                      </motion.div>
                       <span className={cn("text-[11px] font-medium", active ? "text-primary" : "text-muted-foreground")}>
                         {opt.label}
                       </span>
-                      {active && <Check className="absolute top-1 right-1 h-3 w-3 text-primary" />}
+                      <AnimatePresence>
+                        {active && (
+                          <motion.div
+                            initial={{ scale: 0, rotate: -180, opacity: 0 }}
+                            animate={{ scale: 1, rotate: 0, opacity: 1 }}
+                            exit={{ scale: 0, rotate: 180, opacity: 0 }}
+                            transition={{ type: "spring", stiffness: 500, damping: 20 }}
+                            className="absolute -top-1.5 -right-1.5 grid place-items-center h-5 w-5 rounded-full bg-primary shadow-md"
+                          >
+                            <Check className="h-3 w-3 text-primary-foreground" strokeWidth={3} />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </motion.button>
                   );
                 })}
