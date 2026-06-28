@@ -369,7 +369,7 @@ export function ProfileView() {
                   { value: "dark", label: "Dark", icon: Moon },
                   { value: "system", label: "System", icon: Monitor },
                 ].map((opt) => {
-                  const currentTheme = me.theme || "system";
+                  const currentTheme = stored?.theme || me.theme || "system";
                   const active = currentTheme === opt.value;
                   const Icon = opt.icon;
                   return (
@@ -381,6 +381,7 @@ export function ProfileView() {
                         setTheme(opt.value);
                         api.put("/auth/profile", { theme: opt.value }).catch(() => {});
                         if (me) setUser({ ...me, theme: opt.value });
+                        qc.invalidateQueries({ queryKey: ["auth", "me"] });
                       }}
                       className={cn(
                         "relative flex flex-col items-center gap-1.5 py-2.5 rounded-xl border-2 transition-all",

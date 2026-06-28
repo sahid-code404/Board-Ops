@@ -258,29 +258,19 @@ function ThemeSwitcher({
       </motion.button>
       <AnimatePresence>
         {open && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: -8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: -8 }}
-            transition={{ type: "spring", stiffness: 400, damping: 28 }}
-            className="absolute right-0 top-12 z-50 glass-strong rounded-2xl p-1.5 min-w-[150px] shadow-xl"
-          >
-            {options.map((opt, i) => {
+          <div className="absolute right-0 top-12 z-50 glass-strong rounded-2xl p-1.5 min-w-[150px] shadow-xl">
+            {options.map((opt) => {
               const active = currentTheme === opt.value;
               const Icon = opt.icon;
               return (
-                <motion.button
+                <button
                   key={opt.value}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  whileTap={{ scale: 0.95 }}
                   onClick={() => {
                     onThemeChange(opt.value);
                     setOpen(false);
                   }}
                   className={cn(
-                    "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all",
+                    "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
                     active
                       ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
                       : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
@@ -300,10 +290,10 @@ function ThemeSwitcher({
                       </motion.div>
                     )}
                   </AnimatePresence>
-                </motion.button>
+                </button>
               );
             })}
-          </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>
