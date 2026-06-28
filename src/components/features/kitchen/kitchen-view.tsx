@@ -65,6 +65,21 @@ function toDateString(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/** Returns a relative day label: "Today", "Yesterday", "Tomorrow", or the full day name. */
+function getRelativeDayLabel(d: Date): string {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(d);
+  target.setHours(0, 0, 0, 0);
+  const diffMs = target.getTime() - today.getTime();
+  const diffDays = Math.round(diffMs / (24 * 60 * 60 * 1000));
+
+  if (diffDays === 0) return "Today";
+  if (diffDays === -1) return "Yesterday";
+  if (diffDays === 1) return "Tomorrow";
+  return format(target, "EEEE"); // e.g., "Tuesday"
+}
+
 // ─────────────────────────────────────────────────────────────
 // Main view
 // ─────────────────────────────────────────────────────────────
@@ -107,9 +122,9 @@ export function KitchenView() {
 
   return (
     <StaggerGroup className="space-y-4 md:space-y-6">
-      {/* Date picker — capsule container with circular arrow buttons */}
+      {/* Date picker — wide capsule with centered text + circular arrows */}
       <StaggerItem>
-        <div className="flex items-center justify-center gap-3">
+        <div className="flex items-center justify-center gap-4">
           {/* Left arrow — circular */}
           <motion.button
             whileTap={{ scale: 0.9 }}
@@ -120,15 +135,15 @@ export function KitchenView() {
             <ChevronLeft className="h-5 w-5" />
           </motion.button>
 
-          {/* Date capsule — icon + two-line text */}
+          {/* Date capsule — wide, centered text with relative day label */}
           <button
             onClick={() => !isSameDay(date, new Date()) && setDate(new Date())}
-            className="flex items-center gap-2.5 glass-soft rounded-full px-5 py-2 min-w-[180px] text-left transition-all hover:ring-1 hover:ring-primary/30"
+            className="flex-1 max-w-[280px] flex items-center justify-center gap-2.5 glass-soft rounded-full px-6 py-2.5 transition-all hover:ring-1 hover:ring-primary/30"
           >
-            <CalendarDays className="h-5 w-5 text-primary shrink-0" />
-            <div className="leading-tight">
+            <CalendarDays className="h-4 w-4 text-primary shrink-0" />
+            <div className="leading-tight text-center">
               <p className="text-sm font-bold text-primary">
-                {isSameDay(date, new Date()) ? "Today" : format(date, "EEEE")}
+                {getRelativeDayLabel(date)}
               </p>
               <p className="text-[11px] text-muted-foreground">
                 {format(date, "EEE, d MMM")}
