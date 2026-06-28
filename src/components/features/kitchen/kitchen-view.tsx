@@ -21,6 +21,7 @@ import {
   Printer,
   RefreshCw,
   Utensils,
+  UtensilsCrossed,
   UserPlus,
   Users,
   CalendarDays,
@@ -36,6 +37,7 @@ import {
 } from "@/components/glass/page-transition";
 import { ShimmerSkeleton } from "@/components/glass/shimmer-skeleton";
 import { useAuthStore } from "@/stores/use-auth-store";
+import { useAppStore } from "@/stores/use-app-store";
 import { api } from "@/lib/api-client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -83,6 +85,7 @@ function toDateString(d: Date): string {
 
 export function KitchenView() {
   const user = useAuthStore((s) => s.user);
+  const setView = useAppStore((s) => s.setView);
   const [date, setDate] = useState<Date>(new Date());
 
   const dateStr = toDateString(date);
@@ -225,6 +228,10 @@ export function KitchenView() {
               {format(date, "d MMM yyyy")}. Set up meals in the Meals section to
               see kitchen counts here.
             </p>
+            <GlassButton className="mt-5" onClick={() => setView("meals")}>
+              <UtensilsCrossed className="h-4 w-4" />
+              Configure Meals
+            </GlassButton>
           </GlassCard>
         </StaggerItem>
       ) : (

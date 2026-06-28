@@ -15,6 +15,7 @@ export type ViewKey =
   | "notifications"
   | "users"
   | "settings"
+  | "personalization"
   | "profile"
   | "audit";
 

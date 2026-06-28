@@ -13,6 +13,7 @@ import {
   Bell,
   Users,
   Settings,
+  Palette,
   User,
   type LucideIcon,
 } from "lucide-react";
@@ -49,6 +50,7 @@ const ITEMS: PaletteItem[] = [
   { view: "notifications", label: "Notifications", icon: Bell, keywords: ["notification", "alert", "bell"], roles: ["ADMIN", "USER"], group: "Admin" },
   { view: "users", label: "User Management", icon: Users, keywords: ["user", "member", "account"], roles: ["ADMIN"], group: "Admin" },
   { view: "settings", label: "System Settings", icon: Settings, keywords: ["setting", "config", "feature", "flag"], roles: ["ADMIN"], group: "Admin" },
+  { view: "personalization", label: "Personalization", icon: Palette, keywords: ["theme", "color", "accent", "ui", "personalize", "appearance"], roles: ["ADMIN"], group: "Admin" },
   { view: "profile", label: "My Profile", icon: User, keywords: ["profile", "me", "account"], roles: ["ADMIN", "USER"], group: "Account" },
 ];
 

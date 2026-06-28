@@ -88,16 +88,16 @@ export function DashboardView() {
 
   const kpis = data.isAdmin
     ? [
-        { label: "Active Users", value: data.kpis.totalUsers, icon: Users, color: "primary", change: "+2 this week" },
-        { label: "Meals ON Today", value: data.kpis.todayOnCount, icon: Utensils, color: "success", change: `${data.kpis.todayOffCount} OFF` },
-        { label: "Revenue (Month)", value: data.kpis.totalRevenue, icon: Wallet, color: "info", change: "₹", prefix: "₹" },
-        { label: "Net Balance", value: data.kpis.netBalance, icon: TrendingUp, color: "warning", change: "vs expenses", prefix: "₹" },
+        { label: "Active Users", value: data.kpis.totalUsers, icon: Users, color: "primary", change: "+2 this week", route: "users" as const },
+        { label: "Meals ON Today", value: data.kpis.todayOnCount, icon: Utensils, color: "success", change: `${data.kpis.todayOffCount} OFF`, route: "kitchen" as const },
+        { label: "Revenue (Month)", value: data.kpis.totalRevenue, icon: Wallet, color: "info", change: "₹", prefix: "₹", route: "payments" as const },
+        { label: "Net Balance", value: data.kpis.netBalance, icon: TrendingUp, color: "warning", change: "vs expenses", prefix: "₹", route: "expenses" as const },
       ]
     : [
-        { label: "Meals ON Today", value: data.todayMeals.filter((m) => m.status === "ON").length, icon: Utensils, color: "success", change: `${data.todayMeals.filter((m) => m.status === "OFF").length} OFF` },
-        { label: "Pending Bills", value: data.kpis.pendingBills, icon: Receipt, color: "warning", change: "view billing" },
-        { label: "Notifications", value: data.notifications.length, icon: Bell, color: "primary", change: "unread" },
-        { label: "Meals This Week", value: data.trend.reduce((s, t) => s + t.on, 0), icon: Activity, color: "info", change: "7-day total" },
+        { label: "Meals ON Today", value: data.todayMeals.filter((m) => m.status === "ON").length, icon: Utensils, color: "success", change: `${data.todayMeals.filter((m) => m.status === "OFF").length} OFF`, route: "calendar" as const },
+        { label: "Pending Bills", value: data.kpis.pendingBills, icon: Receipt, color: "warning", change: "view billing", route: "billing" as const },
+        { label: "Notifications", value: data.notifications.length, icon: Bell, color: "primary", change: "unread", route: "notifications" as const },
+        { label: "Meals This Week", value: data.trend.reduce((s, t) => s + t.on, 0), icon: Activity, color: "info", change: "7-day total", route: "calendar" as const },
       ];
 
   return (
@@ -134,27 +134,35 @@ export function DashboardView() {
           {kpis.map((kpi) => {
             const Icon = kpi.icon;
             return (
-              <GlassCard key={kpi.label} className="p-4 md:p-5" glow={kpi.color as never}>
-                <div className="flex items-start justify-between mb-3">
-                  <div
-                    className={`grid place-items-center h-10 w-10 rounded-2xl bg-${kpi.color}/15`}
-                    style={{
-                      background: `color-mix(in oklch, var(--${kpi.color === "primary" ? "primary" : kpi.color === "success" ? "success" : kpi.color === "warning" ? "warning" : "info"}) 15%, transparent)`,
-                    }}
-                  >
-                    <Icon className="h-5 w-5 text-primary" />
+              <motion.button
+                key={kpi.label}
+                whileHover={{ scale: 1.02, y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setView(kpi.route)}
+                className="text-left w-full"
+              >
+                <GlassCard className="p-4 md:p-5 cursor-pointer" glow={kpi.color as never}>
+                  <div className="flex items-start justify-between mb-3">
+                    <div
+                      className={`grid place-items-center h-10 w-10 rounded-2xl bg-${kpi.color}/15`}
+                      style={{
+                        background: `color-mix(in oklch, var(--${kpi.color === "primary" ? "primary" : kpi.color === "success" ? "success" : kpi.color === "warning" ? "warning" : "info"}) 15%, transparent)`,
+                      }}
+                    >
+                      <Icon className="h-5 w-5 text-primary" />
+                    </div>
+                    <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
                   </div>
-                  <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <p className="text-xs text-muted-foreground">{kpi.label}</p>
-                <div className="text-2xl md:text-3xl font-bold tracking-tight">
-                  <AnimatedCounter
-                    value={kpi.value}
-                    prefix={kpi.prefix || ""}
-                  />
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-1">{kpi.change}</p>
-              </GlassCard>
+                  <p className="text-xs text-muted-foreground">{kpi.label}</p>
+                  <div className="text-2xl md:text-3xl font-bold tracking-tight">
+                    <AnimatedCounter
+                      value={kpi.value}
+                      prefix={kpi.prefix || ""}
+                    />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1">{kpi.change}</p>
+                </GlassCard>
+              </motion.button>
             );
           })}
         </div>
@@ -177,12 +185,15 @@ export function DashboardView() {
               const isOn = meal.status === "ON" || meal.status === "LOCKED";
               const isLocked = meal.locked || meal.status === "LOCKED";
               return (
-                <motion.div
+                <motion.button
                   key={meal.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.05 }}
-                  className="glass-soft rounded-3xl p-4 relative overflow-hidden"
+                  whileHover={{ scale: 1.03, y: -2 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => setView("calendar")}
+                  className="glass-soft rounded-3xl p-4 relative overflow-hidden text-left w-full"
                   style={{
                     borderColor: isOn ? `${meal.color}60` : undefined,
                     background: isOn
@@ -210,7 +221,7 @@ export function DashboardView() {
                   <p className="text-[10px] text-muted-foreground mt-0.5">
                     {meal.startTime} – {meal.endTime}
                   </p>
-                </motion.div>
+                </motion.button>
               );
             })}
           </div>
@@ -350,10 +361,11 @@ export function DashboardView() {
                 <p className="text-sm text-muted-foreground text-center py-8">No notifications</p>
               ) : (
                 data.notifications.map((n) => (
-                  <motion.div
+                  <motion.button
                     key={n.id}
                     whileHover={{ x: 4 }}
-                    className="glass-soft rounded-2xl p-3 flex items-start gap-3"
+                    onClick={() => n.route && setView(n.route as never)}
+                    className="glass-soft rounded-2xl p-3 flex items-start gap-3 w-full text-left"
                   >
                     <div
                       className={`grid place-items-center h-8 w-8 rounded-xl shrink-0 ${
@@ -372,7 +384,8 @@ export function DashboardView() {
                       <p className="text-sm font-medium truncate">{n.title}</p>
                       <p className="text-xs text-muted-foreground line-clamp-2">{n.description}</p>
                     </div>
-                  </motion.div>
+                    {n.route && <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />}
+                  </motion.button>
                 ))
               )}
             </div>

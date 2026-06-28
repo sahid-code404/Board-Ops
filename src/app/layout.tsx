@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/providers/theme-provider";
 import { QueryProvider } from "@/providers/query-provider";
+import { ThemeConfigProvider } from "@/providers/theme-config-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -62,9 +63,11 @@ export default function RootLayout({
           disableTransitionOnChange={false}
         >
           <QueryProvider>
-            {children}
-            <Toaster />
-            <SonnerToaster position="top-center" />
+            <ThemeConfigProvider>
+              {children}
+              <Toaster />
+              <SonnerToaster position="top-center" />
+            </ThemeConfigProvider>
           </QueryProvider>
         </ThemeProvider>
       </body>

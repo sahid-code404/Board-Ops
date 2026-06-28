@@ -23,6 +23,7 @@ import {
 import { api } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/use-auth-store";
+import { useAppStore } from "@/stores/use-app-store";
 
 import { GlassCard } from "@/components/glass/glass-card";
 import { GlassButton } from "@/components/glass/glass-button";
@@ -177,6 +178,7 @@ function formatDate(iso: string | null) {
 
 export function BillingView() {
   const user = useAuthStore((s) => s.user);
+  const setView = useAppStore((s) => s.setView);
   const isAdmin =
     user?.role === "ADMIN";
 
@@ -390,6 +392,17 @@ export function BillingView() {
                     : "You have no bills matching the current filters."}
                 </p>
               </div>
+              {isAdmin && (
+                <GlassButton className="mt-2" onClick={() => setGenerateOpen(true)}>
+                  <Wallet className="h-4 w-4" />
+                  Generate Bills
+                </GlassButton>
+              )}
+              {!isAdmin && (
+                <GlassButton variant="ghost" className="mt-2" onClick={() => setView("dashboard")}>
+                  Back to Dashboard
+                </GlassButton>
+              )}
             </div>
           </GlassCard>
         ) : (

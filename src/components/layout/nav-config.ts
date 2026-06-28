@@ -11,6 +11,7 @@ import {
   Bell,
   Users,
   Settings,
+  Palette,
   type LucideIcon,
 } from "lucide-react";
 import type { ViewKey } from "@/stores/use-app-store";
@@ -39,6 +40,7 @@ export const NAV_ITEMS: NavItem[] = [
   { view: "users", label: "Users", icon: Users, roles: ["ADMIN"], rail: true },
   { view: "notifications", label: "Notifications", icon: Bell, roles: ["ADMIN", "USER"], rail: true },
   { view: "settings", label: "Settings", icon: Settings, roles: ["ADMIN"], rail: true },
+  { view: "personalization", label: "Personalization", icon: Palette, roles: ["ADMIN"], rail: true },
 ];
 
 export const NAV_LABELS: Record<ViewKey, string> = {
@@ -53,6 +55,7 @@ export const NAV_LABELS: Record<ViewKey, string> = {
   notifications: "Notifications",
   users: "User Management",
   settings: "System Settings",
+  personalization: "Personalization",
   profile: "My Profile",
   audit: "Audit Log",
 };
