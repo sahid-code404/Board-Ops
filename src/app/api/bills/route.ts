@@ -25,7 +25,7 @@ export async function GET(req: Request) {
       where,
       orderBy: { createdAt: "desc" },
       take: limit,
-      include: { user: { select: { name: true, email: true, room: true } } },
+      include: { user: { select: { name: true, email: true, room: true, avatarUrl: true } } },
     });
     return ok(bills);
   } catch (e) {
@@ -137,6 +137,35 @@ export async function POST(req: Request) {
       newValue: { generated, month, year },
     });
     return ok({ generated, month, year });
+  } catch (e) {
+    return handleApiError(e);
+  }
+}
+
+/** DELETE /api/bills — delete all bills (optionally filtered by month/year) */
+export async function DELETE(req: Request) {
+  try {
+    const user = await requireRole("ADMIN");
+    const url = new URL(req.url);
+    const month = url.searchParams.get("month");
+    const year = url.searchParams.get("year");
+
+    const where: Record<string, unknown> = {};
+    if (month !== null && year) {
+      where.periodMonth = Number(month);
+      where.periodYear = Number(year);
+    }
+
+    const result = await db.bill.deleteMany({ where });
+
+    await logAudit({
+      actorId: user.id,
+      action: "BILLS_DELETED_ALL",
+      entity: "Bill",
+      newValue: { deleted: result.count, month, year },
+    });
+
+    return ok({ deleted: result.count });
   } catch (e) {
     return handleApiError(e);
   }

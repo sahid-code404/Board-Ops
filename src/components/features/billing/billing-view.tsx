@@ -20,6 +20,8 @@ import {
   IndianRupee,
   ChevronLeft,
   ChevronRight,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 
 import { api } from "@/lib/api-client";
@@ -38,6 +40,7 @@ import {
 import { ShimmerSkeleton } from "@/components/glass/shimmer-skeleton";
 
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   Dialog,
   DialogContent,
@@ -98,7 +101,7 @@ type Bill = {
   dueDate: string | null;
   generatedAt: string | null;
   createdAt: string;
-  user: { name: string; email: string; room: string | null };
+  user: { name: string; email: string; room: string | null; avatarUrl: string | null };
 };
 
 type ApiResponse<T> = { success: boolean; data: T; error?: string };
@@ -107,6 +110,24 @@ const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
+
+const AVATAR_GRADIENTS = [
+  "from-violet-500 to-fuchsia-500",
+  "from-emerald-500 to-teal-500",
+  "from-amber-500 to-orange-500",
+  "from-rose-500 to-pink-500",
+  "from-cyan-500 to-blue-500",
+  "from-indigo-500 to-purple-500",
+];
+
+function gradientFor(name: string) {
+  const idx = name.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) % AVATAR_GRADIENTS.length;
+  return AVATAR_GRADIENTS[idx];
+}
+
+function initials(name: string) {
+  return name.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("");
+}
 
 // ─────────────────────────────────────────────────────────────
 // Status badge helpers
@@ -231,6 +252,37 @@ export function BillingView() {
     onError: (e: Error) => toast.error(e.message || "Failed to void bill"),
   });
 
+  const [deleteTarget, setDeleteTarget] = useState<Bill | null>(null);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      // Use PUT to set status to VOID (existing delete endpoint sets VOID)
+      await api.delete(`/bills/${id}`);
+    },
+    onSuccess: () => {
+      toast.success("Bill deleted");
+      setDeleteTarget(null);
+      qc.invalidateQueries({ queryKey: ["bills"] });
+    },
+    onError: (e: Error) => toast.error(e.message || "Failed to delete bill"),
+  });
+
+  const deleteAllMutation = useMutation({
+    mutationFn: async () => {
+      const r = await api.delete<ApiResponse<{ deleted: number }>>("/bills", {
+        params: { month: selectedMonth, year: selectedYear },
+      });
+      return r.data;
+    },
+    onSuccess: (data) => {
+      toast.success(`${data.deleted} bills deleted`);
+      setDeleteAllOpen(false);
+      qc.invalidateQueries({ queryKey: ["bills"] });
+    },
+    onError: (e: Error) => toast.error(e.message || "Failed to delete bills"),
+  });
+
   // ── Derived KPIs ──
   const kpis = useMemo(() => {
     const active = bills.filter((b) => b.status !== "VOID");
@@ -325,6 +377,15 @@ export function BillingView() {
             <p className="text-sm text-muted-foreground hidden sm:block">
               Generate and track resident bills
             </p>
+            <GlassButton
+              variant="danger"
+              onClick={() => setDeleteAllOpen(true)}
+              className="shrink-0"
+              disabled={bills.length === 0}
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete All
+            </GlassButton>
             <GlassButton
               onClick={() => setGenerateOpen(true)}
               className="shrink-0"
@@ -450,6 +511,7 @@ export function BillingView() {
                       isAdmin={isAdmin}
                       onView={() => setSelectedBill(bill)}
                       onVoid={() => setVoidTarget(bill)}
+                      onDelete={() => setDeleteTarget(bill)}
                     />
                   </StaggerItem>
                 ))}
@@ -477,11 +539,19 @@ export function BillingView() {
                   {filtered.map((bill) => (
                     <TableRow key={bill.id} className="border-border/40">
                       <TableCell className="pl-4">
-                        <div className="flex flex-col">
-                          <span className="font-medium">{bill.user.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {bill.user.room ? `Room ${bill.user.room}` : bill.user.email}
-                          </span>
+                        <div className="flex items-center gap-2.5">
+                          <Avatar className="h-8 w-8 rounded-xl shrink-0">
+                            {bill.user.avatarUrl && <AvatarImage src={bill.user.avatarUrl} alt={bill.user.name} />}
+                            <AvatarFallback className={cn("rounded-xl bg-gradient-to-br text-white font-semibold text-[10px]", gradientFor(bill.user.name))}>
+                              {initials(bill.user.name) || "U"}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{bill.user.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {bill.user.room ? `Room ${bill.user.room}` : bill.user.email}
+                            </span>
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell className="text-sm">
@@ -527,6 +597,17 @@ export function BillingView() {
                               className="text-destructive hover:text-destructive"
                             >
                               <Ban className="h-4 w-4" />
+                            </GlassButton>
+                          )}
+                          {isAdmin && (
+                            <GlassButton
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setDeleteTarget(bill)}
+                              aria-label="Delete bill"
+                              className="text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
                             </GlassButton>
                           )}
                         </div>
@@ -665,6 +746,72 @@ export function BillingView() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Delete single bill confirm */}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
+      >
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Delete this bill?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget && (
+                <>
+                  This will permanently delete the bill for{" "}
+                  <span className="font-medium text-foreground">
+                    {deleteTarget.user.name}
+                  </span>{" "}
+                  ({formatMonthYear(deleteTarget.periodMonth, deleteTarget.periodYear)}).
+                  This action cannot be undone.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-2xl">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-2xl bg-destructive text-white hover:bg-destructive/90"
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "Deleting…" : "Delete Bill"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete all bills confirm */}
+      <AlertDialog
+        open={deleteAllOpen}
+        onOpenChange={setDeleteAllOpen}
+      >
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Delete all bills for {MONTHS[selectedMonth]} {selectedYear}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete ALL {bills.length} bills for{" "}
+              {MONTHS[selectedMonth]} {selectedYear}. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-2xl">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-2xl bg-destructive text-white hover:bg-destructive/90"
+              onClick={() => deleteAllMutation.mutate()}
+              disabled={deleteAllMutation.isPending}
+            >
+              {deleteAllMutation.isPending ? "Deleting…" : `Delete All (${bills.length})`}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </StaggerGroup>
   );
 }
@@ -722,11 +869,13 @@ function BillCard({
   isAdmin,
   onView,
   onVoid,
+  onDelete,
 }: {
   bill: Bill;
   isAdmin: boolean;
   onView: () => void;
   onVoid: () => void;
+  onDelete: () => void;
 }) {
   return (
     <motion.div
@@ -735,15 +884,23 @@ function BillCard({
       onClick={onView}
     >
       <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="min-w-0 flex-1">
-          <p className="font-semibold truncate">{bill.user.name}</p>
-          <p className="text-xs text-muted-foreground truncate">
-            {bill.user.room ? `Room ${bill.user.room}` : bill.user.email}
-          </p>
-          <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-            <Calendar className="h-3 w-3" />
-            {formatMonthYear(bill.periodMonth, bill.periodYear)}
-          </p>
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <Avatar className="h-10 w-10 rounded-2xl shrink-0">
+            {bill.user.avatarUrl && <AvatarImage src={bill.user.avatarUrl} alt={bill.user.name} />}
+            <AvatarFallback className={cn("rounded-2xl bg-gradient-to-br text-white font-semibold text-xs", gradientFor(bill.user.name))}>
+              {initials(bill.user.name) || "U"}
+            </AvatarFallback>
+          </Avatar>
+          <div className="min-w-0">
+            <p className="font-semibold truncate">{bill.user.name}</p>
+            <p className="text-xs text-muted-foreground truncate">
+              {bill.user.room ? `Room ${bill.user.room}` : bill.user.email}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+              <Calendar className="h-3 w-3" />
+              {formatMonthYear(bill.periodMonth, bill.periodYear)}
+            </p>
+          </div>
         </div>
         <BillStatusBadge status={bill.status} />
       </div>
@@ -784,6 +941,16 @@ function BillCard({
               onClick={(e) => { e.stopPropagation(); onVoid(); }}
             >
               <Ban className="h-3.5 w-3.5" />
+            </GlassButton>
+          )}
+          {isAdmin && (
+            <GlassButton
+              variant="ghost"
+              size="sm"
+              className="text-destructive"
+              onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
             </GlassButton>
           )}
         </div>

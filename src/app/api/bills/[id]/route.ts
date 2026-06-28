@@ -34,10 +34,11 @@ export async function DELETE(
     const existing = await db.bill.findUnique({ where: { id } });
     if (!existing) return err("Bill not found", 404);
 
-    await db.bill.update({ where: { id }, data: { status: "VOID" } });
+    // Hard delete the bill
+    await db.bill.delete({ where: { id } });
     await logAudit({
       actorId: user.id,
-      action: "VOID",
+      action: "DELETE",
       entity: "Bill",
       entityId: id,
       oldValue: existing,
