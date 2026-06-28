@@ -1,0 +1,117 @@
+import { db } from "@/lib/db";
+import { requireAuth } from "@/lib/session";
+import { ok, err, handleApiError } from "@/lib/api-response";
+import { isLocked } from "@/lib/meal-engine";
+import { logAudit } from "@/lib/audit";
+import { createNotification } from "@/lib/notify";
+import { z } from "zod";
+
+const toggleSchema = z.object({
+  entryId: z.string(),
+  status: z.enum(["ON", "OFF"]),
+});
+
+/**
+ * PATCH /api/meals/toggle
+ * Toggle a meal entry's status. Backend validates cutoff.
+ */
+export async function PATCH(req: Request) {
+  try {
+    const user = await requireAuth();
+    const body = await req.json();
+    const { entryId, status } = toggleSchema.parse(body);
+
+    const entry = await db.mealEntry.findUnique({
+      where: { id: entryId },
+      include: { meal: true },
+    });
+    if (!entry) return err("Meal entry not found", 404);
+    if (entry.userId !== user.id) return err("This meal entry does not belong to you", 403);
+
+    if (entry.locked || isLocked(entry.editableUntil)) {
+      if (entry.status === "LOCKED") return err("This meal is locked and cannot be changed", 422);
+      // lock it now
+      await db.mealEntry.update({
+        where: { id: entryId },
+        data: { locked: true, status: entry.status === "ON" ? "LOCKED" : entry.status },
+      });
+      return err("This meal's cutoff has passed. It is now locked.", 422);
+    }
+
+    const oldStatus = entry.status;
+    if (oldStatus === status) return ok(entry);
+
+    const updated = await db.mealEntry.update({
+      where: { id: entryId },
+      data: { status, updatedBy: user.id },
+    });
+
+    await db.mealHistory.create({
+      data: {
+        mealEntryId: entry.id,
+        mealId: entry.mealId,
+        oldStatus,
+        newStatus: status,
+        changedBy: user.id,
+        triggerSource: "MANUAL",
+      },
+    });
+
+    await logAudit({
+      actorId: user.id,
+      action: "MEAL_TOGGLE",
+      entity: "MealEntry",
+      entityId: entry.id,
+      oldValue: { status: oldStatus },
+      newValue: { status },
+    });
+
+    return ok(updated);
+  } catch (e) {
+    return handleApiError(e);
+  }
+}
+
+const bulkSchema = z.object({
+  entryIds: z.array(z.string()),
+  status: z.enum(["ON", "OFF"]),
+});
+
+export async function POST(req: Request) {
+  try {
+    const user = await requireAuth();
+    const body = await req.json();
+    const { entryIds, status } = bulkSchema.parse(body);
+
+    const results: { id: string; success: boolean; error?: string }[] = [];
+    for (const id of entryIds) {
+      const entry = await db.mealEntry.findUnique({ where: { id } });
+      if (!entry || entry.userId !== user.id) {
+        results.push({ id, success: false, error: "Not found" });
+        continue;
+      }
+      if (entry.locked || isLocked(entry.editableUntil)) {
+        results.push({ id, success: false, error: "Locked" });
+        continue;
+      }
+      await db.mealEntry.update({
+        where: { id },
+        data: { status, updatedBy: user.id },
+      });
+      await db.mealHistory.create({
+        data: {
+          mealEntryId: entry.id,
+          mealId: entry.mealId,
+          oldStatus: entry.status,
+          newStatus: status,
+          changedBy: user.id,
+          triggerSource: "PRESET",
+        },
+      });
+      results.push({ id, success: true });
+    }
+    return ok({ results });
+  } catch (e) {
+    return handleApiError(e);
+  }
+}
