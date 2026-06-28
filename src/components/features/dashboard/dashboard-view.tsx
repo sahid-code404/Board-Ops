@@ -144,54 +144,6 @@ export function DashboardView() {
         </div>
       </StaggerItem>
 
-      {/* Today's meals — tap any card to open meals (admin) */}
-      <StaggerItem>
-        <GlassCard className="p-4 md:p-6" hover={false}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold">Today's Meals</h3>
-            {data.isAdmin && (
-              <GlassButton variant="ghost" size="sm" onClick={() => setView("meals")}>
-                View all
-                <ArrowUpRight className="h-3.5 w-3.5" />
-              </GlassButton>
-            )}
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            {data.todayMeals.map((meal, i) => {
-              const isOn = meal.status === "ON" || meal.status === "LOCKED";
-              const isLocked = meal.locked || meal.status === "LOCKED";
-              return (
-                <motion.button
-                  key={meal.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  whileHover={{ scale: 1.03, y: -2 }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => data.isAdmin && setView("meals")}
-                  className="glass-soft rounded-2xl p-3 relative overflow-hidden text-left w-full"
-                  style={{
-                    opacity: isOn ? 1 : 0.5,
-                    background: isOn
-                      ? `linear-gradient(135deg, ${meal.color}30, transparent)`
-                      : undefined,
-                  }}
-                >
-                  <span className="text-2xl block mb-1.5">{meal.icon}</span>
-                  <p className="font-medium text-sm leading-tight">{meal.displayName}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                    {meal.startTime} – {meal.endTime}
-                  </p>
-                  {isLocked && (
-                    <span className="absolute top-2 right-2 text-[10px] opacity-60">🔒</span>
-                  )}
-                </motion.button>
-              );
-            })}
-          </div>
-        </GlassCard>
-      </StaggerItem>
-
       {/* Recent Activity (admin only) */}
       {data.isAdmin && data.recentActivity.length > 0 && (
         <StaggerItem>
