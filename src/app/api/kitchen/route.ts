@@ -47,7 +47,12 @@ export async function GET(req: Request) {
       };
     });
 
-    return ok({ date: target.toISOString(), counts });
+    // Count active residents (for percentage calculation — excludes guests)
+    const activeUsers = await db.user.count({
+      where: { status: "ACTIVE", role: "USER" },
+    });
+
+    return ok({ date: target.toISOString(), counts, activeUsers });
   } catch (e) {
     return handleApiError(e);
   }

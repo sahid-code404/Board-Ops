@@ -5,16 +5,6 @@ import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { addDays, format, isSameDay } from "date-fns";
 import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import {
   ChevronLeft,
   ChevronRight,
   Printer,
@@ -62,6 +52,7 @@ type MealCount = {
 type KitchenResponse = {
   date: string;
   counts: MealCount[];
+  activeUsers: number;
   access?: boolean;
 };
 
@@ -102,6 +93,7 @@ export function KitchenView() {
   });
 
   const counts = resp?.data?.counts ?? [];
+  const activeUsers = resp?.data?.activeUsers ?? 0;
 
   const totals = useMemo(() => {
     return {
@@ -226,6 +218,59 @@ export function KitchenView() {
         </StaggerItem>
       ) : (
         <>
+          {/* Percentage of active users per meal (excludes guests) */}
+          <StaggerItem>
+            <GlassCard className="p-4 md:p-5" hover={false}>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="font-semibold text-sm">Resident Participation</h3>
+                  <p className="text-[11px] text-muted-foreground">
+                    % of {activeUsers} active residents opted in per meal
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                {counts.map((m) => {
+                  const pct = activeUsers > 0 ? Math.round((m.on / activeUsers) * 100) : 0;
+                  return (
+                    <div key={m.id} className="text-center">
+                      <div className="relative h-16 flex items-end justify-center mb-1.5">
+                        <svg className="absolute inset-0 -rotate-90" viewBox="0 0 64 64">
+                          <circle
+                            cx="32"
+                            cy="32"
+                            r="28"
+                            fill="none"
+                            stroke="var(--muted)"
+                            strokeWidth="5"
+                          />
+                          <circle
+                            cx="32"
+                            cy="32"
+                            r="28"
+                            fill="none"
+                            stroke={m.color}
+                            strokeWidth="5"
+                            strokeLinecap="round"
+                            strokeDasharray={`${(pct / 100) * 175.9} 175.9`}
+                            style={{ transition: "stroke-dasharray 0.8s ease" }}
+                          />
+                        </svg>
+                        <div className="relative z-10">
+                          <span className="text-lg font-bold tabular-nums">{pct}%</span>
+                        </div>
+                      </div>
+                      <p className="text-[11px] font-medium truncate">{m.displayName}</p>
+                      <p className="text-[10px] text-muted-foreground tabular-nums">
+                        {m.on}/{activeUsers}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </GlassCard>
+          </StaggerItem>
+
           {/* Per-meal cards */}
           <StaggerItem>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
@@ -233,85 +278,6 @@ export function KitchenView() {
                 <MealCard key={m.id} meal={m} />
               ))}
             </div>
-          </StaggerItem>
-
-          {/* Bar chart */}
-          <StaggerItem>
-            <GlassCard className="p-5 md:p-6" hover={false}>
-              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                <div>
-                  <h3 className="font-semibold text-lg">Counts Comparison</h3>
-                  <p className="text-xs text-muted-foreground">
-                    ON vs OFF vs Guests per meal
-                  </p>
-                </div>
-                <div className="flex items-center gap-3 text-xs">
-                  <Legend2 color="var(--success)" label="ON" />
-                  <Legend2 color="var(--muted-foreground)" label="OFF" />
-                  <Legend2 color="var(--primary)" label="Guests" />
-                </div>
-              </div>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart
-                  data={counts}
-                  margin={{ top: 8, right: 8, left: -16, bottom: 8 }}
-                >
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="var(--border)"
-                    vertical={false}
-                  />
-                  <XAxis
-                    dataKey="displayName"
-                    stroke="var(--muted-foreground)"
-                    fontSize={11}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    stroke="var(--muted-foreground)"
-                    fontSize={11}
-                    allowDecimals={false}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <Tooltip
-                    cursor={{ fill: "var(--muted)", opacity: 0.3 }}
-                    contentStyle={{
-                      background: "var(--popover)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 16,
-                      color: "var(--foreground)",
-                      fontSize: 12,
-                    }}
-                  />
-                  <Bar
-                    dataKey="on"
-                    name="ON"
-                    fill="var(--success)"
-                    radius={[6, 6, 0, 0]}
-                    animationDuration={900}
-                    maxBarSize={48}
-                  />
-                  <Bar
-                    dataKey="off"
-                    name="OFF"
-                    fill="var(--muted-foreground)"
-                    radius={[6, 6, 0, 0]}
-                    animationDuration={1100}
-                    maxBarSize={48}
-                  />
-                  <Bar
-                    dataKey="guests"
-                    name="Guests"
-                    fill="var(--primary)"
-                    radius={[6, 6, 0, 0]}
-                    animationDuration={1300}
-                    maxBarSize={48}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </GlassCard>
           </StaggerItem>
         </>
       )}
@@ -444,18 +410,6 @@ function MealCard({ meal }: { meal: MealCount }) {
   );
 }
 
-function Legend2({ color, label }: { color: string; label: string }) {
-  return (
-    <span className="flex items-center gap-1.5">
-      <span
-        className="h-2.5 w-2.5 rounded-full"
-        style={{ background: color }}
-      />
-      <span className="text-muted-foreground">{label}</span>
-    </span>
-  );
-}
-
 // ─────────────────────────────────────────────────────────────
 // States
 // ─────────────────────────────────────────────────────────────
@@ -506,12 +460,12 @@ function KitchenSkeleton() {
         <ShimmerSkeleton className="h-28 md:h-32" />
         <ShimmerSkeleton className="h-28 md:h-32" />
       </div>
+      <ShimmerSkeleton className="h-32" />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
         {Array.from({ length: 6 }).map((_, i) => (
           <ShimmerSkeleton key={i} className="h-44" />
         ))}
       </div>
-      <ShimmerSkeleton className="h-72" />
     </div>
   );
 }
