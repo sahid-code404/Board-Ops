@@ -12,6 +12,9 @@ import {
   Tablet,
   Type,
   CornerDownLeft,
+  Layers,
+  Eye,
+  Droplets,
 } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { GlassCard } from "@/components/glass/glass-card";
@@ -118,6 +121,9 @@ export function PersonalizationView() {
       radius: "1.25rem",
       mode: "system",
       preset: "violet",
+      glassMode: "on",
+      blurIntensity: "normal",
+      transparency: "medium",
     };
     setLocal(defaults);
     previewTheme(defaults);
@@ -128,6 +134,23 @@ export function PersonalizationView() {
     } catch (e: unknown) {
       toast.error("Failed to reset theme");
     }
+  };
+
+  // Glass / transparency / blur controls
+  const setGlassMode = (mode: "on" | "off") => {
+    const updated = { ...local, glassMode: mode };
+    setLocal(updated);
+    previewTheme(updated);
+  };
+  const setBlurIntensity = (level: "light" | "normal" | "heavy") => {
+    const updated = { ...local, blurIntensity: level };
+    setLocal(updated);
+    previewTheme(updated);
+  };
+  const setTransparency = (level: "low" | "medium" | "high") => {
+    const updated = { ...local, transparency: level };
+    setLocal(updated);
+    previewTheme(updated);
   };
 
   if (loading) {
@@ -278,6 +301,121 @@ export function PersonalizationView() {
                     </motion.button>
                   );
                 })}
+              </div>
+            </GlassCard>
+          </StaggerItem>
+
+          {/* Glass Effects — transparency + blur toggle */}
+          <StaggerItem>
+            <GlassCard className="p-5" hover={false}>
+              <div className="flex items-center gap-2 mb-4">
+                <Layers className="h-5 w-5 text-primary" />
+                <h3 className="font-semibold">Glass Effects</h3>
+              </div>
+
+              {/* Glass toggle on/off */}
+              <div className="space-y-2 mb-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Transparency & Blur</p>
+                      <p className="text-[11px] text-muted-foreground">Frosted-glass backdrop on all panels</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 glass-soft rounded-2xl p-1">
+                    <button
+                      onClick={() => setGlassMode("on")}
+                      className={cn(
+                        "px-3 py-1.5 rounded-xl text-xs font-medium transition-all",
+                        local.glassMode === "on"
+                          ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      On
+                    </button>
+                    <button
+                      onClick={() => setGlassMode("off")}
+                      className={cn(
+                        "px-3 py-1.5 rounded-xl text-xs font-medium transition-all",
+                        local.glassMode === "off"
+                          ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      Off
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Blur intensity */}
+              <div className="space-y-2 mb-5">
+                <div className="flex items-center gap-2">
+                  <Droplets className="h-4 w-4 text-muted-foreground" />
+                  <p className="text-sm font-medium">Blur Intensity</p>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { value: "light", label: "Light" },
+                    { value: "normal", label: "Normal" },
+                    { value: "heavy", label: "Heavy" },
+                  ] as const).map((opt) => {
+                    const active = local.blurIntensity === opt.value;
+                    return (
+                      <motion.button
+                        key={opt.value}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setBlurIntensity(opt.value)}
+                        disabled={local.glassMode === "off"}
+                        className={cn(
+                          "py-2.5 rounded-2xl text-xs font-medium transition-all",
+                          active
+                            ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                            : "glass-soft text-muted-foreground hover:text-foreground",
+                          local.glassMode === "off" && "opacity-40 cursor-not-allowed"
+                        )}
+                      >
+                        {opt.label}
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Transparency level */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Eye className="h-4 w-4 text-muted-foreground" />
+                  <p className="text-sm font-medium">Transparency</p>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { value: "low", label: "Low" },
+                    { value: "medium", label: "Medium" },
+                    { value: "high", label: "High" },
+                  ] as const).map((opt) => {
+                    const active = local.transparency === opt.value;
+                    return (
+                      <motion.button
+                        key={opt.value}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setTransparency(opt.value)}
+                        disabled={local.glassMode === "off"}
+                        className={cn(
+                          "py-2.5 rounded-2xl text-xs font-medium transition-all",
+                          active
+                            ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                            : "glass-soft text-muted-foreground hover:text-foreground",
+                          local.glassMode === "off" && "opacity-40 cursor-not-allowed"
+                        )}
+                      >
+                        {opt.label}
+                      </motion.button>
+                    );
+                  })}
+                </div>
               </div>
             </GlassCard>
           </StaggerItem>

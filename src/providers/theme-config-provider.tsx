@@ -10,6 +10,9 @@ type ThemeConfig = {
   radius: string;
   mode: "system" | "light" | "dark";
   preset: string;
+  glassMode: "on" | "off";
+  blurIntensity: "light" | "normal" | "heavy";
+  transparency: "low" | "medium" | "high";
 };
 
 const DEFAULT_THEME: ThemeConfig = {
@@ -19,6 +22,9 @@ const DEFAULT_THEME: ThemeConfig = {
   radius: "1.25rem",
   mode: "system",
   preset: "violet",
+  glassMode: "on",
+  blurIntensity: "normal",
+  transparency: "medium",
 };
 
 type ThemeContextValue = {
@@ -67,6 +73,10 @@ export function ThemeConfigProvider({ children }: { children: ReactNode }) {
     root.style.setProperty("--sidebar-ring", hexToOklch(config.primary));
     root.style.setProperty("--radius", config.radius);
     root.style.setProperty("--chart-1", hexToOklch(config.primary));
+    // Glass / blur / transparency data attributes — drive the CSS overrides in globals.css
+    root.setAttribute("data-glass-mode", config.glassMode || "on");
+    root.setAttribute("data-blur-intensity", config.blurIntensity || "normal");
+    root.setAttribute("data-transparency", config.transparency || "medium");
   }, []);
 
   const refresh = useCallback(async () => {

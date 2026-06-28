@@ -11,6 +11,9 @@ const DEFAULT_THEME = {
   radius: "1.25rem",
   mode: "system",
   preset: "violet",
+  glassMode: "on",
+  blurIntensity: "normal",
+  transparency: "medium",
 };
 
 /**
@@ -41,6 +44,9 @@ const themeSchema = z.object({
   radius: z.string().min(4).max(20),
   mode: z.enum(["system", "light", "dark"]),
   preset: z.string(),
+  glassMode: z.enum(["on", "off"]).default("on"),
+  blurIntensity: z.enum(["light", "normal", "heavy"]).default("normal"),
+  transparency: z.enum(["low", "medium", "high"]).default("medium"),
 });
 
 /**
