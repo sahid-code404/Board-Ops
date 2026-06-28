@@ -27,6 +27,8 @@ import {
   KeyRound,
   Eye,
   EyeOff,
+  Clock,
+  AlertTriangle,
 } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { GlassCard } from "@/components/glass/glass-card";
@@ -64,6 +66,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuthStore, type Role } from "@/stores/use-auth-store";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { formatDeletionCountdown } from "@/lib/user-cleanup";
 
 type UserStatus = "PENDING" | "APPROVED" | "ACTIVE" | "INACTIVE" | "SUSPENDED" | "ARCHIVED";
 
@@ -80,6 +83,8 @@ type ManagedUser = {
   avatarUrl?: string | null;
   createdAt: string;
   lastLoginAt?: string | null;
+  deletedAt?: string | null;
+  deletionReason?: string | null;
 };
 
 type Action =
@@ -90,7 +95,9 @@ type Action =
   | "ARCHIVE"
   | "RESTORE"
   | "ASSIGN_ROLE"
-  | "EDIT_USER";
+  | "EDIT_USER"
+  | "DELETE_USER"
+  | "RESTORE_DELETED";
 
 const STATUS_META: Record<UserStatus, { label: string; className: string }> = {
   PENDING: { label: "Pending", className: "bg-warning/15 text-warning" },
@@ -106,12 +113,13 @@ const ROLE_META: Record<Role, { label: string; className: string }> = {
   USER: { label: "Resident", className: "bg-muted text-muted-foreground" },
 };
 
-const STATUS_FILTERS: { key: UserStatus | "ALL"; label: string }[] = [
+const STATUS_FILTERS: { key: UserStatus | "ALL" | "DELETED"; label: string }[] = [
   { key: "ALL", label: "All" },
   { key: "PENDING", label: "Pending" },
   { key: "ACTIVE", label: "Active" },
   { key: "SUSPENDED", label: "Suspended" },
   { key: "ARCHIVED", label: "Archived" },
+  { key: "DELETED", label: "Deletion Queue" },
 ];
 
 const ACTIONS_NEED_REASON: Action[] = ["SUSPEND", "DEACTIVATE", "ARCHIVE"];
@@ -152,7 +160,7 @@ export function UsersView() {
   const isAdmin = role === "ADMIN";
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<UserStatus | "ALL">("ALL");
+  const [status, setStatus] = useState<UserStatus | "ALL" | "DELETED">("ALL");
   const [confirm, setConfirm] = useState<{ user: ManagedUser; action: Action } | null>(null);
   const [reason, setReason] = useState("");
   const [assignRole, setAssignRole] = useState<ManagedUser | null>(null);
@@ -169,13 +177,15 @@ export function UsersView() {
     password: "",
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ManagedUser | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["users", { search, status }],
     queryFn: () =>
       unwrap<ManagedUser[]>(
         api.get("/users", {
-          params: { q: search, status: status === "ALL" ? undefined : status },
+          params: { q: search, status: status === "ALL" || status === "DELETED" ? undefined : status },
         })
       ),
     enabled: isAdmin,
@@ -218,6 +228,8 @@ export function UsersView() {
         RESTORE: "restored",
         ASSIGN_ROLE: "role updated",
         EDIT_USER: "updated",
+        DELETE_USER: "moved to deletion queue",
+        RESTORE_DELETED: "restored",
       };
       toast.success(`User ${labels[vars.action]}`);
     },
@@ -240,13 +252,50 @@ export function UsersView() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const res = await api.delete<{ success: boolean; data: ManagedUser }>(`/users/${id}`, { body: JSON.stringify({ reason }) });
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.success("User moved to deletion queue (7 days)");
+      setDeleteTarget(null);
+      setDeleteReason("");
+      qc.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (e: Error) => {
+      toast.error(e.message || "Failed to delete user");
+    },
+  });
+
+  const restoreDeletedMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.post<{ success: boolean; data: ManagedUser }>(`/users/${id}/restore`);
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.success("User restored successfully");
+      qc.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (e: Error) => {
+      toast.error(e.message || "Failed to restore user");
+    },
+  });
+
   const kpis = useMemo(() => {
     const total = users.length;
-    const active = users.filter((u) => u.status === "ACTIVE").length;
+    const active = users.filter((u) => u.status === "ACTIVE" && !u.deletedAt).length;
     const pending = users.filter((u) => u.status === "PENDING").length;
     const suspended = users.filter((u) => u.status === "SUSPENDED").length;
-    return { total, active, pending, suspended };
+    const inQueue = users.filter((u) => u.deletedAt).length;
+    return { total, active, pending, suspended, inQueue };
   }, [users]);
+
+  const filteredUsers = useMemo(() => {
+    if (status === "DELETED") return users.filter((u) => u.deletedAt);
+    if (status === "ALL") return users.filter((u) => !u.deletedAt);
+    return users.filter((u) => !u.deletedAt && u.status === status);
+  }, [users, status]);
 
   if (!isAdmin) {
     return (
@@ -273,6 +322,15 @@ export function UsersView() {
       });
       setShowPassword(false);
       setEditUser(user);
+      return;
+    }
+    if (action === "DELETE_USER") {
+      setDeleteReason("");
+      setDeleteTarget(user);
+      return;
+    }
+    if (action === "RESTORE_DELETED") {
+      restoreDeletedMutation.mutate(user.id);
       return;
     }
     if (action === "ASSIGN_ROLE") {
@@ -334,6 +392,15 @@ export function UsersView() {
     setAssignReason("");
   };
 
+  const submitDelete = () => {
+    if (!deleteTarget) return;
+    if (deleteReason.trim().length < 3) {
+      toast.error("A reason is required (min 3 characters)");
+      return;
+    }
+    deleteMutation.mutate({ id: deleteTarget.id, reason: deleteReason });
+  };
+
   return (
     <StaggerGroup className="space-y-4 md:space-y-6 pb-6">
       {/* KPIs */}
@@ -383,15 +450,17 @@ export function UsersView() {
               <ShimmerSkeleton key={i} className="h-24" />
             ))}
           </div>
-        ) : users.length === 0 ? (
+        ) : filteredUsers.length === 0 ? (
           <GlassCard className="p-12 text-center" hover={false}>
             <UsersIcon className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-            <p className="text-sm text-muted-foreground">No users match your search.</p>
+            <p className="text-sm text-muted-foreground">
+              {status === "DELETED" ? "No users in the deletion queue." : "No users match your search."}
+            </p>
           </GlassCard>
         ) : (
           <div className="space-y-3">
             <AnimatePresence mode="popLayout">
-              {users.map((u) => (
+              {filteredUsers.map((u) => (
                 <motion.div
                   key={u.id}
                   layout
@@ -591,6 +660,48 @@ export function UsersView() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(v) => !v && setDeleteTarget(null)}>
+        <DialogContent className="glass-strong border-border/60 rounded-3xl max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Delete {deleteTarget?.name}?
+            </DialogTitle>
+            <DialogDescription>
+              This will move the user to the <strong className="text-foreground">deletion queue</strong>.
+              The account will be permanently deleted after{" "}
+              <strong className="text-foreground">7 days</strong> unless restored.
+              All active sessions will be revoked immediately.
+            </DialogDescription>
+          </DialogHeader>
+          <GlassTextarea
+            label="Reason for deletion"
+            rows={3}
+            placeholder="Why is this user being deleted?"
+            value={deleteReason}
+            onChange={(e) => setDeleteReason(e.target.value)}
+          />
+          <div className="glass-soft rounded-2xl p-3 flex items-start gap-2 border border-destructive/20">
+            <Clock className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+            <p className="text-xs text-muted-foreground">
+              The user will receive a notification about the scheduled deletion.
+              You can restore the user from the <strong>Deletion Queue</strong> tab
+              within 7 days.
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <GlassButton variant="ghost" size="md" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </GlassButton>
+            <GlassButton variant="danger" size="md" onClick={submitDelete} loading={deleteMutation.isPending}>
+              <Trash2 className="h-4 w-4" />
+              Move to Deletion Queue
+            </GlassButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </StaggerGroup>
   );
 }
@@ -655,33 +766,43 @@ function UserRow({
   const rMeta = ROLE_META[user.role];
 
   const actions: { action: Action; label: string; icon: typeof CheckCircle2; variant?: "destructive" }[] = [];
-  // Edit User is always available for all statuses
-  actions.push({ action: "EDIT_USER", label: "Edit User", icon: Pencil });
-  switch (user.status) {
-    case "PENDING":
-      actions.push({ action: "APPROVE", label: "Approve", icon: CheckCircle2 });
-      actions.push({ action: "DEACTIVATE", label: "Reject", icon: Ban, variant: "destructive" });
-      break;
-    case "ACTIVE":
-      actions.push({ action: "SUSPEND", label: "Suspend", icon: Ban, variant: "destructive" });
-      actions.push({ action: "DEACTIVATE", label: "Deactivate", icon: Power });
-      actions.push({ action: "ARCHIVE", label: "Archive", icon: Archive });
-      if (canEditRole) actions.push({ action: "ASSIGN_ROLE", label: "Assign Role", icon: Shield });
-      break;
-    case "SUSPENDED":
-      actions.push({ action: "ACTIVATE", label: "Activate", icon: Power });
-      actions.push({ action: "ARCHIVE", label: "Archive", icon: Archive });
-      break;
-    case "INACTIVE":
-      actions.push({ action: "ACTIVATE", label: "Activate", icon: Power });
-      actions.push({ action: "ARCHIVE", label: "Archive", icon: Archive });
-      break;
-    case "ARCHIVED":
-      actions.push({ action: "RESTORE", label: "Restore", icon: RotateCcw });
-      break;
-    case "APPROVED":
-      actions.push({ action: "ACTIVATE", label: "Activate", icon: Power });
-      break;
+
+  // If user is in deletion queue, only show Restore
+  if (user.deletedAt) {
+    actions.push({ action: "RESTORE_DELETED", label: "Restore User", icon: RotateCcw });
+  } else {
+    // Edit User is always available for all statuses
+    actions.push({ action: "EDIT_USER", label: "Edit User", icon: Pencil });
+    switch (user.status) {
+      case "PENDING":
+        actions.push({ action: "APPROVE", label: "Approve", icon: CheckCircle2 });
+        actions.push({ action: "DEACTIVATE", label: "Reject", icon: Ban, variant: "destructive" });
+        break;
+      case "ACTIVE":
+        actions.push({ action: "SUSPEND", label: "Suspend", icon: Ban, variant: "destructive" });
+        actions.push({ action: "DEACTIVATE", label: "Deactivate", icon: Power });
+        actions.push({ action: "ARCHIVE", label: "Archive", icon: Archive });
+        if (canEditRole) actions.push({ action: "ASSIGN_ROLE", label: "Assign Role", icon: Shield });
+        break;
+      case "SUSPENDED":
+        actions.push({ action: "ACTIVATE", label: "Activate", icon: Power });
+        actions.push({ action: "ARCHIVE", label: "Archive", icon: Archive });
+        break;
+      case "INACTIVE":
+        actions.push({ action: "ACTIVATE", label: "Activate", icon: Power });
+        actions.push({ action: "ARCHIVE", label: "Archive", icon: Archive });
+        break;
+      case "ARCHIVED":
+        actions.push({ action: "RESTORE", label: "Restore", icon: RotateCcw });
+        break;
+      case "APPROVED":
+        actions.push({ action: "ACTIVATE", label: "Activate", icon: Power });
+        break;
+    }
+    // Delete is available for all non-deleted users (except other admins)
+    if (user.role !== "ADMIN") {
+      actions.push({ action: "DELETE_USER", label: "Delete", icon: Trash2, variant: "destructive" });
+    }
   }
 
   return (
@@ -698,13 +819,23 @@ function UserRow({
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-semibold truncate">{user.name}</h3>
-                <Badge variant="outline" className={cn("text-[10px]", rMeta.className)}>
-                  {rMeta.label}
-                </Badge>
-                <Badge variant="outline" className={cn("text-[10px]", sMeta.className)}>
-                  {sMeta.label}
-                </Badge>
+                <h3 className={cn("font-semibold truncate", user.deletedAt && "text-muted-foreground line-through")}>
+                  {user.name}
+                </h3>
+                {user.deletedAt ? (
+                  <Badge variant="outline" className="text-[10px] bg-destructive/15 text-destructive border-destructive/30">
+                    <Clock className="h-2.5 w-2.5" /> {formatDeletionCountdown(new Date(user.deletedAt))}
+                  </Badge>
+                ) : (
+                  <>
+                    <Badge variant="outline" className={cn("text-[10px]", rMeta.className)}>
+                      {rMeta.label}
+                    </Badge>
+                    <Badge variant="outline" className={cn("text-[10px]", sMeta.className)}>
+                      {sMeta.label}
+                    </Badge>
+                  </>
+                )}
               </div>
               <div className="flex flex-col sm:flex-row sm:items-center gap-x-3 gap-y-0.5 mt-1.5 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1 truncate">
@@ -723,10 +854,16 @@ function UserRow({
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-muted-foreground">
                 <span>Joined {format(new Date(user.createdAt), "MMM d, yyyy")}</span>
-                {user.lastLoginAt && (
+                {user.lastLoginAt && !user.deletedAt && (
                   <span>· Last login {formatDistanceToNow(new Date(user.lastLoginAt), { addSuffix: true })}</span>
                 )}
               </div>
+              {user.deletedAt && user.deletionReason && (
+                <div className="mt-1.5 text-[11px] text-destructive/80 flex items-start gap-1">
+                  <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                  <span>Reason: {user.deletionReason}</span>
+                </div>
+              )}
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

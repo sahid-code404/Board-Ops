@@ -1,16 +1,24 @@
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/session";
 import { ok, handleApiError } from "@/lib/api-response";
+import { purgeExpiredUsers } from "@/lib/user-cleanup";
 
 export async function GET(req: Request) {
   try {
-    const user = await requireRole("ADMIN");
+    await requireRole("ADMIN");
+
+    // Auto-purge users whose 7-day grace period has expired
+    await purgeExpiredUsers();
+
     const url = new URL(req.url);
     const status = url.searchParams.get("status");
     const search = url.searchParams.get("q");
 
+    // "DELETED" is a client-side filter (checks deletedAt), not a DB status
+    const dbStatus = status && status !== "DELETED" ? status : undefined;
+
     const where = {
-      ...(status ? { status } : {}),
+      ...(dbStatus ? { status: dbStatus } : {}),
       ...(search
         ? {
             OR: [
@@ -38,6 +46,8 @@ export async function GET(req: Request) {
         avatarUrl: true,
         createdAt: true,
         lastLoginAt: true,
+        deletedAt: true,
+        deletionReason: true,
       },
     });
     return ok(users);

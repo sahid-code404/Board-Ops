@@ -4,6 +4,7 @@ import { ok, err, handleApiError } from "@/lib/api-response";
 import { logAudit } from "@/lib/audit";
 import { createNotification } from "@/lib/notify";
 import { hashPassword } from "@/lib/auth";
+import { getDeletionDate } from "@/lib/user-cleanup";
 import { z } from "zod";
 
 const actionSchema = z.object({
@@ -212,6 +213,87 @@ export async function PUT(
         room: updated.room,
         passwordChanged: !!data.password,
       },
+    });
+
+    return ok(updated);
+  } catch (e) {
+    return handleApiError(e);
+  }
+}
+
+const deleteSchema = z.object({
+  reason: z.string().min(3, "A reason is required for deletion"),
+});
+
+/** DELETE /api/users/[id] — soft-delete user (enters 7-day restoration queue) */
+export async function DELETE(
+  req: Request,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  try {
+    const admin = await requireRole("ADMIN");
+    const { id } = await ctx.params;
+    const body = await req.json().catch(() => ({}));
+    const { reason } = deleteSchema.parse(body);
+
+    const user = await db.user.findUnique({ where: { id } });
+    if (!user) return err("User not found", 404);
+    if (user.deletedAt) return err("This user is already in the deletion queue", 422);
+    if (user.role === "ADMIN" && admin.role === "ADMIN") {
+      return err("Admins cannot delete other admins", 403);
+    }
+
+    const deletionDate = getDeletionDate();
+
+    const updated = await db.user.update({
+      where: { id },
+      data: {
+        deletedAt: deletionDate,
+        deletedBy: admin.id,
+        deletionReason: reason,
+        status: "ARCHIVED",
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        status: true,
+        room: true,
+        gender: true,
+        emergencyContact: true,
+        avatarUrl: true,
+        createdAt: true,
+        lastLoginAt: true,
+        deletedAt: true,
+        deletionReason: true,
+      },
+    });
+
+    // Revoke all active sessions immediately
+    await db.userSession.updateMany({
+      where: { userId: id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+
+    await createNotification({
+      userId: id,
+      title: "Account Scheduled for Deletion",
+      description: `Your account is scheduled for permanent deletion in 7 days. Reason: ${reason}. Contact an administrator if you believe this is a mistake.`,
+      type: "DANGER",
+      priority: "URGENT",
+      route: "profile",
+    });
+
+    await logAudit({
+      actorId: admin.id,
+      action: "USER_DELETE",
+      entity: "User",
+      entityId: id,
+      oldValue: { status: user.status },
+      newValue: { status: "ARCHIVED", deletedAt: deletionDate, reason },
+      reason,
     });
 
     return ok(updated);
