@@ -7,7 +7,6 @@ import { addDays, format, isSameDay } from "date-fns";
 import {
   ChevronLeft,
   ChevronRight,
-  RefreshCw,
   Utensils,
   UtensilsCrossed,
   UserPlus,
@@ -27,7 +26,6 @@ import { ShimmerSkeleton } from "@/components/glass/shimmer-skeleton";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { useAppStore } from "@/stores/use-app-store";
 import { api } from "@/lib/api-client";
-import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -79,7 +77,7 @@ export function KitchenView() {
   const dateStr = toDateString(date);
   const isUser = user?.role === "USER";
 
-  const { data: resp, isLoading, isFetching } = useQuery({
+  const { data: resp, isLoading } = useQuery({
     queryKey: ["kitchen", dateStr],
     queryFn: () =>
       api.get<ApiResponse<KitchenResponse>>("/kitchen", {
@@ -112,12 +110,6 @@ export function KitchenView() {
       {/* Action bar: centered date picker */}
       <StaggerItem>
         <div className="flex items-center justify-center gap-2 flex-wrap">
-          <p className="text-sm text-muted-foreground hidden sm:flex items-center gap-1.5 mr-2">
-            <RefreshCw
-              className={cn("h-3 w-3", isFetching && "animate-spin")}
-            />
-            Auto-refreshes every 15s
-          </p>
           <GlassButton
             variant="secondary"
             size="icon"
