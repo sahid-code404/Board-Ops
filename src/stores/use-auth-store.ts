@@ -11,10 +11,17 @@ export type CurrentUser = {
   email: string;
   phone?: string;
   role: Role;
-  status: "ACTIVE" | "PENDING" | "SUSPENDED" | "ARCHIVED";
+  status: "ACTIVE" | "PENDING" | "SUSPENDED" | "ARCHIVED" | "INACTIVE";
   avatarUrl?: string;
   room?: string;
+  gender?: string | null;
+  emergencyContact?: string | null;
   theme?: string;
+  language?: string;
+  timezone?: string;
+  twoFactorEnabled?: boolean;
+  createdAt?: string;
+  lastLoginAt?: string | null;
 };
 
 type AuthState = {

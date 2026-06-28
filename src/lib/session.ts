@@ -5,7 +5,22 @@ import type { User } from "@prisma/client";
 
 export type SessionUser = Pick<
   User,
-  "id" | "name" | "email" | "phone" | "role" | "status" | "avatarUrl" | "room"
+  | "id"
+  | "name"
+  | "email"
+  | "phone"
+  | "role"
+  | "status"
+  | "avatarUrl"
+  | "room"
+  | "gender"
+  | "emergencyContact"
+  | "theme"
+  | "language"
+  | "timezone"
+  | "twoFactorEnabled"
+  | "createdAt"
+  | "lastLoginAt"
 >;
 
 export async function getAuthUser(): Promise<SessionUser | null> {
@@ -20,15 +35,24 @@ export async function getAuthUser(): Promise<SessionUser | null> {
     include: { user: true },
   });
   if (!session || session.revokedAt || session.expiresAt < new Date()) return null;
+  const u = session.user;
   return {
-    id: session.user.id,
-    name: session.user.name,
-    email: session.user.email,
-    phone: session.user.phone ?? undefined,
-    role: session.user.role,
-    status: session.user.status,
-    avatarUrl: session.user.avatarUrl ?? undefined,
-    room: session.user.room ?? undefined,
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    phone: u.phone ?? undefined,
+    role: u.role,
+    status: u.status,
+    avatarUrl: u.avatarUrl ?? undefined,
+    room: u.room ?? undefined,
+    gender: u.gender ?? undefined,
+    emergencyContact: u.emergencyContact ?? undefined,
+    theme: u.theme,
+    language: u.language,
+    timezone: u.timezone,
+    twoFactorEnabled: u.twoFactorEnabled,
+    createdAt: u.createdAt,
+    lastLoginAt: u.lastLoginAt,
   };
 }
 
@@ -57,4 +81,26 @@ export async function getClientIp(): Promise<string> {
 export async function getUserAgent(): Promise<string | null> {
   const h = await headers();
   return h.get("user-agent");
+}
+
+/** Parse a User-Agent string into a human-friendly device/browser label. */
+export function parseUserAgent(ua: string | null): { device: string; browser: string; os: string } {
+  if (!ua) return { device: "Unknown device", browser: "Unknown", os: "Unknown" };
+  let browser = "Unknown";
+  let os = "Unknown";
+  let device = "Desktop";
+
+  if (/iPhone/.test(ua)) { os = "iOS"; device = "iPhone"; }
+  else if (/iPad/.test(ua)) { os = "iPadOS"; device = "iPad"; }
+  else if (/Android/.test(ua)) { os = "Android"; device = "Android"; }
+  else if (/Mac OS X/.test(ua)) { os = "macOS"; device = "Mac"; }
+  else if (/Windows/.test(ua)) { os = "Windows"; device = "PC"; }
+  else if (/Linux/.test(ua)) { os = "Linux"; device = "Linux"; }
+
+  if (/Edg/.test(ua)) browser = "Edge";
+  else if (/Chrome/.test(ua) && /Safari/.test(ua)) browser = "Chrome";
+  else if (/Firefox/.test(ua)) browser = "Firefox";
+  else if (/Safari/.test(ua)) browser = "Safari";
+
+  return { device, browser, os };
 }
