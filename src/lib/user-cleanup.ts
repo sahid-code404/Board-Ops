@@ -69,3 +69,22 @@ export async function purgeExpiredBills(): Promise<number> {
     return 0;
   }
 }
+
+/**
+ * Permanently delete payments whose soft-delete grace period (7 days) has expired.
+ * Called on every GET /api/payments to keep the deletion queue clean.
+ */
+export async function purgeExpiredPayments(): Promise<number> {
+  try {
+    const now = new Date();
+    const result = await db.payment.deleteMany({
+      where: {
+        deletedAt: { not: null, lt: now },
+      },
+    });
+    return result.count;
+  } catch (e) {
+    console.error("Failed to purge expired payments:", e);
+    return 0;
+  }
+}

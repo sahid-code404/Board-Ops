@@ -333,21 +333,25 @@ model Bill {
 }
 
 model Payment {
-  id           String   @id @default(cuid())
-  userId       String
-  billId       String?
-  amount       Float
-  method       String   @default("CASH") // CASH | UPI | CARD | BANK_TRANSFER | WALLET
-  status       String   @default("PENDING") // PENDING | APPROVED | REJECTED | REFUNDED
-  reference    String?
-  notes        String?
-  approvedBy   String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bill         Bill?    @relation(fields: [billId], references: [id], onDelete: SetNull)
+  id              String   @id @default(cuid())
+  userId          String
+  billId          String?
+  amount          Float
+  method          String   @default("CASH") // CASH | UPI | CARD | BANK_TRANSFER | WALLET
+  status          String   @default("PENDING") // PENDING | APPROVED | REJECTED | REFUNDED | VOID | DELETED
+  reference       String?
+  notes           String?
+  approvedBy      String?
+  deletedAt       DateTime? // Soft-delete: scheduled for permanent deletion after 7 days
+  deletedBy       String?
+  deletionReason  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bill            Bill?    @relation(fields: [billId], references: [id], onDelete: SetNull)
 
   @@index([userId, status])
+  @@index([deletedAt])
 }
 
 model Expense {

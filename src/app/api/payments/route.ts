@@ -3,15 +3,28 @@ import { requireAuth, requireRole } from "@/lib/session";
 import { ok, err, handleApiError } from "@/lib/api-response";
 import { logAudit } from "@/lib/audit";
 import { createNotification } from "@/lib/notify";
+import { purgeExpiredPayments } from "@/lib/user-cleanup";
 import { z } from "zod";
 
 export async function GET(req: Request) {
   try {
+    // Purge payments whose 7-day grace period has expired
+    await purgeExpiredPayments();
+
     const user = await requireAuth();
     const url = new URL(req.url);
     const limit = Number(url.searchParams.get("limit") || 20);
-    const where: { userId?: string; createdAt?: { gte: Date; lte: Date } } =
-      user.role === "USER" ? { userId: user.id } : {};
+    const includeDeleted = url.searchParams.get("includeDeleted") === "true";
+
+    const where: Record<string, unknown> = {};
+    if (!includeDeleted) {
+      where.deletedAt = null;
+    } else {
+      where.deletedAt = { not: null };
+    }
+    if (user.role === "USER") {
+      where.userId = user.id;
+    }
 
     // Optional date filter (YYYY-MM-DD). Filters payments where createdAt falls
     // within that calendar day. When omitted, all payments are returned (back-compat).
