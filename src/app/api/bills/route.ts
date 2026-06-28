@@ -161,6 +161,8 @@ export async function DELETE(req: Request) {
     const url = new URL(req.url);
     const month = url.searchParams.get("month");
     const year = url.searchParams.get("year");
+    const body = await req.json().catch(() => ({}));
+    const reason = (body as { reason?: string }).reason;
 
     const where: Record<string, unknown> = { deletedAt: null };
     if (month !== null && year) {
@@ -171,14 +173,15 @@ export async function DELETE(req: Request) {
     const deletionDate = getDeletionDate();
     const result = await db.bill.updateMany({
       where,
-      data: { deletedAt: deletionDate, deletedBy: user.id, status: "DELETED" },
+      data: { deletedAt: deletionDate, deletedBy: user.id, status: "DELETED", deletionReason: reason || null },
     });
 
     await logAudit({
       actorId: user.id,
       action: "BILLS_SOFT_DELETED_ALL",
       entity: "Bill",
-      newValue: { scheduled: result.count, permanentDeletion: deletionDate, month, year },
+      newValue: { scheduled: result.count, permanentDeletion: deletionDate, month, year, reason },
+      reason,
     });
 
     return ok({ deleted: result.count, permanentDeletion: deletionDate.toISOString() });

@@ -33,7 +33,7 @@ import { formatDeletionCountdown } from "@/lib/user-cleanup";
 
 import { GlassCard } from "@/components/glass/glass-card";
 import { GlassButton } from "@/components/glass/glass-button";
-import { GlassInput } from "@/components/glass/glass-input";
+import { GlassInput, GlassTextarea } from "@/components/glass/glass-input";
 import { AnimatedCounter } from "@/components/glass/animated-counter";
 import {
   StaggerGroup,
@@ -105,6 +105,7 @@ type Bill = {
   generatedAt: string | null;
   createdAt: string;
   deletedAt: string | null;
+  deletionReason: string | null;
   user: { name: string; email: string; room: string | null; avatarUrl: string | null };
 };
 
@@ -275,14 +276,17 @@ export function BillingView() {
 
   const [deleteTarget, setDeleteTarget] = useState<Bill | null>(null);
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleteAllReason, setDeleteAllReason] = useState("");
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await api.delete(`/bills/${id}`);
+      await api.delete(`/bills/${id}`, { body: JSON.stringify({ reason: deleteReason || undefined }) });
     },
     onSuccess: () => {
       toast.success("Bill scheduled for deletion — permanently removed in 7 days");
       setDeleteTarget(null);
+      setDeleteReason("");
       qc.invalidateQueries({ queryKey: ["bills"] });
     },
     onError: (e: Error) => toast.error(e.message || "Failed to delete bill"),
@@ -292,12 +296,14 @@ export function BillingView() {
     mutationFn: async () => {
       const r = await api.delete<ApiResponse<{ deleted: number }>>("/bills", {
         params: { month: selectedMonth, year: selectedYear },
+        body: JSON.stringify({ reason: deleteAllReason || undefined }),
       });
       return r.data;
     },
     onSuccess: (data) => {
       toast.success(`${data.deleted} bills scheduled for deletion — permanently removed in 7 days`);
       setDeleteAllOpen(false);
+      setDeleteAllReason("");
       qc.invalidateQueries({ queryKey: ["bills"] });
     },
     onError: (e: Error) => toast.error(e.message || "Failed to delete bills"),
@@ -661,35 +667,52 @@ export function BillingView() {
                       </TableCell>
                       <TableCell className="pr-4">
                         <div className="flex items-center justify-end gap-1">
-                          <GlassButton
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setSelectedBill(bill)}
-                            aria-label="View bill"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </GlassButton>
-                          {isAdmin && bill.status !== "VOID" && (
-                            <GlassButton
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setVoidTarget(bill)}
-                              aria-label="Void bill"
-                              className="text-destructive hover:text-destructive"
-                            >
-                              <Ban className="h-4 w-4" />
-                            </GlassButton>
-                          )}
-                          {isAdmin && (
-                            <GlassButton
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setDeleteTarget(bill)}
-                              aria-label="Delete bill"
-                              className="text-destructive hover:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </GlassButton>
+                          {bill.deletedAt ? (
+                            isAdmin && (
+                              <GlassButton
+                                variant="ghost"
+                                size="sm"
+                                className="text-success hover:text-success"
+                                onClick={() => restoreMutation.mutate(bill.id)}
+                                aria-label="Restore bill"
+                              >
+                                <RotateCcw className="h-3.5 w-3.5" />
+                                Restore
+                              </GlassButton>
+                            )
+                          ) : (
+                            <>
+                              <GlassButton
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setSelectedBill(bill)}
+                                aria-label="View bill"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </GlassButton>
+                              {isAdmin && bill.status !== "VOID" && (
+                                <GlassButton
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setVoidTarget(bill)}
+                                  aria-label="Void bill"
+                                  className="text-destructive hover:text-destructive"
+                                >
+                                  <Ban className="h-4 w-4" />
+                                </GlassButton>
+                              )}
+                              {isAdmin && (
+                                <GlassButton
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setDeleteTarget(bill)}
+                                  aria-label="Delete bill"
+                                  className="text-destructive hover:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </GlassButton>
+                              )}
+                            </>
                           )}
                         </div>
                       </TableCell>
@@ -853,6 +876,13 @@ export function BillingView() {
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <GlassTextarea
+            label="Reason (optional)"
+            rows={2}
+            placeholder="Why is this bill being deleted?"
+            value={deleteReason}
+            onChange={(e) => setDeleteReason(e.target.value)}
+          />
           <AlertDialogFooter>
             <AlertDialogCancel className="rounded-2xl">Cancel</AlertDialogCancel>
             <AlertDialogAction
@@ -884,6 +914,13 @@ export function BillingView() {
               You can restore them before the 7-day period expires. Do you want to continue?
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <GlassTextarea
+            label="Reason (optional)"
+            rows={2}
+            placeholder="Why are these bills being deleted?"
+            value={deleteAllReason}
+            onChange={(e) => setDeleteAllReason(e.target.value)}
+          />
           <AlertDialogFooter>
             <AlertDialogCancel className="rounded-2xl">Cancel</AlertDialogCancel>
             <AlertDialogAction
@@ -1019,10 +1056,17 @@ function BillCard({
       </div>
       <div className="flex items-center justify-between mt-3">
         {isDeleted ? (
-          <span className="text-xs text-destructive/80 flex items-center gap-1">
-            <AlertTriangle className="h-3 w-3" />
-            Scheduled for deletion
-          </span>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-xs text-destructive/80 flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3" />
+              Scheduled for deletion
+            </span>
+            {bill.deletionReason && (
+              <span className="text-[10px] text-destructive/60 truncate max-w-[150px]">
+                Reason: {bill.deletionReason}
+              </span>
+            )}
+          </div>
         ) : (
           <span className="text-xs text-muted-foreground flex items-center gap-1">
             <Clock className="h-3 w-3" />

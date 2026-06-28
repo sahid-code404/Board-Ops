@@ -118,7 +118,7 @@ const STATUS_FILTERS: { key: UserStatus | "ALL" | "DELETED"; label: string; shor
   { key: "ACTIVE", label: "Active", short: "Active" },
   { key: "SUSPENDED", label: "Suspended", short: "Suspended" },
   { key: "ARCHIVED", label: "Archived", short: "Archived" },
-  { key: "DELETED", label: "Deletion Queue", short: "Queue" },
+  { key: "DELETED", label: "Deletion Queue", short: "Deletion Queue" },
 ];
 
 const ACTIONS_NEED_REASON: Action[] = ["SUSPEND", "DEACTIVATE", "ARCHIVE"];
@@ -428,7 +428,10 @@ export function UsersView() {
           <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-1">
             {STATUS_FILTERS.map((f) => {
               const active = status === f.key;
-              const badge = f.key === "PENDING" && kpis.pending > 0 ? kpis.pending : null;
+              const pendingBadge = f.key === "PENDING" && kpis.pending > 0 ? kpis.pending : null;
+              const queueBadge = f.key === "DELETED" && kpis.inQueue > 0 ? kpis.inQueue : null;
+              const badge = pendingBadge ?? queueBadge;
+              const isQueueBadge = queueBadge !== null;
               return (
                 <motion.button
                   key={f.key}
@@ -446,7 +449,11 @@ export function UsersView() {
                   {badge !== null && (
                     <span className={cn(
                       "text-[9px] rounded-full px-1.5 py-0.5 leading-none font-bold min-w-[16px] text-center",
-                      active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-warning text-white"
+                      active
+                        ? "bg-primary-foreground/20 text-primary-foreground"
+                        : isQueueBadge
+                          ? "bg-destructive text-white"
+                          : "bg-warning text-white"
                     )}>
                       {badge}
                     </span>

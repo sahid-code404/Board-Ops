@@ -27,12 +27,14 @@ export async function GET(
 
 /** DELETE /api/bills/[id] — soft-delete a single bill (7-day grace period) */
 export async function DELETE(
-  _req: Request,
+  req: Request,
   ctx: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireRole("ADMIN");
     const { id } = await ctx.params;
+    const body = await req.json().catch(() => ({}));
+    const reason = (body as { reason?: string }).reason;
     const existing = await db.bill.findUnique({ where: { id } });
     if (!existing) return err("Bill not found", 404);
     if (existing.deletedAt) return err("Bill is already scheduled for deletion", 422);
@@ -40,7 +42,7 @@ export async function DELETE(
     const deletionDate = getDeletionDate();
     await db.bill.update({
       where: { id },
-      data: { deletedAt: deletionDate, deletedBy: user.id, status: "DELETED" },
+      data: { deletedAt: deletionDate, deletedBy: user.id, status: "DELETED", deletionReason: reason || null },
     });
     await logAudit({
       actorId: user.id,
@@ -48,7 +50,8 @@ export async function DELETE(
       entity: "Bill",
       entityId: id,
       oldValue: existing,
-      newValue: { deletedAt: deletionDate, status: "DELETED" },
+      newValue: { deletedAt: deletionDate, status: "DELETED", reason },
+      reason,
     });
     return ok({ success: true, permanentDeletion: deletionDate.toISOString() });
   } catch (e) {

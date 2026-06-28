@@ -321,6 +321,7 @@ model Bill {
   snapshot     String?  // JSON snapshot of calculation
   deletedAt    DateTime? // Soft-delete: scheduled for permanent deletion after 7 days
   deletedBy    String?
+  deletionReason String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
