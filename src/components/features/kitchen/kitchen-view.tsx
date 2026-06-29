@@ -190,18 +190,18 @@ export function KitchenView() {
       <StaggerItem>
         <div className="grid grid-cols-3 gap-3">
           <KpiCard
-            icon={UserPlus}
-            label="Guests"
-            value={totals.guests}
-            color="primary"
-            sub="Today"
-          />
-          <KpiCard
             icon={Utensils}
             label="Total Meals"
             value={monthTotals.meals}
             color="success"
             sub="This Month"
+          />
+          <KpiCard
+            icon={UserPlus}
+            label="Guests"
+            value={totals.guests}
+            color="primary"
+            sub="Today"
           />
           <KpiCard
             icon={Users}
