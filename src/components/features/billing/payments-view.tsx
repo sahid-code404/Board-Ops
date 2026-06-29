@@ -332,6 +332,7 @@ export function PaymentsView() {
       toast.success("Payment submitted — pending admin approval");
       setSubmitOpen(false);
       qc.invalidateQueries({ queryKey: ["payments"] });
+      qc.invalidateQueries({ queryKey: ["bills"] });
     },
     onError: (e: Error) => toast.error(e.message || "Failed to submit payment"),
   });
@@ -1442,7 +1443,8 @@ function SubmitPaymentDialog({
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string>("");
 
-  // Load user's outstanding bills for selection
+  // Load user's outstanding bills for selection — always refetch when dialog opens
+  // so paid bills don't appear in the dropdown
   const { data: bills = [] } = useQuery({
     queryKey: ["bills"],
     queryFn: async () => {
@@ -1450,10 +1452,12 @@ function SubmitPaymentDialog({
       return r.data;
     },
     enabled: open,
+    staleTime: 0,
+    placeholderData: (prev) => prev,
   });
 
   const outstanding = bills.filter(
-    (b) => b.status !== "PAID" && b.status !== "VOID" && b.dueAmount > 0
+    (b) => b.status !== "PAID" && b.status !== "VOID" && b.status !== "DELETED" && b.dueAmount > 0
   );
 
   function reset() {
