@@ -33,6 +33,21 @@ export async function GET(req: Request) {
       where.periodMonth = Number(month);
       where.periodYear = Number(year);
     }
+
+    // Exclude future-period bills (e.g. July 2027 when we're in June 2026).
+    // Used by the Submit Payment dialog so users only see current/past bills.
+    const excludeFuture = url.searchParams.get("future") === "false";
+    if (excludeFuture) {
+      const now = new Date();
+      const currentPeriod = now.getFullYear() * 12 + now.getMonth();
+      // periodMonth is 0-indexed (0=Jan), periodYear is the year
+      where.AND = [
+        { OR: [
+          { periodYear: { lt: now.getFullYear() } },
+          { periodYear: now.getFullYear(), periodMonth: { lte: now.getMonth() } },
+        ]},
+      ];
+    }
     const bills = await db.bill.findMany({
       where,
       orderBy: { createdAt: "desc" },
