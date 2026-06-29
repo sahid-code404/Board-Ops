@@ -365,19 +365,6 @@ export function KitchenView() {
                                 <p className="text-[11px] text-muted-foreground">Room {u.room}</p>
                               )}
                             </div>
-                            {/* ON/OFF summary badges */}
-                            <div className="flex items-center gap-1 shrink-0">
-                              {u.onCount > 0 && (
-                                <span className="inline-flex items-center gap-0.5 text-[10px] bg-success/15 text-success px-1.5 py-0.5 rounded-full font-medium">
-                                  <Check className="h-2.5 w-2.5" /> {u.onCount}
-                                </span>
-                              )}
-                              {u.offCount > 0 && (
-                                <span className="inline-flex items-center gap-0.5 text-[10px] bg-warning/15 text-warning px-1.5 py-0.5 rounded-full font-medium">
-                                  <X className="h-2.5 w-2.5" /> {u.offCount}
-                                </span>
-                              )}
-                            </div>
                             {/* Expand chevron */}
                             <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
                               <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
