@@ -301,6 +301,20 @@ export function PaymentsView() {
     placeholderData: (prev) => prev,
   });
 
+  // Fetch users with refundable credit (admin only) — powers the "Refund
+  // Pending" KPI and keeps the Pay Refund button count in sync. Refetches
+  // whenever payments or bills change.
+  const { data: refundCreditUsers = [] } = useQuery({
+    queryKey: ["payments", "refund-users"],
+    queryFn: async () => {
+      const r = await api.get<{ success: boolean; data: Array<{ userId: string; creditAmount: number }> }>("/payments/refund");
+      return r.data;
+    },
+    enabled: isAdmin,
+    placeholderData: (prev) => prev,
+  });
+  const refundPendingCount = refundCreditUsers.length;
+
   const submitMutation = useMutation({
     mutationFn: (payload: {
       amount: number;
@@ -464,9 +478,8 @@ export function PaymentsView() {
     const approved = payments.filter((p) => p.status === "APPROVED");
     const totalApproved = approved.reduce((s, p) => s + p.amount, 0);
     const pending = payments.filter((p) => p.status === "PENDING").length;
-    const rejected = payments.filter((p) => p.status === "REJECTED").length;
     const refunded = payments.filter((p) => p.status === "REFUNDED").length;
-    return { totalApproved, pending, rejected, refunded };
+    return { totalApproved, pending, refunded };
   }, [payments]);
 
   // Filtered list — search + status filter pills only
@@ -624,10 +637,11 @@ export function PaymentsView() {
             color="warning"
           />
           <KpiCard
-            label="Rejected"
-            value={kpis.rejected}
-            icon={<XCircle className="h-5 w-5" />}
-            color="danger"
+            label="Refund Pending"
+            value={refundPendingCount}
+            icon={<RotateCcw className="h-5 w-5" />}
+            color="primary"
+            onClick={isAdmin ? fetchRefundUsers : undefined}
           />
         </div>
       </StaggerItem>
@@ -1102,12 +1116,14 @@ function KpiCard({
   icon,
   color,
   prefix,
+  onClick,
 }: {
   label: string;
   value: number;
   icon: React.ReactNode;
   color: "primary" | "success" | "warning" | "danger" | "info";
   prefix?: string;
+  onClick?: () => void;
 }) {
   const colorVar =
     color === "primary"
@@ -1119,11 +1135,9 @@ function KpiCard({
           : color === "danger"
             ? "var(--destructive)"
             : "var(--info)";
-  return (
-    <GlassCard
-      className="p-4"
-      glow={color === "danger" ? "danger" : color === "warning" ? "warning" : color === "success" ? "success" : "primary"}
-    >
+  const glow = color === "danger" ? "danger" : color === "warning" ? "warning" : color === "success" ? "success" : "primary";
+  const content = (
+    <>
       <div className="flex items-start justify-between mb-3">
         <div
           className="grid place-items-center h-10 w-10 rounded-2xl"
@@ -1139,6 +1153,20 @@ function KpiCard({
       <div className="text-2xl font-bold tracking-tight tabular-nums">
         <AnimatedCounter value={value} prefix={prefix || ""} />
       </div>
+    </>
+  );
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className="text-left w-full">
+        <GlassCard className="p-4 transition-all hover:ring-1 hover:ring-primary/30" glow={glow} whileHover={{ y: -2 }}>
+          {content}
+        </GlassCard>
+      </button>
+    );
+  }
+  return (
+    <GlassCard className="p-4" glow={glow}>
+      {content}
     </GlassCard>
   );
 }

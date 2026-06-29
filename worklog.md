@@ -1760,3 +1760,24 @@ Stage Summary:
 - After refund: bill paidAmount = approved payments − refunded payments = exactly the bill total (no more stuck overpayment).
 - Refund list auto-refreshes after each refund, removing users whose credit is fully consumed.
 - Verified end-to-end with real overpayment scenario.
+
+---
+Task ID: PAYMENTS-REFUND-PENDING-KPI
+Agent: main (orchestrator)
+Task: In payments section, remove the Rejected KPI and make it Refund Pending (showing count of users eligible for refund).
+
+Work Log:
+- Removed the "Rejected" KPI from the payments-view KPI grid (was the 3rd KPI showing count of rejected payments).
+- Added a new "Refund Pending" KPI in its place — shows the count of users who currently have refundable credit (overpaid / unlinked excess payments).
+- Added a TanStack Query `["payments", "refund-users"]` that fetches GET /api/payments/refund on mount (admin only). The query is auto-invalidated by all payment mutations (approve/reject/void/delete/refund) since they invalidate `["payments"]` by prefix, so the KPI count stays in sync in real time.
+- Updated `KpiCard` to accept an optional `onClick` prop — when provided, the card renders as a button (text-left, hover ring + lift) that triggers the handler. The "Refund Pending" KPI is clickable and opens the Pay Refund dialog directly (via `fetchRefundUsers`).
+- KPI styling: Refund Pending uses the `primary` color (purple) + `RotateCcw` icon, consistent with the Pay Refund button's iconography.
+- Removed the now-unused `rejected` field from the `kpis` memo (no longer referenced anywhere).
+- Lint: passes (0 errors, 1 pre-existing warning).
+- Browser self-verification (agent-browser): signed in as admin → Payments page → KPIs show "Total Deposit ₹16,493 | Pending Approvals 0 | Refund Pending 2" (2 = Rohan ₹1,200 + Priya ₹2,653 credit). Clicked the "Refund Pending" KPI → refund dialog opened showing both users with credit. No console/runtime errors. Cleaned up test data after.
+
+Stage Summary:
+- Payments KPIs are now: Total Deposit (₹), Pending Approvals (count), Refund Pending (count of users with refundable credit).
+- The Refund Pending KPI is clickable — opens the Pay Refund dialog directly.
+- KPI count auto-updates in real time whenever payments are approved/rejected/voided/deleted/refunded (TanStack Query invalidation).
+- Verified end-to-end with test data showing count = 2 and click-to-open flow.
