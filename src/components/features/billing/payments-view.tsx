@@ -262,6 +262,21 @@ export function PaymentsView() {
   const [deleteReason, setDeleteReason] = useState("");
   const [voidTarget, setVoidTarget] = useState<Payment | null>(null);
 
+  // Pay Refund state (admin only) — users with credit balance (overpaid bills)
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refundUsers, setRefundUsers] = useState<Array<{
+    userId: string;
+    name: string;
+    email: string;
+    avatarUrl: string | null;
+    room: string | null;
+    creditAmount: number;
+  }>>([]);
+  const [refundLoading, setRefundLoading] = useState(false);
+  const [refundTarget, setRefundTarget] = useState<{ userId: string; name: string; creditAmount: number } | null>(null);
+  const [refundAmount, setRefundAmount] = useState("");
+  const [refundNotes, setRefundNotes] = useState("");
+
   // Fetch ALL payments for KPIs (not affected by month picker)
   const { data: allPayments = [] } = useQuery({
     queryKey: ["payments", "all"],
@@ -416,6 +431,42 @@ export function PaymentsView() {
     setEditTarget(null);
   }, []);
 
+  // Pay Refund — fetch users with credit balance, then process refund
+  const fetchRefundUsers = async () => {
+    setRefundLoading(true);
+    try {
+      const r = await api.get<{ success: boolean; data: typeof refundUsers }>("/payments/refund");
+      setRefundUsers(r.data);
+      setRefundOpen(true);
+    } catch (e: unknown) {
+      toast.error((e as Error).message || "Failed to load refund users");
+    } finally {
+      setRefundLoading(false);
+    }
+  };
+
+  const refundMutation = useMutation({
+    mutationFn: async () => {
+      if (!refundTarget) return;
+      await api.post("/payments/refund", {
+        userId: refundTarget.userId,
+        amount: parseFloat(refundAmount),
+        notes: refundNotes || undefined,
+      });
+    },
+    onSuccess: () => {
+      toast.success(`Refund of ₹${refundAmount} processed — user notified`);
+      setRefundTarget(null);
+      setRefundAmount("");
+      setRefundNotes("");
+      qc.invalidateQueries({ queryKey: ["payments"] });
+      qc.invalidateQueries({ queryKey: ["bills"] });
+      // Refresh the refund users list
+      fetchRefundUsers();
+    },
+    onError: (e: Error) => toast.error(e.message || "Failed to process refund"),
+  });
+
   // KPIs — computed from the month-filtered payments list
   const kpis = useMemo(() => {
     const approved = payments.filter((p) => p.status === "APPROVED");
@@ -529,6 +580,24 @@ export function PaymentsView() {
           </motion.button>
         </div>
       </StaggerItem>
+
+      {/* Pay Refund — admin only, centered glass card button */}
+      {isAdmin && (
+        <StaggerItem>
+          <div className="flex items-center justify-center">
+            <GlassButton
+              variant="ghost"
+              size="lg"
+              onClick={fetchRefundUsers}
+              loading={refundLoading}
+              className="shrink-0 glass text-primary hover:text-primary font-semibold"
+            >
+              <RotateCcw className="h-5 w-5" />
+              Pay Refund
+            </GlassButton>
+          </div>
+        </StaggerItem>
+      )}
 
       {/* Action bar — only for non-admins (who can submit payments) */}
       {!isAdmin && (
@@ -930,6 +999,102 @@ export function PaymentsView() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Refund — user list dialog */}
+      <Dialog open={refundOpen && !refundTarget} onOpenChange={(o) => !o && setRefundOpen(false)}>
+        <DialogContent className="rounded-3xl max-w-md max-h-[80vh] overflow-y-auto no-scrollbar">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-primary" />
+              Users with Credit Balance
+            </DialogTitle>
+            <DialogDescription>
+              These users have overpaid and are eligible for a refund. Click to process.
+            </DialogDescription>
+          </DialogHeader>
+          {refundUsers.length === 0 ? (
+            <div className="text-center py-8 text-sm text-muted-foreground">
+              No users have credit balance right now.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {refundUsers.map((u) => (
+                <button
+                  key={u.userId}
+                  onClick={() => {
+                    setRefundTarget({ userId: u.userId, name: u.name, creditAmount: u.creditAmount });
+                    setRefundAmount(String(u.creditAmount));
+                    setRefundNotes("");
+                  }}
+                  className="w-full flex items-center gap-3 p-3 rounded-2xl glass-soft hover:ring-1 hover:ring-primary/30 transition-all text-left"
+                >
+                  <Avatar className="h-10 w-10 rounded-xl shrink-0">
+                    <AvatarFallback className={cn("rounded-xl bg-gradient-to-br text-white font-semibold text-xs", gradientFor(u.name))}>
+                      {initials(u.name) || "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{u.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-bold text-success tabular-nums">₹{Math.round(u.creditAmount).toLocaleString("en-IN")}</p>
+                    <p className="text-[10px] text-muted-foreground">credit</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Refund — confirm + amount dialog */}
+      <Dialog open={!!refundTarget} onOpenChange={(o) => !o && (setRefundTarget(null), setRefundAmount(""), setRefundNotes(""))}>
+        <DialogContent className="rounded-3xl max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-primary" />
+              Process Refund
+            </DialogTitle>
+            <DialogDescription>
+              Refund to <span className="font-medium text-foreground">{refundTarget?.name}</span>.
+              Available credit: <span className="font-medium text-success">₹{Math.round(refundTarget?.creditAmount || 0).toLocaleString("en-IN")}</span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <GlassInput
+              label="Refund Amount (₹)"
+              type="number"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={refundAmount}
+              onChange={(e) => setRefundAmount(e.target.value)}
+              icon={<IndianRupee className="h-4 w-4" />}
+            />
+            <GlassTextarea
+              label="Notes (optional)"
+              rows={2}
+              placeholder="Reason for refund…"
+              value={refundNotes}
+              onChange={(e) => setRefundNotes(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <GlassButton variant="ghost" onClick={() => { setRefundTarget(null); setRefundAmount(""); setRefundNotes(""); }}>
+              Cancel
+            </GlassButton>
+            <GlassButton
+              variant="danger"
+              loading={refundMutation.isPending}
+              disabled={!refundAmount || parseFloat(refundAmount) <= 0 || parseFloat(refundAmount) > (refundTarget?.creditAmount || 0)}
+              onClick={() => refundMutation.mutate()}
+            >
+              <RotateCcw className="h-4 w-4" />
+              Process Refund
+            </GlassButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </StaggerGroup>
   );
 }
