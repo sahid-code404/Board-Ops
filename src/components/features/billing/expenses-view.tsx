@@ -904,14 +904,9 @@ function ExpenseRow({
               </div>
               {/* Date + qty + description row */}
               <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-muted-foreground">
-                <span className="inline-flex items-center gap-1">
-                  <Calendar className="h-3 w-3" /> {formatDate(expense.expenseDate)}
+                <span>
+                  {formatDate(expense.expenseDate)}{qty ? ` ${qty}` : ""}
                 </span>
-                {qty && (
-                  <span className="inline-flex items-center gap-1">
-                    <Boxes className="h-3 w-3" /> {qty}
-                  </span>
-                )}
                 {expense.description && (
                   <span className="truncate max-w-[200px]">
                     · {expense.description}
