@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, memo, useCallback } from "react";
+import { useState, useMemo, memo, useCallback, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -246,7 +246,21 @@ export function UserMealsView() {
     setExpandedDay((prev) => (prev === dateStr ? null : dateStr));
   }, []);
 
+  // Auto-scroll to today's row when agenda view loads or month changes
+  const todayRef = useRef<HTMLDivElement>(null);
+  const todayDateStr = toDateString(now);
   const isLoading = viewMode === "day" ? dayLoading : monthLoading;
+  useEffect(() => {
+    if (viewMode !== "agenda" || isLoading || days.length === 0) return;
+    // Only auto-scroll if today is in the current month's data
+    const hasToday = days.some((d) => d.dateStr === todayDateStr);
+    if (!hasToday) return;
+    // Small delay to let the DOM render after loading
+    const t = setTimeout(() => {
+      todayRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 300);
+    return () => clearTimeout(t);
+  }, [viewMode, isLoading, days, todayDateStr]);
 
   if (isLoading) {
     return (
@@ -438,6 +452,7 @@ export function UserMealsView() {
                 {days.map((day) => (
                   <motion.div
                     key={day.dateStr}
+                    ref={day.dateStr === todayDateStr ? todayRef : undefined}
                     layout
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
