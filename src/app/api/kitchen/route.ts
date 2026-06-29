@@ -97,11 +97,9 @@ export async function GET(req: Request) {
           : entry
             ? (entry.locked || entry.status === "LOCKED" || isLocked(entry.editableUntil))
             : false;
-        // Compute override dynamically: compare current status with original state.
-        // If no entry exists, the meal is in its default state — no override.
-        const originalState = entry?.originalState || m.defaultState;
+        // Override flag is set ONLY by the admin override API (POST /api/meals/override).
+        // User toggles (PATCH /api/meals/toggle) never set overrideFlag — it's their own choice.
         const currentStatus = entry?.status || m.defaultState;
-        const isOverridden = currentStatus !== originalState && currentStatus !== "LOCKED";
         return {
           mealId: m.id,
           mealName: m.displayName,
@@ -109,7 +107,7 @@ export async function GET(req: Request) {
           mealColor: m.color,
           status: currentStatus,
           locked: effectivelyLocked,
-          overrideFlag: isOverridden,
+          overrideFlag: entry?.overrideFlag ?? false,
         };
       });
       const onCount = mealsOn.filter((m) => m.status === "ON" || m.status === "LOCKED").length;
