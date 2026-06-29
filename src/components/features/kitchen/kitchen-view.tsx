@@ -15,6 +15,8 @@ import {
   Soup,
   Lock,
   RotateCcw,
+  Check,
+  X,
 } from "lucide-react";
 import { GlassCard } from "@/components/glass/glass-card";
 import { GlassButton } from "@/components/glass/glass-button";
@@ -26,6 +28,7 @@ import {
 import { ShimmerSkeleton } from "@/components/glass/shimmer-skeleton";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { useAppStore } from "@/stores/use-app-store";
+import { cn } from "@/lib/utils";
 import { api } from "@/lib/api-client";
 
 // ─────────────────────────────────────────────────────────────
@@ -46,6 +49,26 @@ type MealCount = {
   total: number;
 };
 
+type UserMealItem = {
+  mealId: string;
+  mealName: string;
+  mealIcon: string;
+  mealColor: string;
+  status: string;
+  locked: boolean;
+};
+
+type UserMealStatus = {
+  userId: string;
+  name: string;
+  email: string;
+  room: string | null;
+  avatarUrl: string | null;
+  onCount: number;
+  offCount: number;
+  meals: UserMealItem[];
+};
+
 type KitchenResponse = {
   date: string;
   counts: MealCount[];
@@ -56,6 +79,7 @@ type KitchenResponse = {
     guests: number;
     off: number;
   };
+  userMealStatus?: UserMealStatus[];
 };
 
 type ApiResponse<T> = { success: boolean; data: T };
@@ -132,6 +156,7 @@ export function KitchenView() {
   }, [counts]);
 
   const monthTotals = resp?.data?.monthTotals ?? { meals: 0, guests: 0, off: 0 };
+  const userMealStatus = resp?.data?.userMealStatus;
 
   // USER role or server denied access — kitchen is admin/manager only
   if (isUser || resp?.data?.access === false) {
@@ -242,6 +267,75 @@ export function KitchenView() {
               ))}
             </div>
           </StaggerItem>
+
+          {/* User meal status — admin can see each user's ON/OFF per meal */}
+          {userMealStatus && userMealStatus.length > 0 && (
+            <StaggerItem>
+              <GlassCard className="p-4" hover={false}>
+                <div className="flex items-center gap-2 mb-3">
+                  <Users className="h-5 w-5 text-primary" />
+                  <h3 className="font-semibold">User Meal Status</h3>
+                  <span className="text-xs text-muted-foreground">· {format(date, "d MMM yyyy")}</span>
+                </div>
+                <div className="max-h-96 overflow-y-auto no-scrollbar space-y-2">
+                  {userMealStatus.map((u) => (
+                    <div
+                      key={u.userId}
+                      className="flex items-center gap-3 p-2.5 rounded-2xl glass-soft"
+                    >
+                      {/* Avatar */}
+                      <div className="grid place-items-center h-9 w-9 rounded-xl bg-primary/15 text-primary shrink-0 text-xs font-bold">
+                        {u.name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase()}
+                      </div>
+                      {/* Name + room */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{u.name}</p>
+                        {u.room && (
+                          <p className="text-[11px] text-muted-foreground">Room {u.room}</p>
+                        )}
+                      </div>
+                      {/* Per-meal status pills */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        {u.meals.map((m) => {
+                          const isOn = m.status === "ON" || m.status === "LOCKED";
+                          const isOff = m.status === "OFF";
+                          const isLocked = m.locked || m.status === "LOCKED";
+                          return (
+                            <div
+                              key={m.mealId}
+                              title={`${m.mealName}: ${m.status}`}
+                              className={cn(
+                                "grid place-items-center h-7 w-7 rounded-lg text-xs transition-all",
+                                isOn && !isLocked && "bg-success/15 text-success",
+                                isOn && isLocked && "bg-success/10 text-success/60",
+                                isOff && "bg-warning/15 text-warning",
+                                !isOn && !isOff && "bg-muted text-muted-foreground"
+                              )}
+                            >
+                              {m.mealIcon}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {/* ON/OFF count badges */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        {u.onCount > 0 && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] bg-success/15 text-success px-1.5 py-0.5 rounded-full font-medium">
+                            <Check className="h-2.5 w-2.5" /> {u.onCount}
+                          </span>
+                        )}
+                        {u.offCount > 0 && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] bg-warning/15 text-warning px-1.5 py-0.5 rounded-full font-medium">
+                            <X className="h-2.5 w-2.5" /> {u.offCount}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </GlassCard>
+            </StaggerItem>
+          )}
         </>
       )}
     </StaggerGroup>

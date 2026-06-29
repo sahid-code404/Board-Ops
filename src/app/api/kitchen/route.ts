@@ -79,7 +79,41 @@ export async function GET(req: Request) {
       where: { status: "ACTIVE", role: "USER" },
     });
 
-    return ok({ date: target.toISOString(), counts, activeUsers, monthTotals });
+    // Per-user meal status for the selected date — admin can see who's ON/OFF
+    const activeResidents = await db.user.findMany({
+      where: { status: "ACTIVE", role: "USER" },
+      select: { id: true, name: true, email: true, room: true, avatarUrl: true },
+      orderBy: { name: "asc" },
+    });
+
+    const userMealStatus = activeResidents.map((u) => {
+      const userEntries = entries.filter((e) => e.userId === u.id);
+      const mealsOn = meals.map((m) => {
+        const entry = userEntries.find((e) => e.mealId === m.id);
+        return {
+          mealId: m.id,
+          mealName: m.displayName,
+          mealIcon: m.icon,
+          mealColor: m.color,
+          status: entry?.status ?? "—",
+          locked: entry?.locked ?? false,
+        };
+      });
+      const onCount = mealsOn.filter((m) => m.status === "ON" || m.status === "LOCKED").length;
+      const offCount = mealsOn.filter((m) => m.status === "OFF").length;
+      return {
+        userId: u.id,
+        name: u.name,
+        email: u.email,
+        room: u.room,
+        avatarUrl: u.avatarUrl,
+        onCount,
+        offCount,
+        meals: mealsOn,
+      };
+    });
+
+    return ok({ date: target.toISOString(), counts, activeUsers, monthTotals, userMealStatus });
   } catch (e) {
     return handleApiError(e);
   }
