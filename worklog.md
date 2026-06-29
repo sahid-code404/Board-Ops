@@ -1502,3 +1502,33 @@ Stage Summary:
 - Funds page user pills now match billing page's BillRow aesthetic (avatar + name + status badge + Total/Deposit/Due transaction strip + room row).
 - Funds page has a horizontal scrollable All/Due/Paid sort bar with live count badges.
 - All changes verified end-to-end in the browser with no errors.
+
+---
+Task ID: BILLING-KPI-REFRESH
+Agent: main (orchestrator)
+Task: Remove the Outstanding KPI from billing; make billing KPIs look like meal counts (kitchen) KPIs.
+
+Work Log:
+- Removed the "Outstanding" KpiCard from billing-view (was admin-only, between Total Collected and Overdue Amount).
+- Removed now-unused `TrendingUp` import and `totalOutstanding` from the `kpis` memo (no longer consumed).
+- Restyled `billing-view.tsx` `KpiCard` to match kitchen-view's `KpiCard`:
+  * Added `relative overflow-hidden` + `whileHover={{ y: -2 }}` on the GlassCard.
+  * Added blurred color blob: `absolute -top-8 -right-8 h-24 w-24 rounded-full blur-3xl opacity-30` with `background: colorVar`.
+  * Wrapped content in `relative` div.
+  * Icon tile: `h-10 w-10` → `h-9 w-9 rounded-2xl` (kitchen size), background `color-mix 18%` (was 15%), kept `color: colorVar` so the icon inherits the accent.
+  * Icons: `h-5 w-5` → `h-4 w-4` (kitchen size).
+  * Label: `text-xs` → `text-[11px]` (kitchen size).
+  * Value: kept `text-2xl font-bold tracking-tight tabular-nums` with AnimatedCounter.
+  * Added optional `sub` prop rendered as `text-[10px] text-muted-foreground mt-1` (kitchen pattern).
+- KPI grid: `grid-kpi` (auto-fit) → fixed `grid grid-cols-3` for admin (3 KPIs) / `grid grid-cols-2` for user (2 KPIs). Matches kitchen's fixed 3-col layout.
+- Added sub labels: Total Billed → "All bills" / "Your bills"; Total Collected → "Paid amount"; Overdue Amount → "{n} overdue" / "None overdue".
+- Updated loading skeleton: dynamic KPI count (3 for admin, 2 for user) in matching `grid-cols-3`/`grid-cols-2`.
+- Renamed BillDetail panel label "Outstanding" → "Due" for terminology consistency with the BillRow transaction strip.
+- Lint: `bun run lint` passes (0 errors, 1 pre-existing warning).
+- Browser self-verification (agent-browser): signed in as admin → Billing page renders 3 KPIs: "Total Billed ₹27,900 / All bills", "Total Collected ₹4,650 / Paid amount", "Overdue Amount ₹0 / None overdue". Verified DOM structure matches kitchen: blurred color blob present, icon tile `h-9 w-9 rounded-2xl`, relative wrapper present. No console/runtime errors.
+
+Stage Summary:
+- Billing KPIs now visually match the meal counts (kitchen) KPI aesthetic: glass card + glow + blurred color blob + 9×9 rounded-2xl icon tile + text-[11px] label + text-2xl value + text-[10px] sub + hover lift.
+- Outstanding KPI removed; admin now sees 3 KPIs (Total Billed, Total Collected, Overdue Amount), users see 2 (Total Billed, Overdue Amount).
+- Fixed grid-cols-3/cols-2 layout (was auto-fit) so the KPIs sit in a clean single row like kitchen.
+- Verified end-to-end in the browser with no errors.

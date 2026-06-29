@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
   Wallet,
-  TrendingUp,
   AlertCircle,
   Receipt,
   Plus,
@@ -360,11 +359,10 @@ export function BillingView() {
     const active = allBills.filter((b) => b.status !== "VOID");
     const totalBilled = active.reduce((s, b) => s + b.totalAmount, 0);
     const totalCollected = active.reduce((s, b) => s + b.paidAmount, 0);
-    const totalOutstanding = active.reduce((s, b) => s + b.dueAmount, 0);
     const overdueBills = active.filter((b) => isOverdue(b));
     const overdueCount = overdueBills.length;
     const overdueAmount = overdueBills.reduce((s, b) => s + b.dueAmount, 0);
-    return { totalBilled, totalCollected, totalOutstanding, overdueCount, overdueAmount };
+    return { totalBilled, totalCollected, overdueCount, overdueAmount };
   }, [allBills]);
 
   // ── Filtered list ──
@@ -387,8 +385,8 @@ export function BillingView() {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div className="grid-kpi gap-3">
-          {Array.from({ length: 4 }).map((_, i) => (
+        <div className={cn("gap-3", isAdmin ? "grid grid-cols-3" : "grid grid-cols-2")}>
+          {Array.from({ length: isAdmin ? 3 : 2 }).map((_, i) => (
             <ShimmerSkeleton key={i} className="h-32" />
           ))}
         </div>
@@ -506,40 +504,34 @@ export function BillingView() {
         </StaggerItem>
       )}
 
-      {/* KPIs — admins see all 4, users see Total Billed + Overdue Amount */}
+      {/* KPIs — admins see 3 (Total Billed, Total Collected, Overdue), users see 2 (Total Billed, Overdue) */}
       <StaggerItem>
-        <div className="grid-kpi gap-3">
+        <div className={cn("gap-3", isAdmin ? "grid grid-cols-3" : "grid grid-cols-2")}>
           <KpiCard
             label="Total Billed"
             value={kpis.totalBilled}
-            icon={<Wallet className="h-5 w-5" />}
+            icon={<Wallet className="h-4 w-4" />}
             color="primary"
             prefix="₹"
+            sub={isAdmin ? "All bills" : "Your bills"}
           />
           {isAdmin && (
             <KpiCard
               label="Total Collected"
               value={kpis.totalCollected}
-              icon={<CheckCircle2 className="h-5 w-5" />}
+              icon={<CheckCircle2 className="h-4 w-4" />}
               color="success"
               prefix="₹"
-            />
-          )}
-          {isAdmin && (
-            <KpiCard
-              label="Outstanding"
-              value={kpis.totalOutstanding}
-              icon={<TrendingUp className="h-5 w-5" />}
-              color="warning"
-              prefix="₹"
+              sub="Paid amount"
             />
           )}
           <KpiCard
             label="Overdue Amount"
             value={kpis.overdueAmount}
-            icon={<AlertCircle className="h-5 w-5" />}
+            icon={<AlertCircle className="h-4 w-4" />}
             color="danger"
             prefix="₹"
+            sub={kpis.overdueCount > 0 ? `${kpis.overdueCount} overdue` : "None overdue"}
           />
         </div>
       </StaggerItem>
@@ -925,12 +917,14 @@ function KpiCard({
   icon,
   color,
   prefix,
+  sub,
 }: {
   label: string;
   value: number;
   icon: React.ReactNode;
   color: "primary" | "success" | "warning" | "danger" | "info";
   prefix?: string;
+  sub?: string;
 }) {
   const colorVar =
     color === "primary"
@@ -943,21 +937,34 @@ function KpiCard({
             ? "var(--destructive)"
             : "var(--info)";
   return (
-    <GlassCard className="p-4" glow={color === "danger" ? "danger" : color === "warning" ? "warning" : color === "success" ? "success" : "primary"}>
-      <div className="flex items-start justify-between mb-3">
-        <div
-          className="grid place-items-center h-10 w-10 rounded-2xl"
-          style={{
-            background: `color-mix(in oklch, ${colorVar} 15%, transparent)`,
-            color: colorVar,
-          }}
-        >
-          {icon}
+    <GlassCard
+      className="p-4 relative overflow-hidden"
+      glow={color === "danger" ? "danger" : color === "warning" ? "warning" : color === "success" ? "success" : "primary"}
+      whileHover={{ y: -2 }}
+    >
+      <div
+        className="absolute -top-8 -right-8 h-24 w-24 rounded-full blur-3xl opacity-30"
+        style={{ background: colorVar }}
+      />
+      <div className="relative">
+        <div className="flex items-start justify-between mb-3">
+          <div
+            className="grid place-items-center h-9 w-9 rounded-2xl"
+            style={{
+              background: `color-mix(in oklch, ${colorVar} 18%, transparent)`,
+              color: colorVar,
+            }}
+          >
+            {icon}
+          </div>
         </div>
-      </div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <div className="text-2xl font-bold tracking-tight tabular-nums">
-        <AnimatedCounter value={value} prefix={prefix || ""} />
+        <p className="text-[11px] text-muted-foreground">{label}</p>
+        <div className="text-2xl font-bold tracking-tight tabular-nums">
+          <AnimatedCounter value={value} prefix={prefix || ""} />
+        </div>
+        {sub && (
+          <p className="text-[10px] text-muted-foreground mt-1">{sub}</p>
+        )}
       </div>
     </GlassCard>
   );
@@ -1188,7 +1195,7 @@ const BillDetail = memo(function BillDetail({ bill, isAdmin }: { bill: Bill; isA
         </div>
         <div className="flex items-center justify-between pt-2 border-t border-border/40">
           <span className="text-sm text-warning flex items-center gap-1">
-            <AlertCircle className="h-3.5 w-3.5" /> Outstanding
+            <AlertCircle className="h-3.5 w-3.5" /> Due
           </span>
           <span className="text-base font-bold text-warning tabular-nums">
             {formatINR(bill.dueAmount)}
