@@ -4,7 +4,7 @@ import { useState, useMemo, memo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { isSameMonth, format } from "date-fns";
+import { isSameMonth, isSameDay, format, addDays, startOfMonth, endOfMonth, eachDayOfInterval, getDay } from "date-fns";
 import {
   ChevronLeft,
   ChevronRight,
@@ -15,6 +15,9 @@ import {
   Check,
   X,
   ChevronDown,
+  CalendarDays,
+  List,
+  Sun,
 } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
@@ -83,6 +86,7 @@ type EntriesResponse = {
 };
 
 type ApiResponse<T> = { success: boolean; data: T };
+type ViewMode = "agenda" | "calendar" | "day";
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -107,6 +111,8 @@ function parseDateStr(s: string): Date {
   return new Date(y, m - 1, d);
 }
 
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
 // ─────────────────────────────────────────────────────────────
 // Main view
 // ─────────────────────────────────────────────────────────────
@@ -114,12 +120,15 @@ function parseDateStr(s: string): Date {
 export function UserMealsView() {
   const qc = useQueryClient();
   const now = new Date();
+  const [viewMode, setViewMode] = useState<ViewMode>("agenda");
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [selectedDay, setSelectedDay] = useState(new Date());
   const isThisMonth = isSameMonth(new Date(selectedYear, selectedMonth, 1), now);
   const [expandedDay, setExpandedDay] = useState<string | null>(toDateString(now));
 
-  const { data: monthData, isLoading } = useQuery({
+  // Month query — for agenda + calendar views
+  const { data: monthData, isLoading: monthLoading } = useQuery({
     queryKey: ["user-meals", { month: selectedMonth, year: selectedYear }],
     queryFn: async () => {
       const r = await api.get<ApiResponse<EntriesResponse>>("/meals/entries", {
@@ -128,34 +137,54 @@ export function UserMealsView() {
       return r.data;
     },
     placeholderData: (prev) => prev,
+    enabled: viewMode !== "day",
   });
 
-  // Normalize: build a sorted array of days with their meal entries
-  const days = useMemo(() => {
-    if (!monthData) return [];
-    const mealMap = new Map(monthData.meals.map((m) => [m.id, m]));
-    const result: { dateStr: string; date: Date; entries: MealEntry[] }[] = [];
+  // Single-day query — for day view
+  const dayStr = toDateString(selectedDay);
+  const { data: dayData, isLoading: dayLoading } = useQuery({
+    queryKey: ["user-meals-day", dayStr],
+    queryFn: async () => {
+      const r = await api.get<ApiResponse<EntriesResponse>>("/meals/entries", {
+        params: { date: dayStr },
+      });
+      return r.data;
+    },
+    placeholderData: (prev) => prev,
+    enabled: viewMode === "day",
+  });
 
-    const dateKeys = Object.keys(monthData.byDate).sort();
+  const toggleMutation = useMutation({
+    mutationFn: async ({ entryId, status }: { entryId: string; status: "ON" | "OFF" }) => {
+      await api.patch("/meals/toggle", { entryId, status });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["user-meals"] });
+      qc.invalidateQueries({ queryKey: ["user-meals-day"] });
+      qc.invalidateQueries({ queryKey: ["kitchen"] });
+    },
+    onError: (e: Error) => toast.error(e.message || "Failed to toggle meal"),
+  });
+
+  // Normalize month data into sorted days array
+  const days = useMemo(() => {
+    const src = monthData;
+    if (!src) return [];
+    const mealMap = new Map(src.meals.map((m) => [m.id, m]));
+    const result: { dateStr: string; date: Date; entries: MealEntry[] }[] = [];
+    const dateKeys = Object.keys(src.byDate).sort();
     for (const dateStr of dateKeys) {
-      const flatEntries = monthData.byDate[dateStr];
+      const flatEntries = src.byDate[dateStr];
       if (!flatEntries || flatEntries.length === 0) continue;
       const entries: MealEntry[] = flatEntries.map((f) => {
         const meal = mealMap.get(f.mealId);
         return {
-          id: f.id,
-          status: f.status,
-          locked: f.locked,
-          editableUntil: f.editableUntil,
-          serviceDate: f.serviceDate,
+          id: f.id, status: f.status, locked: f.locked,
+          editableUntil: f.editableUntil, serviceDate: f.serviceDate,
           meal: {
-            id: f.mealId,
-            name: f.mealName,
-            displayName: f.mealDisplayName,
-            icon: f.mealIcon,
-            color: f.mealColor,
-            startTime: f.startTime,
-            endTime: f.endTime,
+            id: f.mealId, name: f.mealName, displayName: f.mealDisplayName,
+            icon: f.mealIcon, color: f.mealColor,
+            startTime: f.startTime, endTime: f.endTime,
             cutoffTime: meal?.cutoffTime ?? "",
           },
         };
@@ -165,18 +194,34 @@ export function UserMealsView() {
     return result;
   }, [monthData]);
 
-  const toggleMutation = useMutation({
-    mutationFn: async ({ entryId, status }: { entryId: string; status: "ON" | "OFF" }) => {
-      await api.patch("/meals/toggle", { entryId, status });
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["user-meals"] });
-      qc.invalidateQueries({ queryKey: ["kitchen"] });
-    },
-    onError: (e: Error) => toast.error(e.message || "Failed to toggle meal"),
-  });
+  // Map for quick lookup by dateStr
+  const dayMap = useMemo(() => {
+    const m = new Map<string, MealEntry[]>();
+    for (const d of days) m.set(d.dateStr, d.entries);
+    return m;
+  }, [days]);
 
-  // Month-level stats
+  // Day view entries
+  const dayEntries = useMemo(() => {
+    if (!dayData) return [];
+    const mealMap = new Map(dayData.meals.map((m) => [m.id, m]));
+    const flat = dayData.byDate[dayStr] ?? [];
+    return flat.map<MealEntry>((f) => {
+      const meal = mealMap.get(f.mealId);
+      return {
+        id: f.id, status: f.status, locked: f.locked,
+        editableUntil: f.editableUntil, serviceDate: f.serviceDate,
+        meal: {
+          id: f.mealId, name: f.mealName, displayName: f.mealDisplayName,
+          icon: f.mealIcon, color: f.mealColor,
+          startTime: f.startTime, endTime: f.endTime,
+          cutoffTime: meal?.cutoffTime ?? "",
+        },
+      };
+    });
+  }, [dayData, dayStr]);
+
+  // Month stats
   const stats = useMemo(() => {
     let on = 0, off = 0, locked = 0;
     for (const day of days) {
@@ -189,9 +234,19 @@ export function UserMealsView() {
     return { on, off, locked };
   }, [days]);
 
+  // Day stats
+  const dayStats = useMemo(() => {
+    const on = dayEntries.filter((e) => e.status === "ON" || e.status === "LOCKED").length;
+    const off = dayEntries.filter((e) => e.status === "OFF").length;
+    const locked = dayEntries.filter((e) => e.locked || e.status === "LOCKED").length;
+    return { on, off, locked };
+  }, [dayEntries]);
+
   const handleToggleDay = useCallback((dateStr: string) => {
     setExpandedDay((prev) => (prev === dateStr ? null : dateStr));
   }, []);
+
+  const isLoading = viewMode === "day" ? dayLoading : monthLoading;
 
   if (isLoading) {
     return (
@@ -213,59 +268,128 @@ export function UserMealsView() {
 
   return (
     <StaggerGroup className="space-y-4 pb-6">
-      {/* Month picker — same capsule design as billing/expenses */}
+      {/* View mode toggle — segmented control */}
       <StaggerItem>
-        <div className="flex items-center justify-center gap-4">
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => {
-              const d = new Date(selectedYear, selectedMonth - 1, 1);
-              setSelectedMonth(d.getMonth());
-              setSelectedYear(d.getFullYear());
-            }}
-            aria-label="Previous month"
-            className="grid place-items-center h-10 w-10 rounded-full glass-strong shrink-0 ring-1 ring-border/40 hover:ring-primary/40 transition-all"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </motion.button>
-
-          <button
-            onClick={() => {
-              if (!isThisMonth) {
-                setSelectedMonth(now.getMonth());
-                setSelectedYear(now.getFullYear());
-              }
-            }}
-            className="flex-1 max-w-[280px] flex items-center justify-center gap-2.5 glass-soft rounded-full px-6 py-2.5 transition-all hover:ring-1 hover:ring-primary/30"
-          >
-            <Calendar className="h-4 w-4 text-primary shrink-0" />
-            <div className="leading-tight text-center">
-              <p className="text-sm font-bold text-primary">
-                {new Date(selectedYear, selectedMonth).toLocaleDateString("en-US", { month: "long" })}
-              </p>
-              <p className="text-[11px] text-muted-foreground">{selectedYear}</p>
-            </div>
-            {!isThisMonth && (
-              <RotateCcw className="h-3 w-3 text-muted-foreground shrink-0" />
-            )}
-          </button>
-
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => {
-              const d = new Date(selectedYear, selectedMonth + 1, 1);
-              setSelectedMonth(d.getMonth());
-              setSelectedYear(d.getFullYear());
-            }}
-            aria-label="Next month"
-            className="grid place-items-center h-10 w-10 rounded-full glass-strong shrink-0 ring-1 ring-border/40 hover:ring-primary/40 transition-all"
-          >
-            <ChevronRight className="h-5 w-5" />
-          </motion.button>
+        <div className="flex items-center justify-center">
+          <div className="inline-flex items-center gap-1 glass-soft rounded-2xl p-1">
+            {([
+              { mode: "agenda" as const, label: "Agenda", icon: List },
+              { mode: "calendar" as const, label: "Calendar", icon: CalendarDays },
+              { mode: "day" as const, label: "Day", icon: Sun },
+            ]).map((opt) => {
+              const active = viewMode === opt.mode;
+              const Icon = opt.icon;
+              return (
+                <button
+                  key={opt.mode}
+                  onClick={() => setViewMode(opt.mode)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-[11px] font-medium transition-all shrink-0",
+                    active
+                      ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </StaggerItem>
 
-      {/* KPI cards — month totals */}
+      {/* Picker — month picker for agenda/calendar, day picker for day view */}
+      {viewMode === "day" ? (
+        <StaggerItem>
+          <div className="flex items-center justify-center gap-4">
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => setSelectedDay((d) => addDays(d, -1))}
+              aria-label="Previous day"
+              className="grid place-items-center h-10 w-10 rounded-full glass-strong shrink-0 ring-1 ring-border/40 hover:ring-primary/40 transition-all"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </motion.button>
+            <button
+              onClick={() => !isSameDay(selectedDay, now) && setSelectedDay(new Date())}
+              className="flex-1 max-w-[280px] flex items-center justify-center gap-2.5 glass-soft rounded-full px-6 py-2.5 transition-all hover:ring-1 hover:ring-primary/30"
+            >
+              <Calendar className="h-4 w-4 text-primary shrink-0" />
+              <div className="leading-tight text-center">
+                <p className="text-sm font-bold text-primary">
+                  {isSameDay(selectedDay, now) ? "Today" : format(selectedDay, "d MMM")}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  {format(selectedDay, "EEE, d MMM yyyy")}
+                </p>
+              </div>
+              {!isSameDay(selectedDay, now) && (
+                <RotateCcw className="h-3 w-3 text-muted-foreground shrink-0" />
+              )}
+            </button>
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => setSelectedDay((d) => addDays(d, 1))}
+              aria-label="Next day"
+              className="grid place-items-center h-10 w-10 rounded-full glass-strong shrink-0 ring-1 ring-border/40 hover:ring-primary/40 transition-all"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </motion.button>
+          </div>
+        </StaggerItem>
+      ) : (
+        <StaggerItem>
+          <div className="flex items-center justify-center gap-4">
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => {
+                const d = new Date(selectedYear, selectedMonth - 1, 1);
+                setSelectedMonth(d.getMonth());
+                setSelectedYear(d.getFullYear());
+              }}
+              aria-label="Previous month"
+              className="grid place-items-center h-10 w-10 rounded-full glass-strong shrink-0 ring-1 ring-border/40 hover:ring-primary/40 transition-all"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </motion.button>
+            <button
+              onClick={() => {
+                if (!isThisMonth) {
+                  setSelectedMonth(now.getMonth());
+                  setSelectedYear(now.getFullYear());
+                }
+              }}
+              className="flex-1 max-w-[280px] flex items-center justify-center gap-2.5 glass-soft rounded-full px-6 py-2.5 transition-all hover:ring-1 hover:ring-primary/30"
+            >
+              <Calendar className="h-4 w-4 text-primary shrink-0" />
+              <div className="leading-tight text-center">
+                <p className="text-sm font-bold text-primary">
+                  {new Date(selectedYear, selectedMonth).toLocaleDateString("en-US", { month: "long" })}
+                </p>
+                <p className="text-[11px] text-muted-foreground">{selectedYear}</p>
+              </div>
+              {!isThisMonth && (
+                <RotateCcw className="h-3 w-3 text-muted-foreground shrink-0" />
+              )}
+            </button>
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => {
+                const d = new Date(selectedYear, selectedMonth + 1, 1);
+                setSelectedMonth(d.getMonth());
+                setSelectedYear(d.getFullYear());
+              }}
+              aria-label="Next month"
+              className="grid place-items-center h-10 w-10 rounded-full glass-strong shrink-0 ring-1 ring-border/40 hover:ring-primary/40 transition-all"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </motion.button>
+          </div>
+        </StaggerItem>
+      )}
+
+      {/* KPI cards */}
       <StaggerItem>
         <div className="grid grid-cols-3 gap-3">
           <GlassCard className="p-4" glow="success" hover={false}>
@@ -274,7 +398,7 @@ export function UserMealsView() {
             </div>
             <p className="text-xs text-muted-foreground">Meals ON</p>
             <div className="text-2xl font-bold tracking-tight">
-              <AnimatedCounter value={stats.on} />
+              <AnimatedCounter value={viewMode === "day" ? dayStats.on : stats.on} />
             </div>
           </GlassCard>
           <GlassCard className="p-4" glow="warning" hover={false}>
@@ -283,7 +407,7 @@ export function UserMealsView() {
             </div>
             <p className="text-xs text-muted-foreground">Meals OFF</p>
             <div className="text-2xl font-bold tracking-tight">
-              <AnimatedCounter value={stats.off} />
+              <AnimatedCounter value={viewMode === "day" ? dayStats.off : stats.off} />
             </div>
           </GlassCard>
           <GlassCard className="p-4" glow="danger" hover={false}>
@@ -292,74 +416,189 @@ export function UserMealsView() {
             </div>
             <p className="text-xs text-muted-foreground">Locked</p>
             <div className="text-2xl font-bold tracking-tight">
-              <AnimatedCounter value={stats.locked} />
+              <AnimatedCounter value={viewMode === "day" ? dayStats.locked : stats.locked} />
             </div>
           </GlassCard>
         </div>
       </StaggerItem>
 
-      {/* Agenda — list of days with expandable meal details */}
-      <StaggerItem>
-        {days.length === 0 ? (
-          <GlassCard className="p-10 text-center" hover={false}>
-            <Utensils className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-            <p className="text-sm text-muted-foreground">
-              No meals configured for {new Date(selectedYear, selectedMonth).toLocaleDateString("en-US", { month: "long", year: "numeric" })}.
-            </p>
-          </GlassCard>
-        ) : (
-          <div className="space-y-2">
-            <AnimatePresence mode="popLayout">
-              {days.map((day) => (
-                <motion.div
-                  key={day.dateStr}
-                  layout
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.98 }}
-                  transition={{ type: "spring", stiffness: 280, damping: 26 }}
-                >
-                  <DayRow
-                    dateStr={day.dateStr}
-                    date={day.date}
-                    entries={day.entries}
-                    isExpanded={expandedDay === day.dateStr}
-                    onToggleExpand={() => handleToggleDay(day.dateStr)}
-                    onToggleMeal={(entryId, status) =>
-                      toggleMutation.mutate({ entryId, status })
-                    }
-                    loading={toggleMutation.isPending}
-                  />
-                </motion.div>
+      {/* Content — agenda / calendar / day */}
+      {viewMode === "agenda" && (
+        <StaggerItem>
+          {days.length === 0 ? (
+            <GlassCard className="p-10 text-center" hover={false}>
+              <Utensils className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+              <p className="text-sm text-muted-foreground">
+                No meals configured for {new Date(selectedYear, selectedMonth).toLocaleDateString("en-US", { month: "long", year: "numeric" })}.
+              </p>
+            </GlassCard>
+          ) : (
+            <div className="space-y-2">
+              <AnimatePresence mode="popLayout">
+                {days.map((day) => (
+                  <motion.div
+                    key={day.dateStr}
+                    layout
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    transition={{ type: "spring", stiffness: 280, damping: 26 }}
+                  >
+                    <DayRow
+                      dateStr={day.dateStr}
+                      date={day.date}
+                      entries={day.entries}
+                      isExpanded={expandedDay === day.dateStr}
+                      onToggleExpand={() => handleToggleDay(day.dateStr)}
+                      onToggleMeal={(entryId, status) =>
+                        toggleMutation.mutate({ entryId, status })
+                      }
+                      loading={toggleMutation.isPending}
+                    />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+        </StaggerItem>
+      )}
+
+      {viewMode === "calendar" && (
+        <StaggerItem>
+          <GlassCard className="p-4" hover={false}>
+            {/* Weekday headers */}
+            <div className="grid grid-cols-7 gap-1 mb-2">
+              {WEEKDAYS.map((wd) => (
+                <div key={wd} className="text-center text-[10px] font-medium text-muted-foreground py-1">
+                  {wd}
+                </div>
               ))}
-            </AnimatePresence>
-          </div>
-        )}
-      </StaggerItem>
+            </div>
+            {/* Calendar grid */}
+            <div className="grid grid-cols-7 gap-1">
+              {(() => {
+                const monthStart = startOfMonth(new Date(selectedYear, selectedMonth, 1));
+                const monthEnd = endOfMonth(monthStart);
+                const startPad = getDay(monthStart);
+                const allDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+                const cells: (Date | null)[] = [];
+                for (let i = 0; i < startPad; i++) cells.push(null);
+                allDays.forEach((d) => cells.push(d));
+                while (cells.length % 7 !== 0) cells.push(null);
+
+                return cells.map((date, i) => {
+                  if (!date) return <div key={`pad-${i}`} className="aspect-square" />;
+                  const ds = toDateString(date);
+                  const entries = dayMap.get(ds) ?? [];
+                  const isToday = ds === toDateString(now);
+                  const onCount = entries.filter((e) => e.status === "ON" || e.status === "LOCKED").length;
+                  const offCount = entries.filter((e) => e.status === "OFF").length;
+                  const hasLocked = entries.some((e) => e.locked || e.status === "LOCKED");
+                  const isPast = date < now && !isToday;
+
+                  return (
+                    <button
+                      key={ds}
+                      onClick={() => {
+                        setSelectedDay(date);
+                        setViewMode("day");
+                      }}
+                      className={cn(
+                        "aspect-square rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all text-[10px]",
+                        isToday
+                          ? "bg-primary/15 ring-1 ring-primary/40"
+                          : entries.length > 0
+                            ? "glass-soft hover:ring-1 hover:ring-primary/30"
+                            : "opacity-40",
+                        isPast && "opacity-60"
+                      )}
+                    >
+                      <span className={cn("font-bold", isToday ? "text-primary" : "text-foreground")}>
+                        {format(date, "d")}
+                      </span>
+                      {entries.length > 0 && (
+                        <div className="flex items-center gap-0.5">
+                          {onCount > 0 && (
+                            <span className="h-1.5 w-1.5 rounded-full bg-success" />
+                          )}
+                          {offCount > 0 && (
+                            <span className="h-1.5 w-1.5 rounded-full bg-warning" />
+                          )}
+                          {hasLocked && (
+                            <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
+                          )}
+                        </div>
+                      )}
+                    </button>
+                  );
+                });
+              })()}
+            </div>
+            {/* Legend */}
+            <div className="flex items-center justify-center gap-4 mt-3 pt-3 border-t border-border/40">
+              <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                <span className="h-1.5 w-1.5 rounded-full bg-success" /> ON
+              </span>
+              <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                <span className="h-1.5 w-1.5 rounded-full bg-warning" /> OFF
+              </span>
+              <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                <span className="h-1.5 w-1.5 rounded-full bg-destructive" /> Locked
+              </span>
+            </div>
+          </GlassCard>
+        </StaggerItem>
+      )}
+
+      {viewMode === "day" && (
+        <StaggerItem>
+          {dayEntries.length === 0 ? (
+            <GlassCard className="p-10 text-center" hover={false}>
+              <Utensils className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+              <p className="text-sm text-muted-foreground">
+                No meals configured for {format(selectedDay, "d MMMM yyyy")}.
+              </p>
+            </GlassCard>
+          ) : (
+            <div className="space-y-3">
+              <AnimatePresence mode="popLayout">
+                {dayEntries.map((entry) => (
+                  <motion.div
+                    key={entry.id}
+                    layout
+                    initial={{ opacity: 0, y: 12, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ type: "spring", stiffness: 280, damping: 26 }}
+                  >
+                    <DayMealCard
+                      entry={entry}
+                      onToggle={(newStatus) =>
+                        toggleMutation.mutate({ entryId: entry.id, status: newStatus })
+                      }
+                      loading={toggleMutation.isPending}
+                    />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+        </StaggerItem>
+      )}
     </StaggerGroup>
   );
 }
 
 // ─────────────────────────────────────────────────────────────
-// Day row — collapsed shows date + summary, expanded shows meal cards
+// Day row — for agenda view (collapsible)
 // ─────────────────────────────────────────────────────────────
 
 const DayRow = memo(function DayRow({
-  dateStr,
-  date,
-  entries,
-  isExpanded,
-  onToggleExpand,
-  onToggleMeal,
-  loading,
+  dateStr, date, entries, isExpanded, onToggleExpand, onToggleMeal, loading,
 }: {
-  dateStr: string;
-  date: Date;
-  entries: MealEntry[];
-  isExpanded: boolean;
-  onToggleExpand: () => void;
-  onToggleMeal: (entryId: string, status: "ON" | "OFF") => void;
-  loading: boolean;
+  dateStr: string; date: Date; entries: MealEntry[];
+  isExpanded: boolean; onToggleExpand: () => void;
+  onToggleMeal: (entryId: string, status: "ON" | "OFF") => void; loading: boolean;
 }) {
   const isToday = toDateString(new Date()) === dateStr;
   const onCount = entries.filter((e) => e.status === "ON" || e.status === "LOCKED").length;
@@ -368,18 +607,11 @@ const DayRow = memo(function DayRow({
 
   return (
     <GlassCard className="overflow-hidden" hover={false}>
-      {/* Day header — clickable to expand/collapse */}
       <button
         onClick={onToggleExpand}
         className="w-full flex items-center gap-3 p-3 hover:bg-secondary/20 transition-colors"
       >
-        {/* Date badge */}
-        <div
-          className={cn(
-            "grid place-items-center h-11 w-11 rounded-2xl shrink-0 flex-col",
-            isToday ? "bg-primary/15" : "bg-muted/40"
-          )}
-        >
+        <div className={cn("grid place-items-center h-11 w-11 rounded-2xl shrink-0 flex-col", isToday ? "bg-primary/15" : "bg-muted/40")}>
           <span className={cn("text-xs font-bold leading-none", isToday ? "text-primary" : "text-muted-foreground")}>
             {format(date, "EEE").toUpperCase()}
           </span>
@@ -387,8 +619,6 @@ const DayRow = memo(function DayRow({
             {format(date, "d")}
           </span>
         </div>
-
-        {/* Summary */}
         <div className="flex-1 min-w-0 text-left">
           <p className={cn("text-sm font-medium", isToday && "text-primary")}>
             {isToday ? "Today" : format(date, "EEEE, d MMMM")}
@@ -411,14 +641,10 @@ const DayRow = memo(function DayRow({
             )}
           </div>
         </div>
-
-        {/* Expand chevron */}
         <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
           <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
         </motion.div>
       </button>
-
-      {/* Expanded meal cards */}
       <AnimatePresence initial={false}>
         {isExpanded && (
           <motion.div
@@ -446,67 +672,81 @@ const DayRow = memo(function DayRow({
 });
 
 // ─────────────────────────────────────────────────────────────
-// Meal card — compact, with toggle switch
+// Compact meal card — for agenda expanded view
 // ─────────────────────────────────────────────────────────────
 
 const MealCard = memo(function MealCard({
-  entry,
-  onToggle,
-  loading,
+  entry, onToggle, loading,
 }: {
-  entry: MealEntry;
-  onToggle: (status: "ON" | "OFF") => void;
-  loading: boolean;
+  entry: MealEntry; onToggle: (status: "ON" | "OFF") => void; loading: boolean;
 }) {
   const isOn = entry.status === "ON" || entry.status === "LOCKED";
   const isLocked = entry.locked || entry.status === "LOCKED";
 
   return (
     <div className="flex items-center gap-3 p-2.5 rounded-2xl glass-soft">
-      {/* Meal icon */}
-      <div
-        className="grid place-items-center h-10 w-10 rounded-xl shrink-0 text-xl"
-        style={{
-          background: `color-mix(in oklch, ${entry.meal.color} 15%, transparent)`,
-        }}
-      >
+      <div className="grid place-items-center h-10 w-10 rounded-xl shrink-0 text-xl" style={{ background: `color-mix(in oklch, ${entry.meal.color} 15%, transparent)` }}>
         {entry.meal.icon}
       </div>
-
-      {/* Meal info */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{entry.meal.displayName}</p>
         <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-[11px] text-muted-foreground">
-            {to12h(entry.meal.startTime)} – {to12h(entry.meal.endTime)}
-          </span>
-          {isLocked && (
-            <span className="inline-flex items-center gap-0.5 text-[10px] text-destructive">
-              <Lock className="h-2.5 w-2.5" />
-            </span>
-          )}
+          <span className="text-[11px] text-muted-foreground">{to12h(entry.meal.startTime)} – {to12h(entry.meal.endTime)}</span>
+          {isLocked && <Lock className="h-2.5 w-2.5 text-destructive" />}
         </div>
       </div>
-
-      {/* Toggle */}
       <button
         onClick={() => !isLocked && onToggle(isOn ? "OFF" : "ON")}
         disabled={isLocked || loading}
-        className={cn(
-          "relative inline-flex h-7 w-12 items-center rounded-full transition-all shrink-0",
-          isOn ? "bg-success shadow-sm shadow-success/30" : "bg-muted",
-          (isLocked || loading) && "opacity-50 cursor-not-allowed"
-        )}
+        className={cn("relative inline-flex h-7 w-12 items-center rounded-full transition-all shrink-0", isOn ? "bg-success shadow-sm shadow-success/30" : "bg-muted", (isLocked || loading) && "opacity-50 cursor-not-allowed")}
       >
-        <motion.span
-          layout
-          transition={{ type: "spring", stiffness: 500, damping: 30 }}
-          className={cn(
-            "inline-block h-5 w-5 rounded-full bg-white shadow-sm",
-            isOn ? "ml-auto mr-1" : "ml-1"
-          )}
-        />
+        <motion.span layout transition={{ type: "spring", stiffness: 500, damping: 30 }} className={cn("inline-block h-5 w-5 rounded-full bg-white shadow-sm", isOn ? "ml-auto mr-1" : "ml-1")} />
       </button>
     </div>
+  );
+});
+
+// ─────────────────────────────────────────────────────────────
+// Full meal card — for day view (larger, with cutoff info)
+// ─────────────────────────────────────────────────────────────
+
+const DayMealCard = memo(function DayMealCard({
+  entry, onToggle, loading,
+}: {
+  entry: MealEntry; onToggle: (status: "ON" | "OFF") => void; loading: boolean;
+}) {
+  const isOn = entry.status === "ON" || entry.status === "LOCKED";
+  const isLocked = entry.locked || entry.status === "LOCKED";
+
+  return (
+    <GlassCard className="p-4" hover={false}>
+      <div className="flex items-center gap-3">
+        <div className="grid place-items-center h-12 w-12 rounded-2xl shrink-0 text-2xl" style={{ background: `color-mix(in oklch, ${entry.meal.color} 15%, transparent)` }}>
+          {entry.meal.icon}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold truncate">{entry.meal.displayName}</h3>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-xs text-muted-foreground">{to12h(entry.meal.startTime)} – {to12h(entry.meal.endTime)}</span>
+            {isLocked && <span className="inline-flex items-center gap-0.5 text-[10px] text-destructive"><Lock className="h-2.5 w-2.5" /> Locked</span>}
+          </div>
+        </div>
+        <button
+          onClick={() => !isLocked && onToggle(isOn ? "OFF" : "ON")}
+          disabled={isLocked || loading}
+          className={cn("relative inline-flex h-8 w-14 items-center rounded-full transition-all shrink-0", isOn ? "bg-success shadow-md shadow-success/30" : "bg-muted", (isLocked || loading) && "opacity-50 cursor-not-allowed")}
+        >
+          <motion.span layout transition={{ type: "spring", stiffness: 500, damping: 30 }} className={cn("inline-block h-6 w-6 rounded-full bg-white shadow-md", isOn ? "ml-auto mr-1" : "ml-1")} />
+        </button>
+      </div>
+      <div className="flex items-center justify-between mt-3">
+        <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-medium", isOn ? "bg-success/15 text-success" : "bg-muted text-muted-foreground")}>
+          {isLocked ? "🔒 Locked" : isOn ? "ON" : "OFF"}
+        </span>
+        {!isLocked && entry.meal.cutoffTime && (
+          <span className="text-[10px] text-muted-foreground">Cutoff: {to12h(entry.meal.cutoffTime)}</span>
+        )}
+      </div>
+    </GlassCard>
   );
 });
