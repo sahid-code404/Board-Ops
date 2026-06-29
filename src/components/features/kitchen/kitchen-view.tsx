@@ -14,6 +14,7 @@ import {
   CalendarDays,
   Soup,
   Lock,
+  RotateCcw,
 } from "lucide-react";
 import { GlassCard } from "@/components/glass/glass-card";
 import { GlassButton } from "@/components/glass/glass-button";
@@ -153,6 +154,9 @@ export function KitchenView() {
                 {datePickerLabels.bottom}
               </p>
             </div>
+            {!isSameDay(date, new Date()) && (
+              <RotateCcw className="h-3 w-3 text-muted-foreground shrink-0" />
+            )}
           </button>
 
           {/* Right arrow — circular */}
