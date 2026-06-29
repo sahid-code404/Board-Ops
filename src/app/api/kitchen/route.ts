@@ -89,28 +89,27 @@ export async function GET(req: Request) {
 
     const userMealStatus = activeResidents.map((u) => {
       const userEntries = entries.filter((e) => e.userId === u.id);
-      // For past dates (before today), all meals are locked — cutoff has passed.
-      // For today, check the editableUntil. For future dates, nothing is locked.
       const isPastDate = target < new Date(new Date().setHours(0, 0, 0, 0));
       const mealsOn = meals.map((m) => {
         const entry = userEntries.find((e) => e.mealId === m.id);
-        // Compute actual locked state:
-        // - Past dates: always locked (cutoff has passed)
-        // - Today: check DB flag, status, or editableUntil
-        // - Future dates: not locked
         const effectivelyLocked = isPastDate
           ? true
           : entry
             ? (entry.locked || entry.status === "LOCKED" || isLocked(entry.editableUntil))
             : false;
+        // Compute override dynamically: compare current status with original state.
+        // If no entry exists, the meal is in its default state — no override.
+        const originalState = entry?.originalState || m.defaultState;
+        const currentStatus = entry?.status || m.defaultState;
+        const isOverridden = currentStatus !== originalState && currentStatus !== "LOCKED";
         return {
           mealId: m.id,
           mealName: m.displayName,
           mealIcon: m.icon,
           mealColor: m.color,
-          status: entry?.status ?? "—",
+          status: currentStatus,
           locked: effectivelyLocked,
-          overrideFlag: entry?.overrideFlag ?? false,
+          overrideFlag: isOverridden,
         };
       });
       const onCount = mealsOn.filter((m) => m.status === "ON" || m.status === "LOCKED").length;

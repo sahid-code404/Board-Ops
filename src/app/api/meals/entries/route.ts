@@ -64,6 +64,7 @@ export async function GET(req: Request) {
                 mealId: meal.id,
                 serviceDate: d,
                 status: meal.defaultState,
+                originalState: meal.defaultState,
                 editableUntil,
                 locked,
               },

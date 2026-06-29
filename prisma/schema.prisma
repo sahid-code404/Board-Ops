@@ -152,10 +152,11 @@ model MealEntry {
   userId          String
   mealId          String
   serviceDate     DateTime
-  status          String   @default("ON") // ON | OFF | LOCKED | SYSTEM_GENERATED | ADMIN_OVERRIDE | CANCELLED | EXPIRED | ARCHIVED
+  status          String   @default("ON") // ON | OFF | LOCKED — current state
+  originalState   String   @default("ON") // ON | OFF — the system default state, never changes after creation
   editableUntil   DateTime
   locked          Boolean  @default(false)
-  overrideFlag    Boolean  @default(false)
+  overrideFlag    Boolean  @default(false) // computed: status !== originalState
   notes           String?
   updatedBy       String?
   createdAt       DateTime @default(now())

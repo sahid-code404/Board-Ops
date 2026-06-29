@@ -30,16 +30,16 @@ export async function POST(req: Request) {
     if (!entry) {
       const editableUntil = computeEditableUntil(meal, data.serviceDate);
       const newStatus = data.action === "TURN_OFF" ? "OFF" : "ON";
-      // No entry existed — meal was in default state. If admin sets it to the
-      // same as default, no override. If different, mark as overridden.
-      const defaultStatus = meal.defaultState === "ON" ? "ON" : "OFF";
-      const overrideFlag = newStatus !== defaultStatus;
+      const originalState = meal.defaultState === "ON" ? "ON" : "OFF";
+      // Override is TRUE only if current differs from original
+      const overrideFlag = newStatus !== originalState;
       const newEntry = await db.mealEntry.create({
         data: {
           userId: data.userId,
           mealId: data.mealId,
           serviceDate: data.serviceDate,
           status: newStatus,
+          originalState,
           editableUntil,
           locked: false,
           overrideFlag,
@@ -87,19 +87,17 @@ export async function POST(req: Request) {
               ? "ON"
               : entry.status;
 
-    // The admin performed an override action. If the new state is the same as
-    // the meal's default state AND the old state was also the default, then
-    // the admin didn't actually change anything meaningful — clear the flag.
-    // Otherwise, the admin changed the state — mark as overridden.
-    const defaultStatus = meal.defaultState === "ON" ? "ON" : "OFF";
-    const wasAtDefault = entry.status === defaultStatus || entry.status === "LOCKED" && meal.defaultState === "ON";
-    const nowAtDefault = newStatus === defaultStatus;
-    const overrideFlag = !(wasAtDefault && nowAtDefault);
+    // Override is computed dynamically: compare new status with the original state.
+    // If they match, the meal is back to its original system value — no override.
+    // If they differ, the meal has been overridden from its original state.
+    const originalState = entry.originalState || (meal.defaultState === "ON" ? "ON" : "OFF");
+    const overrideFlag = newStatus !== originalState;
 
     const updated = await db.mealEntry.update({
       where: { id: entry.id },
       data: {
         status: newStatus,
+        originalState, // preserve the original state (never change it)
         overrideFlag,
         locked: data.action === "LOCK" ? true : false,
         updatedBy: admin.id,
