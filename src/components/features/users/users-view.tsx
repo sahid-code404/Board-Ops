@@ -699,7 +699,7 @@ export function UsersView() {
             </DialogDescription>
           </DialogHeader>
           <GlassTextarea
-            label="Reason for deletion"
+            label="Reason for deletion (required)"
             rows={3}
             placeholder="Why is this user being deleted?"
             value={deleteReason}

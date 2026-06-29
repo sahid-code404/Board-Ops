@@ -797,7 +797,7 @@ export function BillingView() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <GlassTextarea
-            label="Reason (optional)"
+            label="Reason (required)"
             rows={2}
             placeholder="Why is this bill being deleted?"
             value={deleteReason}
@@ -807,8 +807,14 @@ export function BillingView() {
             <AlertDialogCancel className="rounded-2xl">Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="rounded-2xl bg-destructive text-white hover:bg-destructive/90"
-              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
-              disabled={deleteMutation.isPending}
+              disabled={!deleteReason.trim() || deleteMutation.isPending}
+              onClick={() => {
+                if (!deleteReason.trim()) {
+                  toast.error("A reason is required");
+                  return;
+                }
+                if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
+              }}
             >
               {deleteMutation.isPending ? "Deleting…" : "Delete Bill"}
             </AlertDialogAction>
@@ -835,7 +841,7 @@ export function BillingView() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <GlassTextarea
-            label="Reason (optional)"
+            label="Reason (required)"
             rows={2}
             placeholder="Why are these bills being deleted?"
             value={deleteAllReason}
@@ -845,8 +851,14 @@ export function BillingView() {
             <AlertDialogCancel className="rounded-2xl">Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="rounded-2xl bg-destructive text-white hover:bg-destructive/90"
-              onClick={() => deleteAllMutation.mutate()}
-              disabled={deleteAllMutation.isPending}
+              disabled={!deleteAllReason.trim() || deleteAllMutation.isPending}
+              onClick={() => {
+                if (!deleteAllReason.trim()) {
+                  toast.error("A reason is required");
+                  return;
+                }
+                deleteAllMutation.mutate();
+              }}
             >
               {deleteAllMutation.isPending ? "Deleting…" : `Delete All (${bills.length})`}
             </AlertDialogAction>

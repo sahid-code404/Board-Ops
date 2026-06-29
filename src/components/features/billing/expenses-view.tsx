@@ -710,7 +710,7 @@ export function ExpensesView() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <GlassTextarea
-            label="Reason (optional)"
+            label="Reason (required)"
             rows={2}
             placeholder="Why is this expense being deleted?"
             value={deleteReason}
@@ -720,14 +720,19 @@ export function ExpensesView() {
             <AlertDialogCancel className="rounded-2xl">Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="rounded-2xl bg-destructive text-white hover:bg-destructive/90"
-              onClick={() =>
-                deleteTarget &&
-                deleteMutation.mutate({
-                  id: deleteTarget.id,
-                  reason: deleteReason,
-                })
-              }
-              disabled={deleteMutation.isPending}
+              disabled={!deleteReason.trim() || deleteMutation.isPending}
+              onClick={() => {
+                if (!deleteReason.trim()) {
+                  toast.error("A reason is required");
+                  return;
+                }
+                if (deleteTarget) {
+                  deleteMutation.mutate({
+                    id: deleteTarget.id,
+                    reason: deleteReason,
+                  });
+                }
+              }}
             >
               {deleteMutation.isPending ? "Deleting…" : "Delete Expense"}
             </AlertDialogAction>
