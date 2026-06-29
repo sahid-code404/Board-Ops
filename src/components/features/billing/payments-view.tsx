@@ -1143,28 +1143,32 @@ function PaymentRow({
                   </>
                 )}
               </div>
-              {/* Transaction strip — big amount + date + reference */}
+              {/* Transaction strip — Amount with label, same size as billing */}
               <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 mt-2">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl font-bold tabular-nums leading-none">{formatINR(payment.amount)}</span>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Amount</span>
+                  <span className="text-base font-bold tabular-nums">{formatINR(payment.amount)}</span>
                 </div>
-                <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                  <Clock className="h-3 w-3" /> {formatDateTime(payment.createdAt)}
-                </span>
-                {payment.reference && (
-                  <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground truncate">
-                    <ArrowUpRight className="h-3 w-3" /> Ref {payment.reference}
-                  </span>
-                )}
-                {payment.notes && (
-                  <span className="text-[11px] text-muted-foreground truncate max-w-[200px]">
-                    · {payment.notes}
-                  </span>
-                )}
                 {isDeleted && payment.deletionReason && (
                   <span className="inline-flex items-start gap-1 text-[11px] text-destructive/80">
                     <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
                     Reason: {payment.deletionReason}
+                  </span>
+                )}
+              </div>
+              {/* Date + reference + notes row */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="h-3 w-3" /> {formatDateTime(payment.createdAt)}
+                </span>
+                {payment.reference && (
+                  <span className="inline-flex items-center gap-1 truncate">
+                    <ArrowUpRight className="h-3 w-3" /> Ref {payment.reference}
+                  </span>
+                )}
+                {payment.notes && (
+                  <span className="truncate max-w-[200px]">
+                    · {payment.notes}
                   </span>
                 )}
               </div>

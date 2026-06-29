@@ -889,26 +889,32 @@ function ExpenseRow({
                   </>
                 )}
               </div>
-              {/* Transaction strip — big cost + date + qty */}
+              {/* Transaction strip — Cost with label, same size as billing */}
               <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 mt-2">
-                <span className="text-2xl font-bold tabular-nums leading-none">{formatINR(expense.amount)}</span>
-                <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                  <Calendar className="h-3 w-3" /> {formatDate(expense.expenseDate)}
-                </span>
-                {qty && (
-                  <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                    <Boxes className="h-3 w-3" /> {qty}
-                  </span>
-                )}
-                {expense.description && (
-                  <span className="text-[11px] text-muted-foreground truncate max-w-[200px]">
-                    · {expense.description}
-                  </span>
-                )}
+                <div className="flex items-baseline gap-1">
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Cost</span>
+                  <span className="text-base font-bold tabular-nums">{formatINR(expense.amount)}</span>
+                </div>
                 {isDeleted && expense.deletionReason && (
                   <span className="inline-flex items-start gap-1 text-[11px] text-destructive/80">
                     <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
                     Reason: {expense.deletionReason}
+                  </span>
+                )}
+              </div>
+              {/* Date + qty + description row */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  <Calendar className="h-3 w-3" /> {formatDate(expense.expenseDate)}
+                </span>
+                {qty && (
+                  <span className="inline-flex items-center gap-1">
+                    <Boxes className="h-3 w-3" /> {qty}
+                  </span>
+                )}
+                {expense.description && (
+                  <span className="truncate max-w-[200px]">
+                    · {expense.description}
                   </span>
                 )}
               </div>
