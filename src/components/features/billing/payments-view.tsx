@@ -625,7 +625,7 @@ export function PaymentsView() {
 
       {/* KPIs */}
       <StaggerItem>
-        <div className="grid-kpi gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <KpiCard
             label="Total Deposit"
             value={kpis.totalApproved}
@@ -644,12 +644,6 @@ export function PaymentsView() {
             value={kpis.rejected}
             icon={<XCircle className="h-5 w-5" />}
             color="danger"
-          />
-          <KpiCard
-            label="Refunded"
-            value={kpis.refunded}
-            icon={<RotateCcw className="h-5 w-5" />}
-            color="info"
           />
         </div>
       </StaggerItem>

@@ -436,11 +436,10 @@ export function UsersView() {
       </AnimatePresence>
       {/* KPIs */}
       <StaggerItem>
-        <div className="grid-kpi gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <KpiCard label="Total Users" value={kpis.total} icon={UsersIcon} color="primary" />
           <KpiCard label="Active" value={kpis.active} icon={UserCheck} color="success" />
           <KpiCard label="Pending Approval" value={kpis.pending} icon={UserPlus} color="warning" />
-          <KpiCard label="Suspended" value={kpis.suspended} icon={UserX} color="danger" />
         </div>
       </StaggerItem>
 
