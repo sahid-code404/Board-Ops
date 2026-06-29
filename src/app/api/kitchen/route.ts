@@ -97,6 +97,7 @@ export async function GET(req: Request) {
           mealColor: m.color,
           status: entry?.status ?? "—",
           locked: entry?.locked ?? false,
+          overrideFlag: entry?.overrideFlag ?? false,
         };
       });
       const onCount = mealsOn.filter((m) => m.status === "ON" || m.status === "LOCKED").length;

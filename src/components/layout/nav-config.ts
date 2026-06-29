@@ -35,7 +35,7 @@ export type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   { view: "dashboard", label: "Home", icon: LayoutDashboard, roles: ["ADMIN", "USER"], primary: true, rail: true },
   { view: "meals", label: "Meal Configuration", icon: UtensilsCrossed, roles: ["ADMIN"], rail: true },
-  { view: "user-meals", label: "Meals", icon: Utensils, roles: ["USER", "ADMIN"], primaryRoles: ["USER"], rail: true },
+  { view: "user-meals", label: "Meals", icon: Utensils, roles: ["USER"], primaryRoles: ["USER"], rail: true },
   { view: "kitchen", label: "Counts", icon: BarChart3, roles: ["ADMIN"], primary: true, rail: true },
   { view: "billing", label: "Billing", icon: Wallet, roles: ["ADMIN", "USER"], primaryRoles: ["USER"], rail: true },
   { view: "payments", label: "Payments", icon: CreditCard, roles: ["ADMIN", "USER"], primary: true, rail: true },

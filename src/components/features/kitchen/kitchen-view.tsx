@@ -20,6 +20,7 @@ import {
   X,
   Search,
   ChevronDown,
+  ShieldCheck,
 } from "lucide-react";
 import { GlassCard } from "@/components/glass/glass-card";
 import { GlassButton } from "@/components/glass/glass-button";
@@ -60,6 +61,7 @@ type UserMealItem = {
   mealColor: string;
   status: string;
   locked: boolean;
+  overrideFlag: boolean;
 };
 
 type UserMealStatus = {
@@ -397,6 +399,7 @@ export function KitchenView() {
                                     const isOn = m.status === "ON" || m.status === "LOCKED";
                                     const isOff = m.status === "OFF";
                                     const isLocked = m.locked || m.status === "LOCKED";
+                                    const isOverridden = m.overrideFlag;
                                     return (
                                       <div
                                         key={m.mealId}
@@ -420,10 +423,12 @@ export function KitchenView() {
                                               isOff && "bg-warning/15 text-warning",
                                               !isOn && !isOff && "bg-muted text-muted-foreground"
                                             )}>
-                                              {isLocked ? "🔒 Locked" : m.status}
+                                              {isLocked ? "🔒 Locked" : isOn ? "ON" : isOff ? "OFF" : "—"}
                                             </span>
-                                            {isLocked && (
-                                              <span className="text-[10px] text-muted-foreground">Admin can override</span>
+                                            {isOverridden && (
+                                              <span className="inline-flex items-center gap-0.5 text-[10px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-full font-medium">
+                                                <ShieldCheck className="h-2.5 w-2.5" /> Overridden
+                                              </span>
                                             )}
                                           </div>
                                         </div>
