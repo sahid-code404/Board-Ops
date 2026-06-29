@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { addDays, format, isSameDay } from "date-fns";
 import {
@@ -19,6 +19,7 @@ import {
   Check,
   X,
   Search,
+  ChevronDown,
 } from "lucide-react";
 import { GlassCard } from "@/components/glass/glass-card";
 import { GlassButton } from "@/components/glass/glass-button";
@@ -165,6 +166,7 @@ export function KitchenView() {
   const qc = useQueryClient();
   const [mealSearch, setMealSearch] = useState("");
   const [mealSort, setMealSort] = useState<"name" | "on" | "off">("name");
+  const [expandedUser, setExpandedUser] = useState<string | null>(null);
 
   const overrideMutation = useMutation({
     mutationFn: async (params: {
@@ -316,7 +318,7 @@ export function KitchenView() {
             </div>
           </StaggerItem>
 
-          {/* User meal status — admin can see + override each user's ON/OFF */}
+          {/* User meal status — admin can see + override, expandable like agenda */}
           {userMealStatus && userMealStatus.length > 0 && (
             <StaggerItem>
               <GlassCard className="p-4" hover={false}>
@@ -324,7 +326,6 @@ export function KitchenView() {
                   <Users className="h-5 w-5 text-primary" />
                   <h3 className="font-semibold">User Meal Status</h3>
                   <span className="text-xs text-muted-foreground">· {format(date, "d MMM yyyy")}</span>
-                  <span className="text-[10px] text-muted-foreground ml-auto">Click a meal icon to override</span>
                 </div>
 
                 {/* Search + sort */}
@@ -357,77 +358,133 @@ export function KitchenView() {
                   </div>
                 </div>
 
-                {/* User list */}
-                <div className="max-h-96 overflow-y-auto no-scrollbar space-y-2">
+                {/* User list — expandable rows */}
+                <div className="max-h-[28rem] overflow-y-auto no-scrollbar space-y-2">
                   {filteredUsers.length === 0 ? (
                     <p className="text-center py-4 text-sm text-muted-foreground">No users match your search.</p>
                   ) : (
-                    filteredUsers.map((u) => (
-                    <div
-                      key={u.userId}
-                      className="flex items-center gap-3 p-2.5 rounded-2xl glass-soft"
-                    >
-                      {/* Avatar */}
-                      <div className="grid place-items-center h-9 w-9 rounded-xl bg-primary/15 text-primary shrink-0 text-xs font-bold">
-                        {u.name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase()}
-                      </div>
-                      {/* Name + room */}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{u.name}</p>
-                        {u.room && (
-                          <p className="text-[11px] text-muted-foreground">Room {u.room}</p>
-                        )}
-                      </div>
-                      {/* Per-meal status pills — clickable for admin override */}
-                      <div className="flex items-center gap-1 shrink-0">
-                        {u.meals.map((m) => {
-                          const isOn = m.status === "ON" || m.status === "LOCKED";
-                          const isOff = m.status === "OFF";
-                          const isLocked = m.locked || m.status === "LOCKED";
-                          return (
-                            <button
-                              key={m.mealId}
-                              title={`${m.mealName}: ${m.status}${isLocked ? " (locked)" : ""} — click to override`}
-                              disabled={overrideMutation.isPending}
-                              onClick={() => {
-                                // Cycle: ON → OFF → ON (or unlock if locked)
-                                const action = isOn ? "TURN_OFF" : "TURN_ON";
-                                overrideMutation.mutate({
-                                  mealId: m.mealId,
-                                  userId: u.userId,
-                                  serviceDate: dateStr,
-                                  action,
-                                });
-                              }}
-                              className={cn(
-                                "grid place-items-center h-7 w-7 rounded-lg text-xs transition-all hover:scale-110 active:scale-95",
-                                isOn && !isLocked && "bg-success/15 text-success hover:bg-success/25",
-                                isOn && isLocked && "bg-success/10 text-success/60 hover:bg-success/20",
-                                isOff && "bg-warning/15 text-warning hover:bg-warning/25",
-                                !isOn && !isOff && "bg-muted text-muted-foreground hover:bg-muted/60",
-                                "disabled:opacity-50 disabled:cursor-not-allowed"
+                    filteredUsers.map((u) => {
+                      const isExpanded = expandedUser === u.userId;
+                      return (
+                        <GlassCard key={u.userId} className="overflow-hidden" hover={false}>
+                          {/* Collapsed row — click to expand */}
+                          <button
+                            onClick={() => setExpandedUser(isExpanded ? null : u.userId)}
+                            className="w-full flex items-center gap-3 p-3 hover:bg-secondary/20 transition-colors"
+                          >
+                            {/* Avatar */}
+                            <div className="grid place-items-center h-9 w-9 rounded-xl bg-primary/15 text-primary shrink-0 text-xs font-bold">
+                              {u.name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase()}
+                            </div>
+                            {/* Name + room */}
+                            <div className="flex-1 min-w-0 text-left">
+                              <p className="text-sm font-medium truncate">{u.name}</p>
+                              {u.room && (
+                                <p className="text-[11px] text-muted-foreground">Room {u.room}</p>
                               )}
-                            >
-                              {m.mealIcon}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      {/* ON/OFF count badges */}
-                      <div className="flex items-center gap-1 shrink-0">
-                        {u.onCount > 0 && (
-                          <span className="inline-flex items-center gap-0.5 text-[10px] bg-success/15 text-success px-1.5 py-0.5 rounded-full font-medium">
-                            <Check className="h-2.5 w-2.5" /> {u.onCount}
-                          </span>
-                        )}
-                        {u.offCount > 0 && (
-                          <span className="inline-flex items-center gap-0.5 text-[10px] bg-warning/15 text-warning px-1.5 py-0.5 rounded-full font-medium">
-                            <X className="h-2.5 w-2.5" /> {u.offCount}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))
+                            </div>
+                            {/* ON/OFF summary badges */}
+                            <div className="flex items-center gap-1 shrink-0">
+                              {u.onCount > 0 && (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] bg-success/15 text-success px-1.5 py-0.5 rounded-full font-medium">
+                                  <Check className="h-2.5 w-2.5" /> {u.onCount}
+                                </span>
+                              )}
+                              {u.offCount > 0 && (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] bg-warning/15 text-warning px-1.5 py-0.5 rounded-full font-medium">
+                                  <X className="h-2.5 w-2.5" /> {u.offCount}
+                                </span>
+                              )}
+                            </div>
+                            {/* Expand chevron */}
+                            <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                            </motion.div>
+                          </button>
+
+                          {/* Expanded — meal details with override controls */}
+                          <AnimatePresence initial={false}>
+                            {isExpanded && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: "auto", opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                                className="overflow-hidden"
+                              >
+                                <div className="px-3 pb-3 space-y-2">
+                                  {u.meals.map((m) => {
+                                    const isOn = m.status === "ON" || m.status === "LOCKED";
+                                    const isOff = m.status === "OFF";
+                                    const isLocked = m.locked || m.status === "LOCKED";
+                                    return (
+                                      <div
+                                        key={m.mealId}
+                                        className="flex items-center gap-3 p-2.5 rounded-2xl glass-soft"
+                                      >
+                                        {/* Meal icon */}
+                                        <div
+                                          className="grid place-items-center h-9 w-9 rounded-xl shrink-0 text-lg"
+                                          style={{ background: `color-mix(in oklch, ${m.mealColor} 15%, transparent)` }}
+                                        >
+                                          {m.mealIcon}
+                                        </div>
+                                        {/* Meal name + status */}
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-sm font-medium truncate">{m.mealName}</p>
+                                          <div className="flex items-center gap-2 mt-0.5">
+                                            <span className={cn(
+                                              "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                                              isOn && !isLocked && "bg-success/15 text-success",
+                                              isOn && isLocked && "bg-success/10 text-success/60",
+                                              isOff && "bg-warning/15 text-warning",
+                                              !isOn && !isOff && "bg-muted text-muted-foreground"
+                                            )}>
+                                              {isLocked ? "🔒 Locked" : m.status}
+                                            </span>
+                                            {isLocked && (
+                                              <span className="text-[10px] text-muted-foreground">Admin can override</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                        {/* Override toggle */}
+                                        <button
+                                          title={`Toggle ${m.mealName} — currently ${m.status}`}
+                                          disabled={overrideMutation.isPending}
+                                          onClick={() => {
+                                            const action = isOn ? "TURN_OFF" : "TURN_ON";
+                                            overrideMutation.mutate({
+                                              mealId: m.mealId,
+                                              userId: u.userId,
+                                              serviceDate: dateStr,
+                                              action,
+                                            });
+                                          }}
+                                          className={cn(
+                                            "relative inline-flex h-7 w-12 items-center rounded-full transition-all shrink-0",
+                                            isOn ? "bg-success shadow-sm shadow-success/30" : "bg-muted",
+                                            "disabled:opacity-50 disabled:cursor-not-allowed"
+                                          )}
+                                        >
+                                          <motion.span
+                                            layout
+                                            transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                                            className={cn(
+                                              "inline-block h-5 w-5 rounded-full bg-white shadow-sm",
+                                              isOn ? "ml-auto mr-1" : "ml-1"
+                                            )}
+                                          />
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </GlassCard>
+                      );
+                    })
                   )}
                 </div>
               </GlassCard>
