@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -239,7 +239,15 @@ export function PaymentsView() {
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const isThisMonth = isSameMonth(new Date(selectedYear, selectedMonth, 1), now);
 
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  // Debounced search — `searchInput` drives the input field; `search` is the
+  // debounced value (200ms after the user stops typing) used for actual
+  // filtering. Prevents re-filtering large lists on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 200);
+    return () => clearTimeout(t);
+  }, [searchInput]);
   const [statusFilter, setStatusFilter] = useState<PaymentStatus | "ALL" | "DELETED">("ALL");
 
   const [submitOpen, setSubmitOpen] = useState(false);
@@ -262,10 +270,11 @@ export function PaymentsView() {
       const r = await api.get<ApiResponse<Payment[]>>("/payments");
       return r.data;
     },
+    placeholderData: (prev) => prev,
   });
 
   // Fetch month-filtered payments for the list
-  const { data: payments = [], isLoading } = useQuery({
+  const { data: payments = [], isLoading, isFetching } = useQuery({
     queryKey: ["payments", { month: selectedMonth, year: selectedYear }],
     queryFn: async () => {
       const r = await api.get<ApiResponse<Payment[]>>("/payments", {
@@ -273,6 +282,9 @@ export function PaymentsView() {
       });
       return r.data;
     },
+    // Keep previous data visible while a new month/year loads (stale-while-revalidate).
+    // Eliminates the flash of empty content when switching months.
+    placeholderData: (prev) => prev,
   });
 
   // Fetch soft-deleted payments (deletion queue) — admin only
@@ -285,6 +297,7 @@ export function PaymentsView() {
       return r.data;
     },
     enabled: isAdmin,
+    placeholderData: (prev) => prev,
   });
 
   const submitMutation = useMutation({
@@ -394,15 +407,15 @@ export function PaymentsView() {
     onError: (e: Error) => toast.error(e.message || "Failed to restore payment"),
   });
 
-  function openEditForm(p: Payment) {
+  const openEditForm = useCallback((p: Payment) => {
     setEditTarget(p);
     setEditOpen(true);
-  }
+  }, []);
 
-  function closeEditForm() {
+  const closeEditForm = useCallback(() => {
     setEditOpen(false);
     setEditTarget(null);
-  }
+  }, []);
 
   // KPIs — computed from the month-filtered payments list
   const kpis = useMemo(() => {
@@ -453,6 +466,22 @@ export function PaymentsView() {
 
   return (
     <StaggerGroup className="space-y-4">
+      {/* Subtle refetch indicator — thin animated bar at the top of the list.
+          Shows on every refetch (month change, mutation invalidation) but
+          NOT on the initial load (the full skeleton handles that). */}
+      <AnimatePresence>
+        {isFetching && (
+          <motion.div
+            initial={{ scaleX: 0, opacity: 0 }}
+            animate={{ scaleX: 1, opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+            style={{ transformOrigin: "left" }}
+            className="h-0.5 rounded-full bg-primary/60 shadow-sm shadow-primary/30"
+            aria-hidden="true"
+          />
+        )}
+      </AnimatePresence>
       {/* Month picker — centered capsule with circular arrows (matches billing/expenses) */}
       <StaggerItem>
         <div className="flex items-center justify-center gap-4">
@@ -595,8 +624,8 @@ export function PaymentsView() {
         <div className="space-y-3">
           <GlassInput
             placeholder="Search by name, email, reference…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             icon={<Search />}
           />
           <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-1">
@@ -957,7 +986,7 @@ function KpiCard({
   );
 }
 
-function PendingRow({
+const PendingRow = memo(function PendingRow({
   payment,
   onApprove,
   onReject,
@@ -1019,9 +1048,9 @@ function PendingRow({
       </div>
     </motion.div>
   );
-}
+});
 
-function PaymentRow({
+const PaymentRow = memo(function PaymentRow({
   payment,
   isAdmin,
   onApprove,
@@ -1207,7 +1236,7 @@ function PaymentRow({
       </div>
     </GlassCard>
   );
-}
+});
 
 // ─────────────────────────────────────────────────────────────
 // Submit payment dialog

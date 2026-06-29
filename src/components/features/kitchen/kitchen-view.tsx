@@ -103,9 +103,17 @@ export function KitchenView() {
       api.get<ApiResponse<KitchenResponse>>("/kitchen", {
         params: { date: dateStr },
       }),
-    refetchInterval: 15_000,
+    // Live kitchen dashboard — refresh every 30s (was 15s; increased to halve
+    // the API load while still being responsive enough for live counts).
+    refetchInterval: 30_000,
+    // Keep refetching on window focus so returning to the tab gives fresh
+    // counts immediately. Combined with the 30s interval, this provides both
+    // live updates and on-demand freshness.
     refetchOnWindowFocus: true,
     enabled: !isUser,
+    // Keep previous day's data visible while a new date loads (stale-while-
+    // revalidate). Eliminates the flash of empty content when switching dates.
+    placeholderData: (prev) => prev,
   });
 
   const counts = resp?.data?.counts ?? [];

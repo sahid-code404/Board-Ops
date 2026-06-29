@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, memo, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatDistanceToNow, format } from "date-fns";
@@ -158,7 +158,16 @@ export function UsersView() {
   const role = useAuthStore((s) => s.user?.role);
   const isAdmin = role === "ADMIN";
   const qc = useQueryClient();
+  // Debounced search — `searchInput` drives the input field; `search` is the
+  // debounced value (200ms after the user stops typing) used for both the API
+  // queryKey (`q: search`) and the client-side filter. Prevents refetching and
+  // re-filtering on every keystroke.
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 200);
+    return () => clearTimeout(t);
+  }, [searchInput]);
   const [status, setStatus] = useState<UserStatus | "ALL" | "DELETED">("ALL");
   const [confirm, setConfirm] = useState<{ user: ManagedUser; action: Action } | null>(null);
   const [reason, setReason] = useState("");
@@ -179,7 +188,7 @@ export function UsersView() {
   const [deleteTarget, setDeleteTarget] = useState<ManagedUser | null>(null);
   const [deleteReason, setDeleteReason] = useState("");
 
-  const { data: users = [], isLoading } = useQuery({
+  const { data: users = [], isLoading, isFetching } = useQuery({
     queryKey: ["users", { search }],
     queryFn: () =>
       unwrap<ManagedUser[]>(
@@ -299,19 +308,10 @@ export function UsersView() {
     return users.filter((u) => !u.deletedAt && u.status === status);
   }, [users, status]);
 
-  if (!isAdmin) {
-    return (
-      <GlassCard className="p-10 text-center" hover={false}>
-        <ShieldCheck className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-        <h3 className="font-semibold">Admins only</h3>
-        <p className="text-sm text-muted-foreground mt-1">
-          You need administrator privileges to manage users.
-        </p>
-      </GlassCard>
-    );
-  }
-
-  const handleAction = (user: ManagedUser, action: Action) => {
+  // Event handlers — declared BEFORE the `if (!isAdmin)` early return so they
+  // can be wrapped in `useCallback` (rules of hooks: hooks must be called
+  // unconditionally, in the same order, every render).
+  const handleAction = useCallback((user: ManagedUser, action: Action) => {
     if (action === "EDIT_USER") {
       setEditForm({
         name: user.name,
@@ -347,9 +347,9 @@ export function UsersView() {
       return;
     }
     actionMutation.mutate({ id: user.id, action });
-  };
+  }, [actionMutation, restoreDeletedMutation]);
 
-  const submitEdit = () => {
+  const submitEdit = useCallback(() => {
     if (!editUser) return;
     if (editForm.name.trim().length < 2) {
       toast.error("Name must be at least 2 characters");
@@ -369,9 +369,9 @@ export function UsersView() {
     };
     if (editForm.password) data.password = editForm.password;
     editMutation.mutate({ id: editUser.id, data });
-  };
+  }, [editUser, editForm, editMutation]);
 
-  const submitConfirm = () => {
+  const submitConfirm = useCallback(() => {
     if (!confirm) return;
     if (ACTIONS_NEED_REASON.includes(confirm.action) && !reason.trim()) {
       toast.error("A reason is required for this action");
@@ -380,9 +380,9 @@ export function UsersView() {
     actionMutation.mutate({ id: confirm.user.id, action: confirm.action, reason });
     setConfirm(null);
     setReason("");
-  };
+  }, [confirm, reason, actionMutation]);
 
-  const submitAssignRole = () => {
+  const submitAssignRole = useCallback(() => {
     if (!assignRole) return;
     actionMutation.mutate({
       id: assignRole.id,
@@ -392,19 +392,48 @@ export function UsersView() {
     });
     setAssignRole(null);
     setAssignReason("");
-  };
+  }, [assignRole, newRole, assignReason, actionMutation]);
 
-  const submitDelete = () => {
+  const submitDelete = useCallback(() => {
     if (!deleteTarget) return;
     if (deleteReason.trim().length < 3) {
       toast.error("A reason is required (min 3 characters)");
       return;
     }
     deleteMutation.mutate({ id: deleteTarget.id, reason: deleteReason });
-  };
+  }, [deleteTarget, deleteReason, deleteMutation]);
+
+  if (!isAdmin) {
+    return (
+      <GlassCard className="p-10 text-center" hover={false}>
+        <ShieldCheck className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+        <h3 className="font-semibold">Admins only</h3>
+        <p className="text-sm text-muted-foreground mt-1">
+          You need administrator privileges to manage users.
+        </p>
+      </GlassCard>
+    );
+  }
 
   return (
     <StaggerGroup className="space-y-4 pb-6">
+      {/* Subtle refetch indicator — thin animated bar at the top of the list.
+          Shows on every refetch (search debounced trigger, mutation
+          invalidation) but NOT on the initial load (the full skeleton handles
+          that). */}
+      <AnimatePresence>
+        {isFetching && (
+          <motion.div
+            initial={{ scaleX: 0, opacity: 0 }}
+            animate={{ scaleX: 1, opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+            style={{ transformOrigin: "left" }}
+            className="h-0.5 rounded-full bg-primary/60 shadow-sm shadow-primary/30"
+            aria-hidden="true"
+          />
+        )}
+      </AnimatePresence>
       {/* KPIs */}
       <StaggerItem>
         <div className="grid-kpi gap-3">
@@ -420,8 +449,8 @@ export function UsersView() {
         <div className="space-y-3">
           <GlassInput
             placeholder="Search by name, email, phone, or room…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             icon={<Search />}
           />
           {/* Filter pills — scrollable, all visible left-to-right */}
@@ -775,7 +804,7 @@ function KpiCard({
   );
 }
 
-function UserRow({
+const UserRow = memo(function UserRow({
   user,
   onAction,
   canEditRole,
@@ -917,4 +946,4 @@ function UserRow({
       </div>
     </GlassCard>
   );
-}
+});

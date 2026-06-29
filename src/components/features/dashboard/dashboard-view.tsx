@@ -55,6 +55,9 @@ export function DashboardView() {
       return r.data;
     },
     refetchInterval: 30000,
+    // Keep previous data visible while a refetch is in flight (every 30s) so
+    // the dashboard doesn't flash empty during background refreshes.
+    placeholderData: (prev) => prev,
   });
 
   if (isLoading || !data) {

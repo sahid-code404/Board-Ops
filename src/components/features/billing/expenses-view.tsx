@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -257,7 +257,15 @@ export function ExpensesView() {
   const qc = useQueryClient();
 
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
+  // Debounced search — `searchInput` drives the input field; `search` is the
+  // debounced value (200ms after the user stops typing) used for actual
+  // filtering. Prevents re-filtering large lists on every keystroke.
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 200);
+    return () => clearTimeout(t);
+  }, [searchInput]);
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Expense | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Expense | null>(null);
@@ -267,7 +275,7 @@ export function ExpensesView() {
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
 
-  const { data: expenses = [], isLoading } = useQuery({
+  const { data: expenses = [], isLoading, isFetching } = useQuery({
     queryKey: ["expenses", { month: selectedMonth, year: selectedYear }],
     queryFn: async () => {
       const r = await api.get<ApiResponse<Expense[]>>("/expenses", {
@@ -275,6 +283,9 @@ export function ExpensesView() {
       });
       return r.data;
     },
+    // Keep previous data visible while a new month/year loads (stale-while-revalidate).
+    // Eliminates the flash of empty content when switching months.
+    placeholderData: (prev) => prev,
   });
 
   // Soft-deleted expenses for the Deletion Queue (admin only). The backend
@@ -293,6 +304,7 @@ export function ExpensesView() {
       return r.data;
     },
     enabled: isAdmin,
+    placeholderData: (prev) => prev,
   });
 
   const addMutation = useMutation({
@@ -317,28 +329,28 @@ export function ExpensesView() {
     onError: (e: Error) => toast.error(e.message || "Failed to update expense"),
   });
 
-  function openAddForm() {
+  const openAddForm = useCallback(() => {
     setEditTarget(null);
     setFormOpen(true);
-  }
+  }, []);
 
-  function openEditForm(exp: Expense) {
+  const openEditForm = useCallback((exp: Expense) => {
     setEditTarget(exp);
     setFormOpen(true);
-  }
+  }, []);
 
-  function closeForm() {
+  const closeForm = useCallback(() => {
     setFormOpen(false);
     setEditTarget(null);
-  }
+  }, []);
 
-  function handleSubmit(payload: ExpensePayload, id?: string) {
+  const handleSubmit = useCallback((payload: ExpensePayload, id?: string) => {
     if (id) {
       editMutation.mutate({ id, payload });
     } else {
       addMutation.mutate(payload);
     }
-  }
+  }, [addMutation, editMutation]);
 
   const deleteMutation = useMutation({
     mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
@@ -425,6 +437,22 @@ export function ExpensesView() {
 
   return (
     <StaggerGroup className="space-y-4">
+      {/* Subtle refetch indicator — thin animated bar at the top of the list.
+          Shows on every refetch (month change, mutation invalidation) but
+          NOT on the initial load (the full skeleton handles that). */}
+      <AnimatePresence>
+        {isFetching && (
+          <motion.div
+            initial={{ scaleX: 0, opacity: 0 }}
+            animate={{ scaleX: 1, opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+            style={{ transformOrigin: "left" }}
+            className="h-0.5 rounded-full bg-primary/60 shadow-sm shadow-primary/30"
+            aria-hidden="true"
+          />
+        )}
+      </AnimatePresence>
       {/* Month picker — centered capsule with circular arrows + click-to-reset */}
       <StaggerItem>
         <div className="flex items-center justify-center gap-4">
@@ -567,8 +595,8 @@ export function ExpensesView() {
         <div className="space-y-3">
           <GlassInput
             placeholder="Search by title, category, vendor, or description…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             icon={<Search />}
           />
           <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-1">
@@ -811,7 +839,7 @@ function KpiCard({
   );
 }
 
-function ExpenseRow({
+const ExpenseRow = memo(function ExpenseRow({
   expense,
   canManage,
   onEdit,
@@ -974,7 +1002,7 @@ function ExpenseRow({
       </div>
     </GlassCard>
   );
-}
+});
 
 // ─────────────────────────────────────────────────────────────
 // Add / Edit Expense Sheet

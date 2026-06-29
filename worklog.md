@@ -1336,3 +1336,74 @@ Stage Summary:
 - All form field grids (GlassInput/Select/Textarea pairs like Email+Phone, Month+Year, Quantity+Unit, Phone+Room, Theme+Language, Category+Type, Unit+Category) were left as `grid grid-cols-2 gap-3` — form inputs stay side-by-side at 2 columns since they're narrow fields, not auto-sizing cards.
 - Small UI element grids (PRESETS theme swatches, RADIUS_OPTIONS, color swatches, mini-app preview) were left unchanged — they're compact UI elements that already fit cleanly in their containers.
 - File size delta is minimal — each edit only shortened class strings (replacing `grid grid-cols-N` with `grid-kpi`/`grid-cards`), no logic added or removed. No non-target files modified. Lint clean (0 errors). Dev server healthy.
+
+---
+Task ID: OPTIMIZE-UI
+Agent: optimize-ui-agent
+Task: Optimize UI/UX and performance without removing animations/blur/transparency
+
+Work Log:
+- Read worklog.md tail for recent context (DYNAMIC-GRIDS — grid-kpi/grid-cards utility classes already in place; dev server running healthy on port 3000).
+- Audited the 8 specified files for performance issues. Verified `useMemo` is already in place for `kpis`, `filtered`, `filteredUsers`, `sourceBills`/`sourcePayments`/`sourceExpenses` (simple ternaries — stable per render), `totals`, `byCategory`, `kpis` across billing/payments/expenses/users/kitchen. Confirmed TopBar already has `refetchInterval: 30_000` + `staleTime: 10_000` on the unread-count query — no changes needed there.
+
+Edits to `src/components/features/billing/billing-view.tsx`:
+- Import: added `memo`, `useEffect` to the named React imports.
+- Debounced search: split `search` state into `searchInput` (drives the GlassInput) and `search` (the debounced value, 200ms after typing stops, used in the `filtered` useMemo). Added a `useEffect` with `setTimeout`/`clearTimeout`. Prevents re-filtering the list on every keystroke.
+- Bills query: added `placeholderData: (prev) => prev` (stale-while-revalidate — eliminates the flash of empty content when switching months). Destructured `isFetching`.
+- Deleted-bills query: added `placeholderData: (prev) => prev`.
+- Subtle refetch indicator: added a thin `motion.div` (h-0.5, bg-primary/60, animated scaleX from 0→1) wrapped in `AnimatePresence` at the top of the `StaggerGroup`. Shows on every refetch (month change, mutation invalidation) but NOT on initial load (the full skeleton handles that, since `isLoading` is true only on first load with `placeholderData`).
+- Wrapped `BillRow` in `memo(function BillRow(...) { ... })`. Note: inline `onView`/`onVoid`/`onDelete`/`onRestore` arrows in the `.map()` callback create new refs on every render, defeating memo during search-driven re-renders — acknowledged as a known limitation per the task spec (not converting to `useCallback` to avoid overcomplicating). Memo still helps when the parent re-renders for OTHER reasons.
+- Wrapped `BillDetail` in `memo(function BillDetail(...) { ... })` too (rendered inside a Dialog; memoized so it doesn't re-render on parent search/filter changes while open).
+
+Edits to `src/components/features/billing/payments-view.tsx`:
+- Import: added `memo`, `useCallback`, `useEffect`.
+- Debounced search: same `searchInput`/`search` split with 200ms debounce.
+- All three queries (all-payments KPIs, month-filtered payments, deleted-payments queue): added `placeholderData: (prev) => prev`. Destructured `isFetching` from the month-filtered payments query.
+- Subtle refetch indicator: same thin animated `motion.div` at the top of the `StaggerGroup`.
+- Wrapped `PendingRow` and `PaymentRow` in `memo(function ... { ... })`.
+- Wrapped `openEditForm` and `closeEditForm` in `useCallback` with empty deps (they only call stable state setters). They're called from inline arrows in the `.map()` callback AND from the `PaymentEditSheet`'s `onOpenChange`, so the stable refs help avoid re-renders of the sheet body.
+
+Edits to `src/components/features/billing/expenses-view.tsx`:
+- Import: added `memo`, `useCallback`, `useEffect`.
+- Debounced search: same `searchInput`/`search` split with 200ms debounce.
+- Expenses query + deleted-expenses query: added `placeholderData: (prev) => prev`. Destructured `isFetching`.
+- Subtle refetch indicator: same thin animated `motion.div` at the top of the `StaggerGroup`.
+- Wrapped `ExpenseRow` in `memo(function ... { ... })`.
+- Wrapped `openAddForm`, `openEditForm`, `closeForm`, `handleSubmit` in `useCallback`. `handleSubmit` has `[addMutation, editMutation]` deps (the `.mutate` functions are stable per react-query, but listing the mutation objects satisfies `react-hooks/exhaustive-deps`). `openAddForm`/`openEditForm`/`closeForm` have empty deps (only call state setters).
+
+Edits to `src/components/features/users/users-view.tsx`:
+- Import: added `memo`, `useCallback`, `useEffect` (already had `useState`, `useMemo`).
+- Debounced search: same `searchInput`/`search` split with 200ms debounce. IMPORTANT: `search` (the debounced value) is used in the `queryKey: ["users", { search }]` AND in the API params `q: search` — NOT `searchInput`. This means the API refetch is also debounced (only fires 200ms after typing stops), which is the desired behavior — was previously refetching on every keystroke.
+- Destructured `isFetching` from the users query (already had `placeholderData: (prev) => prev`).
+- Subtle refetch indicator: same thin animated `motion.div` at the top of the `StaggerGroup`.
+- Wrapped `UserRow` in `memo(function ... { ... })`.
+- Wrapped `handleAction`, `submitEdit`, `submitConfirm`, `submitAssignRole`, `submitDelete` in `useCallback`. CRITICAL: moved these handlers ABOVE the `if (!isAdmin)` early return so the `useCallback` hooks run unconditionally on every render (rules of hooks — hooks cannot be called conditionally). The handlers don't depend on `isAdmin`, only on stable state setters and the mutation objects, so moving them above the early return is safe.
+  - `handleAction` deps: `[actionMutation, restoreDeletedMutation]` (the `.mutate` functions are stable).
+  - `submitEdit` deps: `[editUser, editForm, editMutation]`.
+  - `submitConfirm` deps: `[confirm, reason, actionMutation]`.
+  - `submitAssignRole` deps: `[assignRole, newRole, assignReason, actionMutation]`.
+  - `submitDelete` deps: `[deleteTarget, deleteReason, deleteMutation]`.
+
+Edits to `src/components/features/dashboard/dashboard-view.tsx`:
+- Added `placeholderData: (prev) => prev` to the dashboard query. Already had `refetchInterval: 30000`. With placeholderData, the existing `if (isLoading || !data)` check now only shows the full skeleton on the very first load (no cached data); subsequent 30s refetches keep the previous data visible (no flash).
+
+Edits to `src/components/features/kitchen/kitchen-view.tsx`:
+- Increased `refetchInterval` from `15_000` to `30_000` (halves the API load while still being responsive for a live kitchen dashboard). Kept `refetchOnWindowFocus: true` (returns to the tab → fresh counts immediately).
+- Added `placeholderData: (prev) => prev` — keeps the previous day's data visible while a new date loads (no flash when navigating between dates). The existing `if (isLoading) return <KitchenSkeleton />` now only shows the skeleton on the very first load (no cached data); date changes show previous data + subtle background refresh.
+
+No changes to:
+- `src/components/layout/app-shell.tsx` — only contains the AnimatePresence page transition wrapper; no queries or list rendering to optimize.
+- `src/components/layout/top-bar.tsx` — already had `refetchInterval: 30_000` + `staleTime: 10_000` on the unread-count query (verified). No list rendering, no row components, no search input.
+
+Verification:
+- `cd /home/z/my-project && bun run lint` → 0 errors, 1 pre-existing warning in `variables-view.tsx` (`react-hooks/incompatible-library` on `form.watch` at line 739 — pre-existing, called out as acceptable in the task spec; NOT in any of the 8 files I edited).
+- `tail -20 dev.log` → healthy dev server: multiple `✓ Compiled in <X>ms` lines and `GET / 200`, `GET /api/dashboard 200`, `GET /api/notifications?unread=true 200` lines. No compile errors, no runtime errors after my edits. (One transient parsing error appeared in the log from a brief intermediate state mid-edit — `Expected ',', got 'const'` — but it was fixed within seconds by closing the `memo(function ... { })` wrappers with `});`, and subsequent compiles succeeded.)
+- Did NOT modify: any CSS, any glass classes, any API routes, any prisma schema, any backend files, any animations (Framer Motion / CSS transitions), any backdrop-filter blur, any transparency/opacity, any visual design, any features or functionality.
+
+Stage Summary:
+- React rendering performance: All 5 row components rendered inside `.map()` loops (`BillRow`, `BillDetail`, `PendingRow`, `PaymentRow`, `ExpenseRow`, `UserRow`) are now wrapped in `React.memo`. When the parent re-renders (e.g., on filter pill change, mutation completion, query refetch), only rows whose props actually changed re-render — the rest skip their render function. Known limitation: inline `onXxx={() => ...}` arrows in the `.map()` callbacks create new function references on every render, defeating memo during search-driven re-renders; per the task spec, NOT converting these to `useCallback` to avoid overcomplicating the code. The debounced search (200ms) means the parent re-renders far less frequently during typing, which is the bigger win.
+- Event handler stability: `openEditForm`, `closeEditForm` (payments-view), `openAddForm`, `openEditForm`, `closeForm`, `handleSubmit` (expenses-view), and `handleAction`, `submitEdit`, `submitConfirm`, `submitAssignRole`, `submitDelete` (users-view) are now wrapped in `useCallback` with proper dependency arrays. The users-view handlers were moved above the `if (!isAdmin)` early return to satisfy the rules of hooks (hooks must be called unconditionally).
+- Query performance: All list-fetching queries (`bills`, `payments` ×3, `expenses` ×2, `dashboard`, `kitchen`, `users`) now use `placeholderData: (prev) => prev` — implementing stale-while-revalidate. Switching months/dates no longer shows a flash of empty content; the previous data stays visible while the new data loads in the background. Kitchen refetch interval doubled from 15s → 30s (halves API load for the live dashboard). TopBar's notification query already had the correct `refetchInterval: 30_000` + `staleTime: 10_000`.
+- UX polish: Search inputs across billing/payments/expenses/users now debounce the actual filter value by 200ms — the user can type freely without the list re-filtering on every keystroke (especially important for large lists of 500+ items). For users-view, the debounce also applies to the API queryKey, so the `/api/users?q=...` request only fires 200ms after typing stops (was firing on every keystroke before). All four list views (billing/payments/expenses/users) now show a subtle thin animated progress bar at the top of the list when `isFetching` is true (refetch in flight) — replaces the previous behavior of showing the full skeleton on every month change. The full skeleton now only shows on the very first load (when `isLoading` is true and there's no cached data), thanks to `placeholderData`.
+- Files modified: 6 of the 8 specified files (billing-view, payments-view, expenses-view, users-view, dashboard-view, kitchen-view). The other 2 (app-shell, top-bar) needed no changes — verified during audit.
+- Net effect: smoother list interactions (no flashing on month/date changes, no per-keystroke re-filtering), fewer API calls (kitchen 30s vs 15s, users debounced query), and fewer React renders (memoized rows, stable callbacks). Zero impact on animations, blur, transparency, or visual design.
