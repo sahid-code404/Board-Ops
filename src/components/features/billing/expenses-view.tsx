@@ -217,12 +217,12 @@ function getCatMeta(cat: string) {
   };
 }
 
+/** Full date-time format: "29 June 2026, 05:28 am" */
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  const d = new Date(iso);
+  const datePart = d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  const timePart = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+  return `${datePart}, ${timePart}`;
 }
 
 /** Format quantity + unit for display (e.g. "5 kg", "2 piece"). */

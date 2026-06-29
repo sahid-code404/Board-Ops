@@ -206,6 +206,15 @@ function formatDate(iso: string | null) {
   });
 }
 
+/** Full date-time format: "29 June 2026, 05:28 am" */
+function formatDateTime(iso: string | null) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  const datePart = d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  const timePart = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+  return `${datePart}, ${timePart}`;
+}
+
 // ─────────────────────────────────────────────────────────────
 // Main view
 // ─────────────────────────────────────────────────────────────
@@ -949,7 +958,7 @@ function BillRow({
                       {BILL_STATUS_STYLES[bill.status].label}
                     </Badge>
                     <Badge variant="outline" className="text-[10px] bg-muted text-muted-foreground border-border">
-                      <Calendar className="h-2.5 w-2.5" /> {formatMonthYear(bill.periodMonth, bill.periodYear)}
+                      <Calendar className="h-2.5 w-2.5" /> {formatDateTime(bill.generatedAt)}
                     </Badge>
                   </>
                 )}
