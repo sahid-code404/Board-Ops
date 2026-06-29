@@ -29,15 +29,19 @@ export async function POST(req: Request) {
 
     if (!entry) {
       const editableUntil = computeEditableUntil(meal, data.serviceDate);
+      const newStatus = data.action === "TURN_OFF" ? "OFF" : "ON";
+      const matchesDefault =
+        (meal.defaultState === "ON" && newStatus === "ON") ||
+        (meal.defaultState === "OFF" && newStatus === "OFF");
       const newEntry = await db.mealEntry.create({
         data: {
           userId: data.userId,
           mealId: data.mealId,
           serviceDate: data.serviceDate,
-          status: data.action === "TURN_OFF" ? "OFF" : "ON",
+          status: newStatus,
           editableUntil,
           locked: false,
-          overrideFlag: true,
+          overrideFlag: !matchesDefault,
           updatedBy: admin.id,
         },
       });
@@ -70,20 +74,30 @@ export async function POST(req: Request) {
     }
 
     const oldStatus = entry.status;
+    // Determine the new status based on the action
+    const newStatus =
+      data.action === "TURN_ON"
+        ? "ON"
+        : data.action === "TURN_OFF"
+          ? "OFF"
+          : data.action === "LOCK"
+            ? "LOCKED"
+            : entry.status === "LOCKED"
+              ? "ON"
+              : entry.status;
+
+    // If the new status matches the meal's default state, the meal is back to
+    // its "natural" state — clear the override flag so no indicator shows.
+    // Otherwise, mark it as overridden.
+    const matchesDefault =
+      (meal.defaultState === "ON" && newStatus === "ON") ||
+      (meal.defaultState === "OFF" && newStatus === "OFF");
+
     const updated = await db.mealEntry.update({
       where: { id: entry.id },
       data: {
-        status:
-          data.action === "TURN_ON"
-            ? "ON"
-            : data.action === "TURN_OFF"
-              ? "OFF"
-              : data.action === "LOCK"
-                ? "LOCKED"
-                : entry.status === "LOCKED"
-                  ? "ON"
-                  : entry.status,
-        overrideFlag: true,
+        status: newStatus,
+        overrideFlag: !matchesDefault,
         locked: data.action === "LOCK" ? true : false,
         updatedBy: admin.id,
       },
