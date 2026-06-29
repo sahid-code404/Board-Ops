@@ -95,7 +95,7 @@ import {
 // ─────────────────────────────────────────────────────────────
 
 type PaymentStatus = "PENDING" | "APPROVED" | "REJECTED" | "REFUNDED" | "VOID" | "DELETED";
-type PaymentMethod = "CASH" | "UPI" | "CARD" | "BANK_TRANSFER" | "WALLET";
+type PaymentMethod = "CASH" | "UPI" | "CARD" | "BANK_TRANSFER" | "WALLET" | "REFUND";
 
 type Payment = {
   id: string;
@@ -184,6 +184,11 @@ const METHOD_META: Record<
     label: "Wallet",
     icon: <WalletIcon className="h-3.5 w-3.5" />,
     className: "bg-secondary text-secondary-foreground border-border",
+  },
+  REFUND: {
+    label: "Refund",
+    icon: <RotateCcw className="h-3.5 w-3.5" />,
+    className: "bg-info/10 text-info border-info/20",
   },
 };
 
@@ -1169,16 +1174,16 @@ const PendingRow = memo(function PendingRow({
       <div
         className={cn(
           "grid place-items-center h-10 w-10 rounded-xl shrink-0",
-          METHOD_META[payment.method].className
+          (METHOD_META[payment.method] ?? METHOD_META.WALLET).className
         )}
       >
-        {METHOD_META[payment.method].icon}
+        {(METHOD_META[payment.method] ?? METHOD_META.WALLET).icon}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <p className="font-medium truncate">{payment.user.name}</p>
           <span className="text-xs text-muted-foreground truncate">
-            · {METHOD_META[payment.method].label}
+            · {(METHOD_META[payment.method] ?? METHOD_META.WALLET).label}
           </span>
         </div>
         <p className="text-xs text-muted-foreground truncate">
@@ -1277,8 +1282,15 @@ const PaymentRow = memo(function PaymentRow({
     }
   }
 
-  const methodMeta = METHOD_META[payment.method];
-  const statusMeta = STATUS_STYLES[payment.status];
+  const methodMeta = METHOD_META[payment.method] ?? {
+    label: payment.method,
+    icon: <WalletIcon className="h-3.5 w-3.5" />,
+    className: "bg-secondary text-secondary-foreground border-border",
+  };
+  const statusMeta = STATUS_STYLES[payment.status] ?? {
+    label: payment.status,
+    className: "bg-muted text-muted-foreground border-border",
+  };
 
   return (
     <GlassCard className="p-4" hover={false}>
