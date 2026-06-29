@@ -26,7 +26,7 @@ export async function POST(
         deletionReason: null,
         status: "PENDING",
       },
-      include: { user: { select: { name: true, email: true } } },
+      include: { user: { select: { name: true, email: true, room: true, avatarUrl: true } } },
     });
 
     await logAudit({

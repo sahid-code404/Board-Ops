@@ -14,17 +14,20 @@ import {
   Search,
   Check,
   AlertCircle,
+  DoorOpen,
 } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { GlassCard } from "@/components/glass/glass-card";
 import { GlassInput } from "@/components/glass/glass-input";
 import { AnimatedCounter } from "@/components/glass/animated-counter";
+import { UserAvatar } from "@/components/glass/user-avatar";
 import {
   StaggerGroup,
   StaggerItem,
 } from "@/components/glass/page-transition";
 import { ShimmerSkeleton } from "@/components/glass/shimmer-skeleton";
+import { Badge } from "@/components/ui/badge";
 
 type UserFund = {
   userId: string;
@@ -55,26 +58,16 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
+type FundFilter = "ALL" | "DUE" | "PAID";
+
+const FILTER_LABELS: Record<FundFilter, string> = {
+  ALL: "All",
+  DUE: "Due",
+  PAID: "Paid",
+};
+
 function formatINR(n: number) {
   return `₹${Math.round(n).toLocaleString("en-IN")}`;
-}
-
-const AVATAR_GRADIENTS = [
-  "from-violet-500 to-fuchsia-500",
-  "from-emerald-500 to-teal-500",
-  "from-amber-500 to-orange-500",
-  "from-rose-500 to-pink-500",
-  "from-cyan-500 to-blue-500",
-  "from-indigo-500 to-purple-500",
-];
-
-function gradientFor(name: string) {
-  const idx = name.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) % AVATAR_GRADIENTS.length;
-  return AVATAR_GRADIENTS[idx];
-}
-
-function initials(name: string) {
-  return name.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("");
 }
 
 export function FundsView() {
@@ -82,6 +75,7 @@ export function FundsView() {
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<FundFilter>("ALL");
   const isThisMonth = selectedMonth === now.getMonth() && selectedYear === now.getFullYear();
 
   const { data, isLoading } = useQuery({
@@ -96,7 +90,9 @@ export function FundsView() {
   });
 
   const users = data?.users ?? [];
-  const filteredUsers = useMemo(() => {
+
+  // Search filter
+  const searchedUsers = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return users;
     return users.filter(
@@ -107,6 +103,27 @@ export function FundsView() {
     );
   }, [users, search]);
 
+  // Status classification — matches billing page semantics
+  const classified = useMemo(() => searchedUsers.map((u) => {
+    const isPaid = u.hasBills && u.needToPay === 0;
+    const hasDue = u.needToPay > 0;
+    const noBills = !u.hasBills;
+    const bucket: FundFilter = noBills ? "PAID" : isPaid ? "PAID" : "DUE";
+    return { ...u, isPaid, hasDue, noBills, bucket };
+  }), [searchedUsers]);
+
+  // Sort bar counts (based on searched set, not the active filter)
+  const counts = useMemo(() => ({
+    ALL: classified.length,
+    DUE: classified.filter((u) => u.bucket === "DUE").length,
+    PAID: classified.filter((u) => u.bucket === "PAID").length,
+  }), [classified]);
+
+  const filteredUsers = useMemo(() => {
+    if (filter === "ALL") return classified;
+    return classified.filter((u) => u.bucket === filter);
+  }, [classified, filter]);
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -116,9 +133,11 @@ export function FundsView() {
           <ShimmerSkeleton className="h-28" />
           <ShimmerSkeleton className="h-28" />
         </div>
+        <ShimmerSkeleton className="h-11 w-full" />
+        <ShimmerSkeleton className="h-8 w-64" />
         <div className="space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (
-            <ShimmerSkeleton key={i} className="h-16" />
+            <ShimmerSkeleton key={i} className="h-24" />
           ))}
         </div>
       </div>
@@ -228,80 +247,129 @@ export function FundsView() {
         />
       </StaggerItem>
 
-      {/* User fund list */}
+      {/* Sort bar — All / Due / Paid (horizontal, scrollable) */}
+      <StaggerItem>
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-1">
+          {(["ALL", "DUE", "PAID"] as const).map((s) => {
+            const active = filter === s;
+            const count = counts[s];
+            return (
+              <button
+                key={s}
+                onClick={() => setFilter(s)}
+                className={cn(
+                  "inline-flex items-center h-8 px-2.5 rounded-xl text-[11px] gap-1.5 font-medium whitespace-nowrap shrink-0 transition-all",
+                  active
+                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                    : "glass-soft text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {FILTER_LABELS[s]}
+                <span
+                  className={cn(
+                    "text-[9px] rounded-full px-1.5 py-0.5 leading-none font-bold min-w-[16px] text-center",
+                    active
+                      ? "bg-primary-foreground/20 text-primary-foreground"
+                      : s === "DUE"
+                        ? "bg-warning text-white"
+                        : s === "PAID"
+                          ? "bg-success text-white"
+                          : "bg-muted-foreground/30 text-white"
+                  )}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </StaggerItem>
+
+      {/* User fund list — billing-style rows */}
       <StaggerItem>
         {filteredUsers.length === 0 ? (
           <GlassCard className="p-10 text-center" hover={false}>
             <p className="text-sm text-muted-foreground">
-              {search ? "No users match your search." : "No user data for this month."}
+              {search
+                ? "No users match your search."
+                : filter === "DUE"
+                  ? "No users with due amounts for this month."
+                  : filter === "PAID"
+                    ? "No settled users for this month."
+                    : "No user data for this month."}
             </p>
           </GlassCard>
         ) : (
           <div className="space-y-3">
-            {filteredUsers.map((u) => {
-              const isPaid = u.needToPay === 0 && u.hasBills;
-              const hasDue = u.needToPay > 0;
-              const noBills = !u.hasBills;
+            {filteredUsers.map((u) => (
+              <GlassCard key={u.userId} className="p-4" hover={false}>
+                <div className="flex items-start gap-3">
+                  {/* Avatar */}
+                  <UserAvatar
+                    name={u.name}
+                    avatarUrl={u.avatarUrl}
+                    className="h-10 w-10 rounded-xl"
+                    fallbackClassName="text-xs"
+                  />
 
-              return (
-                <GlassCard key={u.userId} className="p-4" hover={false}>
-                  <div className="flex items-center gap-3">
-                    {/* Avatar */}
-                    <div className={cn(
-                      "grid place-items-center h-10 w-10 rounded-xl shrink-0 text-xs font-bold bg-gradient-to-br text-white",
-                      gradientFor(u.name)
-                    )}>
-                      {initials(u.name) || "U"}
-                    </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        {/* Name + status badges */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-medium text-sm truncate">{u.name}</h3>
+                          {u.noBills ? (
+                            <Badge variant="outline" className="text-[10px] bg-muted text-muted-foreground border-border">
+                              No Bills
+                            </Badge>
+                          ) : u.isPaid ? (
+                            <Badge variant="outline" className="text-[10px] bg-success/15 text-success border-success/30">
+                              <Check className="h-2.5 w-2.5" /> Settled
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] bg-warning/15 text-warning border-warning/30">
+                              <AlertCircle className="h-2.5 w-2.5" /> Due
+                            </Badge>
+                          )}
+                        </div>
 
-                    {/* Name + room */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{u.name}</p>
-                      {u.room && (
-                        <p className="text-[11px] text-muted-foreground">Room {u.room}</p>
-                      )}
-                    </div>
+                        {/* Transaction strip — Total / Deposit / Due (same size, like billing page) */}
+                        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 mt-2">
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</span>
+                            <span className="text-base font-bold tabular-nums">
+                              {u.hasBills ? formatINR(u.billTotal) : "—"}
+                            </span>
+                          </div>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Deposit</span>
+                            <span className="text-base font-bold text-success tabular-nums">{formatINR(u.deposit)}</span>
+                          </div>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Due</span>
+                            {u.noBills ? (
+                              <span className="text-base font-bold text-muted-foreground tabular-nums">—</span>
+                            ) : u.isPaid ? (
+                              <span className="text-base font-bold text-success tabular-nums">{formatINR(0)}</span>
+                            ) : (
+                              <span className="text-base font-bold text-warning tabular-nums">{formatINR(u.needToPay)}</span>
+                            )}
+                          </div>
+                        </div>
 
-                    {/* Deposit */}
-                    <div className="text-right shrink-0">
-                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Deposit</p>
-                      <p className="text-sm font-semibold text-success tabular-nums">{formatINR(u.deposit)}</p>
-                    </div>
-
-                    {/* Need to pay */}
-                    <div className="text-right shrink-0 min-w-[80px]">
-                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Need to Pay</p>
-                      {noBills ? (
-                        <p className="text-sm font-medium text-muted-foreground">—</p>
-                      ) : isPaid ? (
-                        <span className="inline-flex items-center gap-0.5 text-sm font-semibold text-success">
-                          <Check className="h-3.5 w-3.5" /> Paid
-                        </span>
-                      ) : (
-                        <p className="text-sm font-bold text-warning tabular-nums">{formatINR(u.needToPay)}</p>
-                      )}
-                    </div>
-
-                    {/* Status badge */}
-                    <div className="shrink-0">
-                      {noBills ? (
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
-                          No Bills
-                        </span>
-                      ) : isPaid ? (
-                        <span className="inline-flex items-center gap-0.5 text-[10px] px-2 py-0.5 rounded-full bg-success/15 text-success font-medium">
-                          <Check className="h-2.5 w-2.5" /> Settled
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-0.5 text-[10px] px-2 py-0.5 rounded-full bg-warning/15 text-warning font-medium">
-                          <AlertCircle className="h-2.5 w-2.5" /> Due
-                        </span>
-                      )}
+                        {/* Room info row */}
+                        {u.room && (
+                          <div className="flex items-center gap-1 mt-1.5 text-[11px] text-muted-foreground">
+                            <DoorOpen className="h-3 w-3" />
+                            <span>Room {u.room}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </GlassCard>
-              );
-            })}
+                </div>
+              </GlassCard>
+            ))}
           </div>
         )}
       </StaggerItem>

@@ -52,7 +52,7 @@ export async function GET(req: Request) {
       where,
       orderBy: { createdAt: "desc" },
       take: limit,
-      include: { user: { select: { name: true, email: true } } },
+      include: { user: { select: { name: true, email: true, room: true, avatarUrl: true } } },
     });
     return ok(payments);
   } catch (e) {

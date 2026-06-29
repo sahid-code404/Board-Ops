@@ -1478,3 +1478,27 @@ Stage Summary:
 - The `UserMealsView` renders a date capsule picker (prev/next/today, matching the kitchen-view design), 3 KPI cards (Meals ON / Meals OFF / Locked with animated counters + colored glass glows), and a list of meal cards. Each meal card shows the meal's emoji icon (tinted with its configured color), display name, service time window, a glass toggle switch, and a status pill + cutoff time. Toggling calls `PATCH /api/meals/toggle` with cutoff validation on the backend; locked meals (past cutoff) show a 🔒 badge and a disabled toggle. The toggle mutation invalidates both `["user-meals"]` (refetches this view) and `["kitchen"]` (refreshes the admin kitchen dashboard counts in the background).
 - Key adaptation: the task spec assumed the `/api/meals/entries` endpoint returns a flat array of entries with a nested `meal` object including `cutoffTime`. The actual API returns `{ meals, byDate }` with flat entries (no nested meal, no cutoffTime on entries). Rather than modifying the backend (forbidden by the task), the frontend's `queryFn` normalizes the response — extracting entries from `byDate[dateStr]` and looking up `cutoffTime` from the `meals` array via a `Map`. This preserves the spec's intended rendering code unchanged while correctly adapting to the real API contract.
 - Architecture consistency: reuses all existing glass UI primitives (`GlassCard`, `AnimatedCounter`, `StaggerGroup`/`StaggerItem`, `ShimmerSkeleton`), the established date-capsule pattern from kitchen-view, the local-time `toDateString` helper (avoids TZ drift), `placeholderData: (prev) => prev` for stale-while-revalidate (no flash on date change), `memo` for the `MealCard` row component (avoids re-rendering unchanged cards when the parent re-renders on toggle), and sonner toasts for error surfacing. Lint clean (0 errors). Dev server healthy with the new view successfully fetching `/api/meals/entries?date=2026-06-29 200`.
+
+---
+Task ID: AV-1 + FUNDS-SORT
+Agent: main (orchestrator)
+Task: Use avatar pictures in all user pills if user updated avatars; then make funds user pills UI/details look like billing page user pills + add All/Due/Paid sort bar.
+
+Work Log:
+- Created shared `src/components/glass/user-avatar.tsx` exporting `UserAvatar` component (renders `AvatarImage` when `avatarUrl` set, else deterministic gradient + initials fallback). Also re-exports `gradientFor` + `initials` helpers.
+- Updated `src/app/api/payments/route.ts` GET: `user` select now includes `room` + `avatarUrl` (was only name+email).
+- Updated `src/app/api/payments/[id]/restore/route.ts`: same select expansion for consistency.
+- Refactored `funds-view.tsx`: replaced inline gradient avatar div with `<UserAvatar>`, removed local AVATAR_GRADIENTS/gradientFor/initials helpers.
+- Refactored `payments-view.tsx`: PaymentRow + refund-dialog user list now use `<UserAvatar>`; removed unused `Avatar`/`AvatarImage`/`AvatarFallback` imports + local gradient/initials helpers; extended `Payment.user` type with `room` + `avatarUrl`.
+- Refactored `kitchen-view.tsx`: user meal status row avatar replaced with `<UserAvatar>` (was a plain `bg-primary/15` div with initials, no image support).
+- Refactored `billing-view.tsx`: BillRow avatar replaced with `<UserAvatar>`; removed local gradient/initials helpers + unused avatar imports.
+- Rewrote `funds-view.tsx` user pills to match billing-view BillRow layout: avatar (h-10 w-10 rounded-xl) on left → name + status badge (Settled/Due/No Bills) on top row → transaction strip with Total/Deposit/Due (all same `text-base font-bold` size, labelled like billing's Total/Paid/Due) → room info row below.
+- Added sort bar to `funds-view.tsx` below the search: horizontal scrollable pills `All / Due / Paid` with count badges (same pattern as payments-view statusFilter). Filter buckets: no-bills & isPaid → PAID; needToPay>0 → DUE.
+- Lint: `bun run lint` passes (0 errors, 1 pre-existing warning in variables-view).
+- Browser self-verification (agent-browser): logged in as admin → Funds page renders month picker, 3 KPIs, search, sort bar (All 5 / Due 4 / Paid 1), 5 user rows. Verified Due filter → 4 rows, Paid filter → 1 row (Priya Sharma). Row content confirmed: "Ananya Iyer / Due / TOTAL ₹4,650 / DEPOSIT ₹0 / DUE ₹4,650 / Room B-201". Paid row: "Priya Sharma / Settled / TOTAL ₹4,650 / DEPOSIT ₹10,300 / DUE ₹0 / Room A-101". Kitchen page shows UserAvatar (initials for users without avatar, image for Priya). Payments + Billing pages render correctly with refactored UserAvatar. No console/runtime errors.
+
+Stage Summary:
+- Shared `UserAvatar` glass component now used consistently across funds, payments (row + refund dialog), kitchen, and billing views — uploaded avatar pictures render everywhere, gradient-initials fallback otherwise.
+- Funds page user pills now match billing page's BillRow aesthetic (avatar + name + status badge + Total/Deposit/Due transaction strip + room row).
+- Funds page has a horizontal scrollable All/Due/Paid sort bar with live count badges.
+- All changes verified end-to-end in the browser with no errors.

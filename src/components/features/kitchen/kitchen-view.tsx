@@ -31,6 +31,7 @@ import {
   StaggerItem,
 } from "@/components/glass/page-transition";
 import { ShimmerSkeleton } from "@/components/glass/shimmer-skeleton";
+import { UserAvatar } from "@/components/glass/user-avatar";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { useAppStore } from "@/stores/use-app-store";
 import { cn } from "@/lib/utils";
@@ -355,9 +356,12 @@ export function KitchenView() {
                             className="w-full flex items-center gap-3 p-3 hover:bg-secondary/20 transition-colors"
                           >
                             {/* Avatar */}
-                            <div className="grid place-items-center h-9 w-9 rounded-xl bg-primary/15 text-primary shrink-0 text-xs font-bold">
-                              {u.name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase()}
-                            </div>
+                            <UserAvatar
+                              name={u.name}
+                              avatarUrl={u.avatarUrl}
+                              className="h-9 w-9 rounded-xl"
+                              fallbackClassName="text-xs"
+                            />
                             {/* Name + room */}
                             <div className="flex-1 min-w-0 text-left">
                               <p className="text-sm font-medium truncate">{u.name}</p>

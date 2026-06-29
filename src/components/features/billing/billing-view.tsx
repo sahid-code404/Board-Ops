@@ -43,7 +43,7 @@ import {
 import { ShimmerSkeleton } from "@/components/glass/shimmer-skeleton";
 
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/glass/user-avatar";
 import {
   Dialog,
   DialogContent,
@@ -116,24 +116,6 @@ const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
-
-const AVATAR_GRADIENTS = [
-  "from-violet-500 to-fuchsia-500",
-  "from-emerald-500 to-teal-500",
-  "from-amber-500 to-orange-500",
-  "from-rose-500 to-pink-500",
-  "from-cyan-500 to-blue-500",
-  "from-indigo-500 to-purple-500",
-];
-
-function gradientFor(name: string) {
-  const idx = name.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) % AVATAR_GRADIENTS.length;
-  return AVATAR_GRADIENTS[idx];
-}
-
-function initials(name: string) {
-  return name.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("");
-}
 
 // ─────────────────────────────────────────────────────────────
 // Status badge helpers
@@ -1017,12 +999,12 @@ const BillRow = memo(function BillRow({
   return (
     <GlassCard className="p-4" hover={false}>
       <div className="flex items-start gap-3">
-        <Avatar className="h-10 w-10 rounded-xl shrink-0">
-          {bill.user.avatarUrl && <AvatarImage src={bill.user.avatarUrl} alt={bill.user.name} />}
-          <AvatarFallback className={cn("rounded-xl bg-gradient-to-br text-white font-semibold text-xs", gradientFor(bill.user.name))}>
-            {initials(bill.user.name) || "U"}
-          </AvatarFallback>
-        </Avatar>
+        <UserAvatar
+          name={bill.user.name}
+          avatarUrl={bill.user.avatarUrl}
+          className="h-10 w-10 rounded-xl"
+          fallbackClassName="text-xs"
+        />
 
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">

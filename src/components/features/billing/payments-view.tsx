@@ -45,9 +45,9 @@ import {
   StaggerItem,
 } from "@/components/glass/page-transition";
 import { ShimmerSkeleton } from "@/components/glass/shimmer-skeleton";
+import { UserAvatar } from "@/components/glass/user-avatar";
 
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   Dialog,
   DialogContent,
@@ -108,7 +108,7 @@ type Payment = {
   createdAt: string;
   deletedAt: string | null;
   deletionReason: string | null;
-  user: { name: string; email: string };
+  user: { name: string; email: string; room: string | null; avatarUrl: string | null };
 };
 
 type ApiResponse<T> = { success: boolean; data: T; error?: string };
@@ -209,24 +209,6 @@ function formatDateTime(iso: string) {
   const datePart = d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
   const timePart = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
   return `${datePart}, ${timePart}`;
-}
-
-const AVATAR_GRADIENTS = [
-  "from-violet-500 to-fuchsia-500",
-  "from-emerald-500 to-teal-500",
-  "from-amber-500 to-orange-500",
-  "from-rose-500 to-pink-500",
-  "from-cyan-500 to-blue-500",
-  "from-indigo-500 to-purple-500",
-];
-
-function gradientFor(name: string) {
-  const idx = name.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) % AVATAR_GRADIENTS.length;
-  return AVATAR_GRADIENTS[idx];
-}
-
-function initials(name: string) {
-  return name.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("");
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1030,11 +1012,12 @@ export function PaymentsView() {
                   }}
                   className="w-full flex items-center gap-3 p-3 rounded-2xl glass-soft hover:ring-1 hover:ring-primary/30 transition-all text-left"
                 >
-                  <Avatar className="h-10 w-10 rounded-xl shrink-0">
-                    <AvatarFallback className={cn("rounded-xl bg-gradient-to-br text-white font-semibold text-xs", gradientFor(u.name))}>
-                      {initials(u.name) || "U"}
-                    </AvatarFallback>
-                  </Avatar>
+                  <UserAvatar
+                    name={u.name}
+                    avatarUrl={u.avatarUrl}
+                    className="h-10 w-10 rounded-xl"
+                    fallbackClassName="text-xs"
+                  />
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm truncate">{u.name}</p>
                     <p className="text-xs text-muted-foreground truncate">{u.email}</p>
@@ -1292,16 +1275,12 @@ const PaymentRow = memo(function PaymentRow({
   return (
     <GlassCard className="p-4" hover={false}>
       <div className="flex items-start gap-3">
-        <Avatar className="h-10 w-10 rounded-xl shrink-0">
-          <AvatarFallback
-            className={cn(
-              "rounded-xl bg-gradient-to-br text-white font-semibold text-xs",
-              gradientFor(payment.user.name)
-            )}
-          >
-            {initials(payment.user.name) || "U"}
-          </AvatarFallback>
-        </Avatar>
+        <UserAvatar
+          name={payment.user.name}
+          avatarUrl={payment.user.avatarUrl}
+          className="h-10 w-10 rounded-xl"
+          fallbackClassName="text-xs"
+        />
 
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
