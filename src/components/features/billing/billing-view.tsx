@@ -215,6 +215,13 @@ function formatDateTime(iso: string | null) {
   return `${datePart}, ${timePart}`;
 }
 
+/** A bill is overdue if it has a due date in the past AND there's still an outstanding due amount. */
+function isOverdue(bill: Bill): boolean {
+  if (!bill.dueDate || bill.deletedAt) return false;
+  if (bill.status === "PAID" || bill.status === "VOID") return false;
+  return new Date(bill.dueDate) < new Date() && bill.dueAmount > 0;
+}
+
 // ─────────────────────────────────────────────────────────────
 // Main view
 // ─────────────────────────────────────────────────────────────
@@ -988,10 +995,18 @@ function BillRow({
                   </span>
                 )}
               </div>
-              {/* Due date only */}
+              {/* Due date — red if overdue, with OVERDUE badge */}
               {!isDeleted && bill.dueDate && (
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-muted-foreground">
-                  <span className="inline-flex items-center gap-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1.5 text-[11px]">
+                  {isOverdue(bill) && (
+                    <Badge variant="outline" className="text-[10px] bg-destructive/15 text-destructive border-destructive/30">
+                      <AlertCircle className="h-2.5 w-2.5" /> Overdue
+                    </Badge>
+                  )}
+                  <span className={cn(
+                    "inline-flex items-center gap-1",
+                    isOverdue(bill) ? "text-destructive font-semibold" : "text-muted-foreground"
+                  )}>
                     <Clock className="h-3 w-3" /> Due {formatDate(bill.dueDate)}
                   </span>
                 </div>

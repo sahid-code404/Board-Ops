@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { addDays, format, isSameDay } from "date-fns";
+import { isSameMonth } from "date-fns";
 import {
   Wallet,
   CheckCircle2,
@@ -225,24 +225,6 @@ function initials(name: string) {
   return name.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("");
 }
 
-/** Returns { top, bottom } for the date picker.
- *  - Today/Yesterday/Tomorrow: top = relative label, bottom = "EEE, d MMM"
- *  - Other dates: top = "d MMM" (date only), bottom = "EEE" (day name only, no duplicate) */
-function getDatePickerLabels(d: Date): { top: string; bottom: string } {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const target = new Date(d);
-  target.setHours(0, 0, 0, 0);
-  const diffMs = target.getTime() - today.getTime();
-  const diffDays = Math.round(diffMs / (24 * 60 * 60 * 1000));
-
-  if (diffDays === 0) return { top: "Today", bottom: format(target, "EEE, d MMM") };
-  if (diffDays === -1) return { top: "Yesterday", bottom: format(target, "EEE, d MMM") };
-  if (diffDays === 1) return { top: "Tomorrow", bottom: format(target, "EEE, d MMM") };
-  // Far dates: top = date only, bottom = day name only (no duplicate)
-  return { top: format(target, "d MMM"), bottom: format(target, "EEE") };
-}
-
 // ─────────────────────────────────────────────────────────────
 // Main view
 // ─────────────────────────────────────────────────────────────
@@ -252,10 +234,10 @@ export function PaymentsView() {
   const isAdmin = user?.role === "ADMIN";
   const qc = useQueryClient();
 
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const dateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`;
-  const datePickerLabels = getDatePickerLabels(selectedDate);
-  const isToday = isSameDay(selectedDate, new Date());
+  const now = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const isThisMonth = isSameMonth(new Date(selectedYear, selectedMonth, 1), now);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<PaymentStatus | "ALL" | "DELETED">("ALL");
@@ -273,7 +255,7 @@ export function PaymentsView() {
   const [deleteReason, setDeleteReason] = useState("");
   const [voidTarget, setVoidTarget] = useState<Payment | null>(null);
 
-  // Fetch ALL payments for KPIs (not affected by date picker)
+  // Fetch ALL payments for KPIs (not affected by month picker)
   const { data: allPayments = [] } = useQuery({
     queryKey: ["payments", "all"],
     queryFn: async () => {
@@ -282,21 +264,23 @@ export function PaymentsView() {
     },
   });
 
-  // Fetch date-filtered payments for the list
+  // Fetch month-filtered payments for the list
   const { data: payments = [], isLoading } = useQuery({
-    queryKey: ["payments", dateStr],
+    queryKey: ["payments", { month: selectedMonth, year: selectedYear }],
     queryFn: async () => {
-      const r = await api.get<ApiResponse<Payment[]>>("/payments", { params: { date: dateStr } });
+      const r = await api.get<ApiResponse<Payment[]>>("/payments", {
+        params: { month: selectedMonth, year: selectedYear, limit: 500 },
+      });
       return r.data;
     },
   });
 
   // Fetch soft-deleted payments (deletion queue) — admin only
   const { data: deletedPayments = [] } = useQuery({
-    queryKey: ["payments", "deleted", dateStr],
+    queryKey: ["payments", "deleted", { month: selectedMonth, year: selectedYear }],
     queryFn: async () => {
       const r = await api.get<ApiResponse<Payment[]>>("/payments", {
-        params: { includeDeleted: "true" },
+        params: { month: selectedMonth, year: selectedYear, includeDeleted: "true", limit: 500 },
       });
       return r.data;
     },
@@ -420,15 +404,15 @@ export function PaymentsView() {
     setEditTarget(null);
   }
 
-  // KPIs — computed from ALL payments (not affected by date picker)
+  // KPIs — computed from the month-filtered payments list
   const kpis = useMemo(() => {
-    const approved = allPayments.filter((p) => p.status === "APPROVED");
+    const approved = payments.filter((p) => p.status === "APPROVED");
     const totalApproved = approved.reduce((s, p) => s + p.amount, 0);
-    const pending = allPayments.filter((p) => p.status === "PENDING").length;
-    const rejected = allPayments.filter((p) => p.status === "REJECTED").length;
-    const refunded = allPayments.filter((p) => p.status === "REFUNDED").length;
+    const pending = payments.filter((p) => p.status === "PENDING").length;
+    const rejected = payments.filter((p) => p.status === "REJECTED").length;
+    const refunded = payments.filter((p) => p.status === "REFUNDED").length;
     return { totalApproved, pending, rejected, refunded };
-  }, [allPayments]);
+  }, [payments]);
 
   // Filtered list — search + status filter pills only
   const sourcePayments = statusFilter === "DELETED" ? deletedPayments : payments;
@@ -446,6 +430,7 @@ export function PaymentsView() {
     });
   }, [sourcePayments, search, statusFilter]);
 
+  // Pending payments for the admin approval card — from ALL payments (not month-scoped)
   const pendingPayments = allPayments.filter((p) => p.status === "PENDING");
 
   if (isLoading) {
@@ -468,43 +453,48 @@ export function PaymentsView() {
 
   return (
     <StaggerGroup className="space-y-4">
-      {/* Day picker — wide capsule with centered text + circular arrows */}
+      {/* Month picker — centered capsule with circular arrows (matches billing/expenses) */}
       <StaggerItem>
         <div className="flex items-center justify-center gap-4">
-          {/* Left arrow — circular */}
           <motion.button
             whileTap={{ scale: 0.9 }}
-            onClick={() => setSelectedDate((d) => addDays(d, -1))}
-            aria-label="Previous day"
+            onClick={() => {
+              const d = new Date(selectedYear, selectedMonth - 1, 1);
+              setSelectedMonth(d.getMonth());
+              setSelectedYear(d.getFullYear());
+            }}
+            aria-label="Previous month"
             className="grid place-items-center h-10 w-10 rounded-full glass-strong shrink-0 ring-1 ring-border/40 hover:ring-primary/40 transition-all"
           >
             <ChevronLeft className="h-5 w-5" />
           </motion.button>
 
-          {/* Date capsule — wide, centered text with relative day label */}
           <button
-            onClick={() => !isToday && setSelectedDate(new Date())}
+            onClick={() => !isThisMonth && (setSelectedMonth(now.getMonth()), setSelectedYear(now.getFullYear()))}
             className="flex-1 max-w-[280px] flex items-center justify-center gap-2.5 glass-soft rounded-full px-6 py-2.5 transition-all hover:ring-1 hover:ring-primary/30"
           >
             <Calendar className="h-4 w-4 text-primary shrink-0" />
             <div className="leading-tight text-center">
               <p className="text-sm font-bold text-primary">
-                {datePickerLabels.top}
+                {new Date(selectedYear, selectedMonth).toLocaleDateString("en-US", { month: "long" })}
               </p>
               <p className="text-[11px] text-muted-foreground">
-                {datePickerLabels.bottom}
+                {selectedYear}
               </p>
             </div>
-            {!isToday && (
+            {!isThisMonth && (
               <RotateCcw className="h-3 w-3 text-muted-foreground shrink-0" />
             )}
           </button>
 
-          {/* Right arrow — circular */}
           <motion.button
             whileTap={{ scale: 0.9 }}
-            onClick={() => setSelectedDate((d) => addDays(d, 1))}
-            aria-label="Next day"
+            onClick={() => {
+              const d = new Date(selectedYear, selectedMonth + 1, 1);
+              setSelectedMonth(d.getMonth());
+              setSelectedYear(d.getFullYear());
+            }}
+            aria-label="Next month"
             className="grid place-items-center h-10 w-10 rounded-full glass-strong shrink-0 ring-1 ring-border/40 hover:ring-primary/40 transition-all"
           >
             <ChevronRight className="h-5 w-5" />

@@ -36,6 +36,18 @@ export async function GET(req: Request) {
       where.createdAt = { gte: start, lte: end };
     }
 
+    // Optional month/year filter — filters payments where createdAt falls within
+    // that calendar month. Takes precedence over the single-day `date` filter.
+    const month = url.searchParams.get("month");
+    const year = url.searchParams.get("year");
+    if (month !== null && year) {
+      const m = Number(month);
+      const y = Number(year);
+      const start = new Date(y, m, 1);
+      const end = new Date(y, m + 1, 0, 23, 59, 59, 999);
+      where.createdAt = { gte: start, lte: end };
+    }
+
     const payments = await db.payment.findMany({
       where,
       orderBy: { createdAt: "desc" },
