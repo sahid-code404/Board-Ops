@@ -375,8 +375,10 @@ export function BillingView() {
     const totalBilled = active.reduce((s, b) => s + b.totalAmount, 0);
     const totalCollected = active.reduce((s, b) => s + b.paidAmount, 0);
     const totalOutstanding = active.reduce((s, b) => s + b.dueAmount, 0);
-    const overdueCount = active.filter((b) => b.status === "OVERDUE").length;
-    return { totalBilled, totalCollected, totalOutstanding, overdueCount };
+    const overdueBills = active.filter((b) => isOverdue(b));
+    const overdueCount = overdueBills.length;
+    const overdueAmount = overdueBills.reduce((s, b) => s + b.dueAmount, 0);
+    return { totalBilled, totalCollected, totalOutstanding, overdueCount, overdueAmount };
   }, [bills]);
 
   // ── Filtered list ──
@@ -488,7 +490,7 @@ export function BillingView() {
       </StaggerItem>
 
       {/* Compact action bar — centered transparent glass card button */}
-      {isAdmin && (
+      {isAdmin ? (
         <StaggerItem>
           <div className="flex items-center justify-center">
             <GlassButton
@@ -502,9 +504,23 @@ export function BillingView() {
             </GlassButton>
           </div>
         </StaggerItem>
+      ) : (
+        <StaggerItem>
+          <div className="flex items-center justify-center">
+            <GlassButton
+              variant="ghost"
+              onClick={() => setView("payments")}
+              size="lg"
+              className="shrink-0 glass text-primary hover:text-primary font-semibold"
+            >
+              <Wallet className="h-5 w-5" />
+              Pay Bill
+            </GlassButton>
+          </div>
+        </StaggerItem>
       )}
 
-      {/* KPIs */}
+      {/* KPIs — admins see all 4, users see Total Billed + Overdue Amount */}
       <StaggerItem>
         <div className="grid-kpi gap-3">
           <KpiCard
@@ -514,25 +530,30 @@ export function BillingView() {
             color="primary"
             prefix="₹"
           />
+          {isAdmin && (
+            <KpiCard
+              label="Total Collected"
+              value={kpis.totalCollected}
+              icon={<CheckCircle2 className="h-5 w-5" />}
+              color="success"
+              prefix="₹"
+            />
+          )}
+          {isAdmin && (
+            <KpiCard
+              label="Outstanding"
+              value={kpis.totalOutstanding}
+              icon={<TrendingUp className="h-5 w-5" />}
+              color="warning"
+              prefix="₹"
+            />
+          )}
           <KpiCard
-            label="Total Collected"
-            value={kpis.totalCollected}
-            icon={<CheckCircle2 className="h-5 w-5" />}
-            color="success"
-            prefix="₹"
-          />
-          <KpiCard
-            label="Outstanding"
-            value={kpis.totalOutstanding}
-            icon={<TrendingUp className="h-5 w-5" />}
-            color="warning"
-            prefix="₹"
-          />
-          <KpiCard
-            label="Overdue Count"
-            value={kpis.overdueCount}
+            label="Overdue Amount"
+            value={kpis.overdueAmount}
             icon={<AlertCircle className="h-5 w-5" />}
             color="danger"
+            prefix="₹"
           />
         </div>
       </StaggerItem>
