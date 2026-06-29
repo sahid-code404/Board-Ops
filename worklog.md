@@ -1781,3 +1781,30 @@ Stage Summary:
 - The Refund Pending KPI is clickable — opens the Pay Refund dialog directly.
 - KPI count auto-updates in real time whenever payments are approved/rejected/voided/deleted/refunded (TanStack Query invalidation).
 - Verified end-to-end with test data showing count = 2 and click-to-open flow.
+
+---
+Task ID: DFD-PAYMENTS
+Agent: main (orchestrator)
+Task: Generate DFD (Data Flow Diagram) of all payment-related flows (billing, payments, funds, expenses) from user and admin perspective.
+
+Work Log:
+- Used the charts skill (Playwright + CSS rendering engine) to create a comprehensive DFD.
+- Analyzed content structure: 2 actors (User, Admin), 5 data stores (Bills, Payments, Expenses, MealEntries, Notifications), 12 numbered processes across 4 domains (Billing, Payments, Expenses, Funds).
+- Designed a three-column swimlane layout: User lane (left) | Data Stores (center) | Admin lane (right), with domain section dividers (Billing, Payments, Funds, Expenses) in each lane.
+- Created `dfd-payments.html` with:
+  * Title + subtitle explaining the diagram scope.
+  * Legend bar showing shape conventions (entity=amber square, process=blue rounded rect, data store=purple open rect) + role badges (USER/ADMIN/SYSTEM).
+  * User lane: View Bills, Pay Bill, Submit Payment, Receive Notification, (No Access to Funds/Expenses).
+  * Data Stores column: D1 Bills, D2 Payments, D3 Expenses, D4 MealEntries, D5 Notifications — each with key fields.
+  * Admin lane: Generate Bills, Manage Bills, Approve/Reject Payment, Edit/Void/Delete Payment, Process Refund, Add Expense, Manage Expenses, View Funds Dashboard.
+  * Funds aggregation formula box at bottom: Total Deposit (Σ APPROVED) − Total Expenses (Σ Expenses) = Remaining Fund.
+  * Two summary cards: Bill→Payment Flow, Funds & Expense Flow (numbered step-by-step).
+  * Sync rules box explaining recomputeBillPaidState (the single source of truth for bill paid/due/status).
+- Rendered to PNG via Playwright (4000x4440px, 1273KB).
+- VLM verification: 9/10 readability — all text readable, three columns clearly separated, no overlaps, formula renders correctly.
+
+Stage Summary:
+- Comprehensive DFD delivered as `/home/z/my-project/dfd-payments.png` (and source `dfd-payments.html`).
+- Covers all payment-related flows: bill generation → payment submission → approval → refund, plus expenses and funds aggregation.
+- Shows both User and Admin perspectives via swimlane layout with role badges on every process.
+- Includes data store schemas, the funds aggregation formula, and the bill↔payment sync rules.
