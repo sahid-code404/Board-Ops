@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { requireAuth, requireRole } from "@/lib/session";
 import { ok, err, handleApiError } from "@/lib/api-response";
 import { logAudit } from "@/lib/audit";
+import { createNotification } from "@/lib/notify";
 import { purgeExpiredBills, getDeletionDate } from "@/lib/user-cleanup";
 
 /** GET /api/bills — list bills (user sees own; admin sees all).
@@ -60,6 +61,11 @@ export async function GET(req: Request) {
   }
 }
 
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
 /** POST /api/bills/generate — generate or refresh bills for a billing period.
  *  Admins can run this multiple times. Existing non-void, non-deleted bills are
  *  re-calculated (meal charges updated from current meal entries) while payment
@@ -70,6 +76,7 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const month = Number(body.month ?? new Date().getMonth());
     const year = Number(body.year ?? new Date().getFullYear());
+    const periodLabel = `${MONTHS[month] ?? `Month ${month + 1}`} ${year}`;
     // Optional custom due date from the admin. If omitted, existing bills keep
     // their current due date; new bills default to the 10th of next month.
     const customDueDate = body.dueDate ? new Date(body.dueDate) : null;
@@ -175,6 +182,21 @@ export async function POST(req: Request) {
           },
         });
         updated++;
+
+        // Notify the user when their bill amount increased (e.g. more meals added
+        // after the initial generation). Skip no-op regenerations and decreases
+        // (decreases are usually followed by a refund or adjustment notification).
+        if (totalAmount > existing.totalAmount) {
+          const diff = totalAmount - existing.totalAmount;
+          await createNotification({
+            userId: u.id,
+            title: "Bill updated",
+            description: `Your ${periodLabel} bill increased by ₹${Math.round(diff)} — new total ₹${Math.round(totalAmount)}.`,
+            type: "WARNING",
+            priority: "HIGH",
+            route: "billing",
+          });
+        }
       } else {
         // Create a new bill for this period
         await db.bill.create({
@@ -194,6 +216,18 @@ export async function POST(req: Request) {
           },
         });
         created++;
+
+        // Notify the user that their bill is ready
+        const billDueDate = dueDate ?? defaultDueDate;
+        const dueLabel = billDueDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+        await createNotification({
+          userId: u.id,
+          title: "Bill generated",
+          description: `Your ${periodLabel} bill of ₹${Math.round(totalAmount)} is now available. Due ${dueLabel}.`,
+          type: "INFO",
+          priority: "HIGH",
+          route: "billing",
+        });
       }
     }
 

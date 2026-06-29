@@ -1601,3 +1601,23 @@ Work Log:
 Stage Summary:
 - The "Total Meals Consumed" count now renders as a solid primary-colored badge with white text (high contrast) instead of low-contrast primary-on-primary-tint text.
 - Verified readable in both light and dark themes via VLM analysis.
+
+---
+Task ID: BILL-NOTIFY
+Agent: main (orchestrator)
+Task: New generated bills should notify the user.
+
+Work Log:
+- Root cause: `POST /api/bills` created/updated bills but never called `createNotification` — users had no way to know their bill was ready or changed.
+- Added `createNotification` import to `src/app/api/bills/route.ts`.
+- Added `MONTHS` helper + `periodLabel` (e.g. "July 2026") for readable notification text.
+- New bills (created branch): notify the user with title "Bill generated", description "Your {periodLabel} bill of ₹{totalAmount} is now available. Due {dueDate}.", type INFO, priority HIGH, route "billing".
+- Updated bills (updated branch): notify only when the total increased (avoids spamming on no-op regenerations and decreases). Title "Bill updated", description "Your {periodLabel} bill increased by ₹{diff} — new total ₹{totalAmount}.", type WARNING, priority HIGH, route "billing".
+- Lint: passes (0 errors, 1 pre-existing warning).
+- Browser self-verification (agent-browser): signed in as admin → Billing → Generate Bills dialog → selected July 2026 → clicked Generate (POST /api/bills 200). Signed out → signed in as Priya Sharma (priya@boardops.io / Resident@123). Notifications bell shows "5 unread". Opened notifications → top entry: "Bill generated | High | Your July 2026 bill of ₹8060 is now available. Due 10 Jul 2026. | 1 minute ago | View". No console/runtime errors.
+
+Stage Summary:
+- Users now receive a notification whenever a new bill is generated for them, with the period, amount, and due date.
+- Users also receive a notification when an existing bill is regenerated with an increased amount (e.g. more meals added after the initial generation). No-op regenerations and decreases are skipped to avoid notification spam.
+- Notifications are HIGH priority + route "billing" so clicking "View" takes the user to the billing page.
+- Verified end-to-end: admin generated July 2026 bills → Priya Sharma received the "Bill generated" notification on her next login.
