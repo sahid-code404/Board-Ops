@@ -14,6 +14,7 @@ import { VariablesView } from "@/components/features/variables/variables-view";
 import { BillingView } from "@/components/features/billing/billing-view";
 import { PaymentsView } from "@/components/features/billing/payments-view";
 import { ExpensesView } from "@/components/features/billing/expenses-view";
+import { FundsView } from "@/components/features/billing/funds-view";
 import { NotificationsView } from "@/components/features/notifications/notifications-view";
 import { SettingsView } from "@/components/features/settings/settings-view";
 import { UsersView } from "@/components/features/users/users-view";
@@ -76,6 +77,7 @@ export default function Page() {
         {view === "billing" && <BillingView />}
         {view === "payments" && <PaymentsView />}
         {view === "expenses" && <ExpensesView />}
+        {view === "funds" && <FundsView />}
         {view === "notifications" && <NotificationsView />}
         {view === "settings" && <SettingsView />}
         {view === "personalization" && <PersonalizationView />}

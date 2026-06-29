@@ -14,6 +14,7 @@ import {
   Palette,
   CreditCard,
   MoreHorizontal,
+  PiggyBank,
   type LucideIcon,
 } from "lucide-react";
 import type { ViewKey } from "@/stores/use-app-store";
@@ -40,6 +41,7 @@ export const NAV_ITEMS: NavItem[] = [
   { view: "billing", label: "Billing", icon: Wallet, roles: ["ADMIN", "USER"], primaryRoles: ["USER"], rail: true },
   { view: "payments", label: "Payments", icon: CreditCard, roles: ["ADMIN", "USER"], primary: true, rail: true },
   { view: "expenses", label: "Expenses", icon: Receipt, roles: ["ADMIN"], rail: true },
+  { view: "funds", label: "Funds", icon: PiggyBank, roles: ["ADMIN"], rail: true },
   { view: "variables", label: "Variables", icon: Sigma, roles: ["ADMIN"], rail: true },
   { view: "users", label: "Users", icon: Users, roles: ["ADMIN"], primary: true, rail: true },
   { view: "notifications", label: "Notifications", icon: Bell, roles: ["ADMIN", "USER"], rail: true },
@@ -56,6 +58,7 @@ export const NAV_LABELS: Record<ViewKey, string> = {
   billing: "Billing & Invoices",
   payments: "Payments & Wallet",
   expenses: "Expenses & Procurement",
+  funds: "Funds Overview",
   notifications: "Notifications",
   users: "User Management",
   settings: "System Settings",

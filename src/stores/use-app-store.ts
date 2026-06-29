@@ -12,6 +12,7 @@ export type ViewKey =
   | "billing"
   | "payments"
   | "expenses"
+  | "funds"
   | "notifications"
   | "users"
   | "settings"
