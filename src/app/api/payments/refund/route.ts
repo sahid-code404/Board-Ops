@@ -53,7 +53,8 @@ const refundSchema = z.object({
 
 /** POST /api/payments/refund — processes a refund to a user.
  *  Creates a REFUNDED payment record and notifies the user.
- *  The refund reduces the user's credit (approved − billed − refunded). */
+ *  The refund is linked to the bill that has the overpayment (if any), so
+ *  recomputeBillPaidState correctly reduces that bill's paidAmount. */
 export async function POST(req: Request) {
   try {
     const admin = await requireRole("ADMIN");
@@ -66,21 +67,35 @@ export async function POST(req: Request) {
       return err(`User only has ₹${Math.round(credit)} credit (requested ₹${Math.round(data.amount)})`, 422);
     }
 
-    // Determine which bill to link the refund to (if any). If the admin
-    // specified a billId, use it; otherwise pick the user's most recent
-    // non-void, non-deleted bill so the refund is attributable.
+    // Determine which bill to link the refund to.
+    // Priority:
+    //  1. Admin-specified billId (if any)
+    //  2. The bill with the most overpayment (paidAmount > totalAmount) —
+    //     this is the bill the refund should reduce.
+    //  3. Fallback: the user's most recent non-void, non-deleted bill.
     let billId = data.billId || null;
     if (!billId) {
-      const recentBill = await db.bill.findFirst({
+      const userBills = await db.bill.findMany({
         where: { userId: data.userId, deletedAt: null, status: { notIn: ["VOID", "DELETED"] } },
-        orderBy: { createdAt: "desc" },
-        select: { id: true },
+        select: { id: true, totalAmount: true, paidAmount: true, createdAt: true },
       });
-      billId = recentBill?.id || null;
+      // Find the bill with the most overpayment
+      const overpaidBills = userBills
+        .map((b) => ({ ...b, overpay: b.paidAmount - b.totalAmount }))
+        .filter((b) => b.overpay > 0)
+        .sort((a, b) => b.overpay - a.overpay);
+      if (overpaidBills.length > 0) {
+        billId = overpaidBills[0].id;
+      } else {
+        // No single bill overpaid — link to most recent bill for attribution
+        const sorted = [...userBills].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        billId = sorted[0]?.id || null;
+      }
     }
 
-    // Create a REFUNDED payment record. If linked to a bill, recomputeBillPaidState
-    // treats REFUNDED payments as negative contributions to paidAmount.
+    // Create a REFUNDED payment record linked to the overpaid bill.
+    // recomputeBillPaidState treats REFUNDED payments as negative contributions
+    // to that bill's paidAmount, so the bill stays in sync.
     const payment = await db.payment.create({
       data: {
         userId: data.userId,
@@ -94,7 +109,7 @@ export async function POST(req: Request) {
       },
     });
 
-    // Re-sync the linked bill (if any) so paid/due/status reflect the refund
+    // Re-sync the linked bill so paid/due/status reflect the refund
     if (billId) {
       await recomputeBillPaidState(billId);
     }

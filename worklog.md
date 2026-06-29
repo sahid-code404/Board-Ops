@@ -1732,3 +1732,31 @@ Stage Summary:
 - Credit = approved payments − (current/past-period) billed − already refunded. Future bills excluded.
 - Dialog opens instantly with loading skeleton, then populates — no more perceived "not fetching" delay.
 - Single source of truth (getUserCredit) used by both GET (list) and POST (validate) endpoints.
+
+---
+Task ID: REFUND-BILL-LINKAGE
+Agent: main (orchestrator)
+Task: When users pay more than billed amount, auto-fetch for refund + fix refund bill linkage.
+
+Work Log:
+- Confirmed the credit calculation (getUserCredit) correctly detects bill-level overpayment: when Rohan pays ₹6,000 on a ₹4,800 bill, credit = ₹1,200 ✓.
+- Found a NEW bug in POST /api/payments/refund: when no billId was specified by the admin, the refund was linked to the user's MOST RECENT bill (by createdAt), NOT the bill with the overpayment. This meant recomputeBillPaidState ran on the wrong bill and didn't reduce the overpaid bill's paidAmount.
+  - Example: Rohan overpaid June 2026 bill (₹6,000 on ₹4,800). The refund was linked to July 2027 (most recent by createdAt). June bill's paidAmount stayed at ₹6,000 instead of dropping to ₹4,800.
+- Fixed POST /api/payments/refund bill-linkage priority:
+  1. Admin-specified billId (if any)
+  2. The bill with the MOST overpayment (paidAmount > totalAmount, sorted by overpay desc) — this is the bill the refund should reduce
+  3. Fallback: most recent non-void, non-deleted bill (for unlinked-payment credit)
+- After the fix, verified end-to-end:
+  * Rohan overpays June bill (₹6,000 on ₹4,800) → appears in refund list with ₹1,200 credit
+  * Admin processes ₹1,200 refund → refund linked to June bill (the overpaid one)
+  * June bill after refund: total ₹4,800, paid ₹4,800 (₹6,000 approved − ₹1,200 refunded), due ₹0, PAID ✓
+  * Refund list auto-refreshes → Rohan removed (credit now ₹0), only Priya remains (₹2,653 unlinked credit)
+- Lint: passes (0 errors, 1 pre-existing warning).
+- Browser self-verification: full flow tested — Pay Refund → dialog shows Rohan (₹1,200) + Priya (₹2,653) → click Rohan → process ₹1,200 refund → toast "Refund of ₹1200 processed — user notified" → dialog auto-refreshes, Rohan gone → bill paidAmount correctly reduced to ₹4,800. No errors.
+
+Stage Summary:
+- Pay Refund now auto-fetches ANY user who paid more than their billed amount (bill-level overpayment OR unlinked excess payments).
+- Refund is correctly linked to the OVERPAID bill (not just the most recent bill), so recomputeBillPaidState reduces the right bill's paidAmount.
+- After refund: bill paidAmount = approved payments − refunded payments = exactly the bill total (no more stuck overpayment).
+- Refund list auto-refreshes after each refund, removing users whose credit is fully consumed.
+- Verified end-to-end with real overpayment scenario.
