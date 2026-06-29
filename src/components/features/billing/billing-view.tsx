@@ -370,8 +370,12 @@ export function BillingView() {
   });
 
   // ── Derived KPIs ──
+  // KPIs include ALL bills (active + soft-deleted) for the month, excluding only VOID.
+  // Soft-deleting a bill removes it from the user's view but the financial data
+  // (total billed, collected, outstanding) still counts in the KPIs.
+  const allBills = useMemo(() => [...bills, ...deletedBills], [bills, deletedBills]);
   const kpis = useMemo(() => {
-    const active = bills.filter((b) => b.status !== "VOID");
+    const active = allBills.filter((b) => b.status !== "VOID");
     const totalBilled = active.reduce((s, b) => s + b.totalAmount, 0);
     const totalCollected = active.reduce((s, b) => s + b.paidAmount, 0);
     const totalOutstanding = active.reduce((s, b) => s + b.dueAmount, 0);
@@ -379,7 +383,7 @@ export function BillingView() {
     const overdueCount = overdueBills.length;
     const overdueAmount = overdueBills.reduce((s, b) => s + b.dueAmount, 0);
     return { totalBilled, totalCollected, totalOutstanding, overdueCount, overdueAmount };
-  }, [bills]);
+  }, [allBills]);
 
   // ── Filtered list ──
   // Use deleted bills when filter is DELETED, otherwise use active bills
