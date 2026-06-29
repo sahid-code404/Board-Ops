@@ -889,8 +889,14 @@ function ExpenseRow({
                   </>
                 )}
               </div>
-              {/* Transaction strip — Cost with label, same size as billing */}
+              {/* Transaction strip — Quantity + Cost on the same row, same size */}
               <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 mt-2">
+                {qty && (
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Quantity</span>
+                    <span className="text-base font-bold tabular-nums">{qty}</span>
+                  </div>
+                )}
                 <div className="flex items-baseline gap-1">
                   <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Cost</span>
                   <span className="text-base font-bold tabular-nums">{formatINR(expense.amount)}</span>
@@ -902,11 +908,9 @@ function ExpenseRow({
                   </span>
                 )}
               </div>
-              {/* Date + qty + description row */}
+              {/* Date-time row */}
               <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-muted-foreground">
-                <span>
-                  {formatDate(expense.expenseDate)}{qty ? ` ${qty}` : ""}
-                </span>
+                <span>{formatDate(expense.expenseDate)}</span>
                 {expense.description && (
                   <span className="truncate max-w-[200px]">
                     · {expense.description}
