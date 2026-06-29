@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { requireAuth, requireRole } from "@/lib/session";
 import { ok, handleApiError } from "@/lib/api-response";
+import { isLocked } from "@/lib/meal-engine";
 
 /** GET /api/kitchen — meal counts for a specific day + month-to-date totals */
 export async function GET(req: Request) {
@@ -90,13 +91,18 @@ export async function GET(req: Request) {
       const userEntries = entries.filter((e) => e.userId === u.id);
       const mealsOn = meals.map((m) => {
         const entry = userEntries.find((e) => e.mealId === m.id);
+        // Compute actual locked state: either the DB locked flag is true,
+        // or the editableUntil has passed (cutoff reached)
+        const effectivelyLocked = entry
+          ? (entry.locked || entry.status === "LOCKED" || isLocked(entry.editableUntil))
+          : false;
         return {
           mealId: m.id,
           mealName: m.displayName,
           mealIcon: m.icon,
           mealColor: m.color,
           status: entry?.status ?? "—",
-          locked: entry?.locked ?? false,
+          locked: effectivelyLocked,
           overrideFlag: entry?.overrideFlag ?? false,
         };
       });
