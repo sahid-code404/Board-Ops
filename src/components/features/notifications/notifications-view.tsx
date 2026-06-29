@@ -10,7 +10,6 @@ import {
   CheckCircle2,
   AlertTriangle,
   ShieldAlert,
-  RefreshCw,
   ArrowRight,
   Sparkles,
 } from "lucide-react";
@@ -79,10 +78,11 @@ export function NotificationsView() {
   const setView = useAppStore((s) => s.setView);
   const qc = useQueryClient();
 
-  const { data, isLoading, isFetching, refetch } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["notifications"],
     queryFn: () => unwrap<NotifResponse>(api.get("/notifications")),
     refetchInterval: 30000,
+    refetchOnWindowFocus: true,
   });
 
   const markAllRead = useMutation({
@@ -155,17 +155,7 @@ export function NotificationsView() {
     <StaggerGroup className="space-y-4 pb-6">
       {/* Action bar — centered glass card button */}
       <StaggerItem>
-        <div className="flex items-center justify-center gap-3">
-          <GlassButton
-            variant="ghost"
-            size="icon"
-            onClick={() => refetch()}
-            loading={isFetching}
-            aria-label="Refresh"
-            className="shrink-0 glass text-primary hover:text-primary"
-          >
-            <RefreshCw className="h-5 w-5" />
-          </GlassButton>
+        <div className="flex items-center justify-center">
           <GlassButton
             variant="ghost"
             size="lg"
