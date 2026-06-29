@@ -424,12 +424,14 @@ export function PaymentsView() {
   // Pay Refund — fetch users with credit balance, then process refund
   const fetchRefundUsers = async () => {
     setRefundLoading(true);
+    setRefundOpen(true); // open dialog immediately so the user sees a loading state
+    setRefundUsers([]);  // clear stale list
     try {
       const r = await api.get<{ success: boolean; data: typeof refundUsers }>("/payments/refund");
       setRefundUsers(r.data);
-      setRefundOpen(true);
     } catch (e: unknown) {
       toast.error((e as Error).message || "Failed to load refund users");
+      setRefundOpen(false);
     } finally {
       setRefundLoading(false);
     }
@@ -996,7 +998,13 @@ export function PaymentsView() {
               These users have overpaid and are eligible for a refund. Click to process.
             </DialogDescription>
           </DialogHeader>
-          {refundUsers.length === 0 ? (
+          {refundLoading ? (
+            <div className="space-y-2 py-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <ShimmerSkeleton key={i} className="h-16" />
+              ))}
+            </div>
+          ) : refundUsers.length === 0 ? (
             <div className="text-center py-8 text-sm text-muted-foreground">
               No users have credit balance right now.
             </div>

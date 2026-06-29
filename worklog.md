@@ -1692,3 +1692,43 @@ Stage Summary:
 - All payment status changes (approve, reject, void, soft-delete, refund, bill regeneration) now re-sync the linked bill from scratch — no incremental add/subtract, no drift.
 - Idempotency: re-approving an approved payment is a safe no-op.
 - Verified end-to-end with 10-step DB test + browser cross-check across Billing/Payments/Funds pages. All numbers consistent.
+
+---
+Task ID: REFUND-AUTO-FETCH
+Agent: main (orchestrator)
+Task: Pay Refund button not automatically fetching users who may get refunds.
+
+Work Log:
+- Root cause: GET /api/payments/refund used a narrow credit definition — only bills where `paidAmount > totalAmount` (bill-level overpayment). This missed:
+  1. Unlinked approved payments (direct deposits / wallet top-ups with no billId)
+  2. Overpayment across multiple bills (user overpaid one bill but underpaid another)
+  3. Payments for voided/reduced bills
+  Also, future-period bills (e.g. July 2026 generated in advance) were counted against the user, hiding credit they should be able to reclaim.
+
+- Created `src/lib/credit.ts` exporting `getUserCredit(userId)`:
+  * credit = (sum of APPROVED payments) − (sum of totalAmount for current/past-period bills) − (sum of REFUNDED payments)
+  * Excludes VOID, DELETED, soft-deleted bills.
+  * Excludes future-period bills (periodYear*12 + periodMonth > current period) — a user shouldn't be denied a refund just because next month's bill exists.
+  * Clamps credit at >= 0.
+  * Returns breakdown { credit, totalApproved, totalBilled, totalRefunded }.
+
+- Rewrote GET /api/payments/refund: now iterates all ACTIVE users, calls getUserCredit, returns only those with credit > 0. Includes breakdown for transparency.
+
+- Rewrote POST /api/payments/refund: uses getUserCredit for the credit validation check (same calculation as GET). If no billId specified, links the refund to the user's most recent non-void/non-deleted bill for attribution.
+
+- Frontend UX improvements in payments-view.tsx:
+  * Pay Refund button now opens the dialog IMMEDIATELY with a loading skeleton (3 ShimmerSkeletons) instead of waiting for the fetch to complete before opening. Users see instant feedback.
+  * Clears stale refundUsers list on each open so old data doesn't flash.
+  * On fetch error, closes the dialog + shows toast.
+  * Dialog now has 3 states: loading (skeletons), empty ("No users have credit balance right now"), populated (user list).
+
+- Verified with test data: created ₹6,000 unlinked approved payments for Rohan (whose June bill is ₹4,800) → Rohan shows ₹1,200 credit in the refund dialog. Avatar + name + email + ₹1,200 credit all render correctly. Cleaned up test data after.
+
+- Lint: passes (0 errors, 1 pre-existing warning).
+- Browser self-verification: Pay Refund button → dialog opens instantly with loading → populates with Rohan (₹1,200 credit). No console/runtime errors.
+
+Stage Summary:
+- Pay Refund now correctly identifies ALL users with refundable credit, not just bill-level overpayers.
+- Credit = approved payments − (current/past-period) billed − already refunded. Future bills excluded.
+- Dialog opens instantly with loading skeleton, then populates — no more perceived "not fetching" delay.
+- Single source of truth (getUserCredit) used by both GET (list) and POST (validate) endpoints.
