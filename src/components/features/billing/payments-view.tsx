@@ -333,6 +333,7 @@ export function PaymentsView() {
       setSubmitOpen(false);
       qc.invalidateQueries({ queryKey: ["payments"] });
       qc.invalidateQueries({ queryKey: ["bills"] });
+      qc.invalidateQueries({ queryKey: ["bills", "submit-payment-dialog"] });
     },
     onError: (e: Error) => toast.error(e.message || "Failed to submit payment"),
   });
@@ -354,6 +355,7 @@ export function PaymentsView() {
       setActionTarget(null);
       qc.invalidateQueries({ queryKey: ["payments"] });
       qc.invalidateQueries({ queryKey: ["bills"] });
+      qc.invalidateQueries({ queryKey: ["bills", "submit-payment-dialog"] });
     },
     onError: (e: Error) => toast.error(e.message || "Action failed"),
   });
@@ -1443,17 +1445,17 @@ function SubmitPaymentDialog({
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string>("");
 
-  // Load user's outstanding bills for selection — always refetch when dialog opens
-  // so paid bills don't appear in the dropdown
+  // Load user's outstanding bills for selection — uses a unique queryKey so it
+  // always fetches fresh data when the dialog opens (not stale cached data from
+  // the main billing view which uses a different queryKey with month/year params)
   const { data: bills = [] } = useQuery({
-    queryKey: ["bills"],
+    queryKey: ["bills", "submit-payment-dialog"],
     queryFn: async () => {
       const r = await api.get<ApiResponse<BillListItem[]>>("/bills");
       return r.data;
     },
     enabled: open,
     staleTime: 0,
-    placeholderData: (prev) => prev,
   });
 
   const outstanding = bills.filter(
