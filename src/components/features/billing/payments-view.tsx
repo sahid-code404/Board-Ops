@@ -550,7 +550,7 @@ export function PaymentsView() {
       <StaggerItem>
         <div className="grid-kpi gap-3">
           <KpiCard
-            label="Total Approved"
+            label="Total Deposit"
             value={kpis.totalApproved}
             icon={<CheckCircle2 className="h-5 w-5" />}
             color="success"
