@@ -397,7 +397,6 @@ export function KitchenView() {
                                 <div className="px-3 pb-3 space-y-2">
                                   {u.meals.map((m) => {
                                     const isOn = m.status === "ON" || m.status === "LOCKED";
-                                    const isOff = m.status === "OFF";
                                     const isLocked = m.locked || m.status === "LOCKED";
                                     const isOverridden = m.overrideFlag;
                                     return (
@@ -412,34 +411,27 @@ export function KitchenView() {
                                         >
                                           {m.mealIcon}
                                         </div>
-                                        {/* Meal name + status */}
+                                        {/* Meal name + status labels */}
                                         <div className="flex-1 min-w-0">
                                           <p className="text-sm font-medium truncate">{m.mealName}</p>
-                                          <div className="flex items-center gap-2 mt-0.5">
-                                            {isOverridden ? (
-                                              <>
-                                                {/* Admin has overridden — show colored status */}
-                                                <span className={cn(
-                                                  "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
-                                                  isOn && "bg-success/15 text-success",
-                                                  isOff && "bg-warning/15 text-warning",
-                                                  !isOn && !isOff && "bg-muted text-muted-foreground"
-                                                )}>
-                                                  {isOn ? "ON" : isOff ? "OFF" : "—"}
+                                          {/* Only show Locked or Overridden labels — nothing for default state */}
+                                          {(isLocked || isOverridden) && (
+                                            <div className="flex items-center gap-1.5 mt-0.5">
+                                              {isLocked && !isOverridden && (
+                                                <span className="text-[10px] text-destructive flex items-center gap-0.5">
+                                                  <Lock className="h-2.5 w-2.5" /> Locked
                                                 </span>
+                                              )}
+                                              {isOverridden && (
                                                 <span className="inline-flex items-center gap-0.5 text-[10px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-full font-medium">
                                                   <ShieldCheck className="h-2.5 w-2.5" /> Overridden
                                                 </span>
-                                              </>
-                                            ) : (
-                                              /* Default state — no colored badge, just neutral text */
-                                              <span className="text-[10px] text-muted-foreground">
-                                                {isLocked ? "🔒 Locked" : "Default"}
-                                              </span>
-                                            )}
-                                          </div>
+                                              )}
+                                            </div>
+                                          )}
                                         </div>
-                                        {/* Override toggle — neutral gray when default, green/yellow only when overridden */}
+                                        {/* Toggle — default color (success green) when ON, dark gray when OFF.
+                                            Same color regardless of override state. */}
                                         <button
                                           title={`Toggle ${m.mealName} — currently ${m.status}. Admin can override anytime before month ends.`}
                                           disabled={overrideLoading === `${u.userId}_${m.mealId}`}
@@ -455,11 +447,7 @@ export function KitchenView() {
                                           }}
                                           className={cn(
                                             "relative inline-flex h-7 w-12 items-center rounded-full transition-all shrink-0",
-                                            isOverridden
-                                              ? isOn
-                                                ? "bg-success shadow-sm shadow-success/30"
-                                                : "bg-warning shadow-sm shadow-warning/30"
-                                              : "bg-muted/60",
+                                            isOn ? "bg-success shadow-sm shadow-success/30" : "bg-muted",
                                             overrideLoading === `${u.userId}_${m.mealId}` && "opacity-50 cursor-wait"
                                           )}
                                         >
