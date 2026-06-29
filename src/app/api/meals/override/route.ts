@@ -30,9 +30,10 @@ export async function POST(req: Request) {
     if (!entry) {
       const editableUntil = computeEditableUntil(meal, data.serviceDate);
       const newStatus = data.action === "TURN_OFF" ? "OFF" : "ON";
-      const matchesDefault =
-        (meal.defaultState === "ON" && newStatus === "ON") ||
-        (meal.defaultState === "OFF" && newStatus === "OFF");
+      // No entry existed — meal was in default state. If admin sets it to the
+      // same as default, no override. If different, mark as overridden.
+      const defaultStatus = meal.defaultState === "ON" ? "ON" : "OFF";
+      const overrideFlag = newStatus !== defaultStatus;
       const newEntry = await db.mealEntry.create({
         data: {
           userId: data.userId,
@@ -41,7 +42,7 @@ export async function POST(req: Request) {
           status: newStatus,
           editableUntil,
           locked: false,
-          overrideFlag: !matchesDefault,
+          overrideFlag,
           updatedBy: admin.id,
         },
       });
@@ -86,18 +87,20 @@ export async function POST(req: Request) {
               ? "ON"
               : entry.status;
 
-    // If the new status matches the meal's default state, the meal is back to
-    // its "natural" state — clear the override flag so no indicator shows.
-    // Otherwise, mark it as overridden.
-    const matchesDefault =
-      (meal.defaultState === "ON" && newStatus === "ON") ||
-      (meal.defaultState === "OFF" && newStatus === "OFF");
+    // The admin performed an override action. If the new state is the same as
+    // the meal's default state AND the old state was also the default, then
+    // the admin didn't actually change anything meaningful — clear the flag.
+    // Otherwise, the admin changed the state — mark as overridden.
+    const defaultStatus = meal.defaultState === "ON" ? "ON" : "OFF";
+    const wasAtDefault = entry.status === defaultStatus || entry.status === "LOCKED" && meal.defaultState === "ON";
+    const nowAtDefault = newStatus === defaultStatus;
+    const overrideFlag = !(wasAtDefault && nowAtDefault);
 
     const updated = await db.mealEntry.update({
       where: { id: entry.id },
       data: {
         status: newStatus,
-        overrideFlag: !matchesDefault,
+        overrideFlag,
         locked: data.action === "LOCK" ? true : false,
         updatedBy: admin.id,
       },

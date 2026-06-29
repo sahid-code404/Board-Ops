@@ -401,10 +401,10 @@ export function KitchenView() {
                                         {/* Meal name + status labels */}
                                         <div className="flex-1 min-w-0">
                                           <p className="text-sm font-medium truncate">{m.mealName}</p>
-                                          {/* Only show Locked or Overridden labels — nothing for default state */}
+                                          {/* Show Locked and/or Overridden labels — nothing for default state */}
                                           {(isLocked || isOverridden) && (
                                             <div className="flex items-center gap-1.5 mt-0.5">
-                                              {isLocked && !isOverridden && (
+                                              {isLocked && (
                                                 <span className="text-[10px] text-destructive flex items-center gap-0.5">
                                                   <Lock className="h-2.5 w-2.5" /> Locked
                                                 </span>
