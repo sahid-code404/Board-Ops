@@ -153,28 +153,28 @@ export function NotificationsView() {
 
   return (
     <StaggerGroup className="space-y-4 pb-6">
-      {/* Action bar */}
+      {/* Action bar — centered glass card button */}
       <StaggerItem>
-        <div className="flex items-center justify-end gap-3">
+        <div className="flex items-center justify-center gap-3">
           <GlassButton
-            variant="secondary"
-            size="sm"
+            variant="ghost"
+            size="icon"
             onClick={() => refetch()}
             loading={isFetching}
             aria-label="Refresh"
-            className="shrink-0"
+            className="shrink-0 glass text-primary hover:text-primary"
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className="h-5 w-5" />
           </GlassButton>
           <GlassButton
-            variant="primary"
-            size="sm"
+            variant="ghost"
+            size="lg"
             onClick={() => markAllRead.mutate()}
             loading={markAllRead.isPending}
             disabled={unreadCount === 0}
-            className="shrink-0"
+            className="shrink-0 glass text-primary hover:text-primary font-semibold"
           >
-            <CheckCheck className="h-4 w-4" />
+            <CheckCheck className="h-5 w-5" />
             Mark all read
           </GlassButton>
         </div>
