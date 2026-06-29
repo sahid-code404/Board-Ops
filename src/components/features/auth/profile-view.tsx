@@ -440,6 +440,7 @@ export function ProfileView() {
               variant="danger"
               size="sm"
               onClick={() => {
+                qc.clear();
                 logout();
                 toast.success("Signed out successfully");
               }}

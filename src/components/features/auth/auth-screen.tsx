@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mail, Lock, User, Phone, Eye, EyeOff, Sparkles, ArrowRight, ShieldCheck, Zap, Layers } from "lucide-react";
 import { GlassCard } from "@/components/glass/glass-card";
@@ -42,6 +43,7 @@ export function AuthScreen() {
   });
   const setUser = useAuthStore((s) => s.setUser);
   const setToken = useAuthStore((s) => s.setToken);
+  const qc = useQueryClient();
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,6 +53,8 @@ export function AuthScreen() {
       if (mode === "login") {
         const data = loginSchema.parse({ email: form.email, password: form.password });
         const res = await api.post<{ success: boolean; data: { token: string; user: any } }>("/auth/login", data);
+        // Clear all cached queries from any previous session before setting new user
+        qc.clear();
         setToken(res.data.token);
         setUser(res.data.user);
         toast.success(`Welcome back, ${res.data.user.name.split(" ")[0]}!`);
