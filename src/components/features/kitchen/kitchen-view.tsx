@@ -73,6 +73,7 @@ type UserMealStatus = {
   avatarUrl: string | null;
   onCount: number;
   offCount: number;
+  monthConsumed: number;
   meals: UserMealItem[];
 };
 
@@ -386,6 +387,24 @@ export function KitchenView() {
                                 className="overflow-hidden"
                               >
                                 <div className="px-3 pb-3 space-y-2">
+                                  {/* Monthly tally — total meals consumed this month */}
+                                  <div className="flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-primary/10 ring-1 ring-primary/20">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <div className="grid place-items-center h-8 w-8 rounded-xl bg-primary/20 text-primary shrink-0">
+                                        <Utensils className="h-4 w-4" />
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className="text-[11px] text-muted-foreground leading-tight">Total Meals Consumed</p>
+                                        <p className="text-[10px] text-muted-foreground/80 leading-tight">
+                                          {format(date, "MMM yyyy")}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <span className="text-xl font-bold tabular-nums text-primary shrink-0">
+                                      {u.monthConsumed}
+                                    </span>
+                                  </div>
+
                                   {u.meals.map((m) => {
                                     const isOn = m.status === "ON" || m.status === "LOCKED";
                                     const isLocked = m.locked || m.status === "LOCKED";

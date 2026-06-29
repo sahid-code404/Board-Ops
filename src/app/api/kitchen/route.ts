@@ -89,6 +89,9 @@ export async function GET(req: Request) {
 
     const userMealStatus = activeResidents.map((u) => {
       const userEntries = entries.filter((e) => e.userId === u.id);
+      // Total meals consumed this month (ON + LOCKED entries) — used in the
+      // expanded user card so admin sees a running monthly tally per resident.
+      const monthConsumed = monthEntries.filter((e) => e.userId === u.id).length;
       const isPastDate = target < new Date(new Date().setHours(0, 0, 0, 0));
       const mealsOn = meals.map((m) => {
         const entry = userEntries.find((e) => e.mealId === m.id);
@@ -126,6 +129,7 @@ export async function GET(req: Request) {
         avatarUrl: u.avatarUrl,
         onCount,
         offCount,
+        monthConsumed,
         meals: mealsOn,
       };
     });

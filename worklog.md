@@ -1561,3 +1561,25 @@ Stage Summary:
 - Due date is preserved on regeneration unless the admin explicitly provides a new one.
 - Detailed toast feedback: created / updated / skipped counts.
 - Verified end-to-end with two consecutive generations — no duplicates, no payment data lost, no errors.
+
+---
+Task ID: KITCHEN-MONTH-TALLY
+Agent: main (orchestrator)
+Task: In Meal Counts → User Meal Status, when admin swipes (expands) a user pill, show "Total Meals Consumed This Month" above the meals list.
+
+Work Log:
+- Clarified with user that bills are correct (per-meal billing based on personal meal consumption) — no billing change made.
+- Extended `GET /api/kitchen` in `src/app/api/kitchen/route.ts`: added `monthConsumed` per user — counts the user's ON+LOCKED MealEntry rows within the selected date's month (reuses the existing `monthEntries` query, zero extra DB calls).
+- Updated `UserMealStatus` type in `kitchen-view.tsx` to include `monthConsumed: number`.
+- Added a "Total Meals Consumed" pill at the top of the expanded user card (above the per-meal list):
+  * Layout: flex row, `rounded-2xl bg-primary/10 ring-1 ring-primary/20`, padding 2.5.
+  * Left: 8×8 primary-tinted icon tile (Utensils icon) + label "Total Meals Consumed" (text-[11px]) + month subtitle (text-[10px], e.g. "Jun 2026") via `format(date, "MMM yyyy")`.
+  * Right: large `text-xl font-bold tabular-nums text-primary` count.
+- Lint: `bun run lint` passes (0 errors, 1 pre-existing warning).
+- Browser self-verification (agent-browser): signed in as admin → Counts page → expanded Priya Sharma → "Total Meals Consumed | Jun 2026 | 58" pill appears above her meal list. Expanded Ananya Iyer → shows "2" (she only has 2 meal entries this month). No console/runtime errors.
+
+Stage Summary:
+- Admin now sees a per-user monthly meal tally at the top of each expanded user card in the Meal Counts → User Meal Status section.
+- Tally reflects actual meal consumption (ON + LOCKED entries) for the selected date's month — matches the same data used by the billing engine.
+- Zero extra DB queries (reuses existing monthEntries); no performance impact.
+- Verified end-to-end in the browser with no errors.
