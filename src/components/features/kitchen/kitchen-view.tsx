@@ -439,7 +439,7 @@ export function KitchenView() {
                                             )}
                                           </div>
                                         </div>
-                                        {/* Override toggle */}
+                                        {/* Override toggle — neutral gray when default, green/yellow only when overridden */}
                                         <button
                                           title={`Toggle ${m.mealName} — currently ${m.status}. Admin can override anytime before month ends.`}
                                           disabled={overrideLoading === `${u.userId}_${m.mealId}`}
@@ -455,7 +455,11 @@ export function KitchenView() {
                                           }}
                                           className={cn(
                                             "relative inline-flex h-7 w-12 items-center rounded-full transition-all shrink-0",
-                                            isOn ? "bg-success shadow-sm shadow-success/30" : "bg-muted",
+                                            isOverridden
+                                              ? isOn
+                                                ? "bg-success shadow-sm shadow-success/30"
+                                                : "bg-warning shadow-sm shadow-warning/30"
+                                              : "bg-muted/60",
                                             overrideLoading === `${u.userId}_${m.mealId}` && "opacity-50 cursor-wait"
                                           )}
                                         >
