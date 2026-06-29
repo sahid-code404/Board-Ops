@@ -56,17 +56,24 @@ export async function GET(req: Request) {
       orderBy: { name: "asc" },
     });
 
-    // Get bills for this month (including soft-deleted — financial data still counts)
+    // Get bills for this month (excluding VOID; soft-deleted excluded so we
+    // don't count bills pending permanent deletion).
     const bills = await db.bill.findMany({
       where: {
         periodMonth: month,
         periodYear: year,
         status: { notIn: ["VOID"] },
+        deletedAt: null,
       },
       select: { id: true, userId: true, totalAmount: true, paidAmount: true, dueAmount: true },
     });
 
-    // Get approved payments for this month grouped by user
+    // Get ALL approved, non-deleted payments for this month grouped by user.
+    // This is the single source of truth for a user's deposit — a payment is
+    // counted once regardless of whether it's linked to a bill or not.
+    // (Previously the code added billPaid + directDeposit, which double-counted
+    //  bill-linked payments since billPaid is itself derived from those same
+    //  payments.)
     const userPayments = await db.payment.findMany({
       where: {
         status: "APPROVED",
@@ -80,15 +87,14 @@ export async function GET(req: Request) {
     const userBreakdown = residents.map((u) => {
       const userBills = bills.filter((b) => b.userId === u.id);
       const billTotal = userBills.reduce((s, b) => s + b.totalAmount, 0);
-      const billPaid = userBills.reduce((s, b) => s + b.paidAmount, 0);
       const billDue = userBills.reduce((s, b) => s + b.dueAmount, 0);
 
-      // Direct deposits (approved payments not linked to a specific bill)
-      const directDeposit = userPayments
+      // Deposit = sum of the user's approved, non-deleted payments this month.
+      // (Equivalent to what the Payments page shows as "Total Deposit".)
+      const deposit = userPayments
         .filter((p) => p.userId === u.id)
         .reduce((s, p) => s + p.amount, 0);
 
-      const totalDeposit = billPaid + directDeposit;
       const needToPay = Math.max(0, billDue);
 
       return {
@@ -98,7 +104,7 @@ export async function GET(req: Request) {
         room: u.room,
         avatarUrl: u.avatarUrl,
         billTotal,
-        deposit: totalDeposit,
+        deposit,
         needToPay,
         hasBills: userBills.length > 0,
       };

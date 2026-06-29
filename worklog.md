@@ -1621,3 +1621,31 @@ Stage Summary:
 - Users also receive a notification when an existing bill is regenerated with an increased amount (e.g. more meals added after the initial generation). No-op regenerations and decreases are skipped to avoid notification spam.
 - Notifications are HIGH priority + route "billing" so clicking "View" takes the user to the billing page.
 - Verified end-to-end: admin generated July 2026 bills → Priya Sharma received the "Bill generated" notification on her next login.
+
+---
+Task ID: FUNDS-DEPOSIT-FIX
+Agent: main (orchestrator)
+Task: Fix payments and funds total deposit not matching per user (Priya paid ₹10,493 but funds showed ₹18,333).
+
+Work Log:
+- Diagnosed root cause with investigation script: the funds API per-user `deposit` was computed as `billPaid + directDeposit`, which DOUBLE-COUNTED bill-linked payments. `billPaid` (the bill's paidAmount field) is itself derived from the same approved payments, so a payment linked to a bill was counted once in `billPaid` and again in `directDeposit`.
+  - Priya's data: bill 6/2026 paidAmount = ₹7,840 (from ₹4,650 + ₹3,190 linked payments) + direct payments ₹10,493 (all approved payments including the linked ones) = ₹18,333 (the wrong number). Actual correct deposit = ₹10,493.
+- Fixed `GET /api/funds` in `src/app/api/funds/route.ts`:
+  * Per-user `deposit` is now the sum of the user's approved, non-deleted payments created in the selected month — the single source of truth. No more `billPaid + directDeposit`.
+  * This matches the Payments page's "Total Deposit" KPI exactly (both sum approved payments by `createdAt` month).
+  * Also excluded soft-deleted bills from the bills query (`deletedAt: null`) so bills pending permanent deletion don't inflate billTotal/needToPay.
+  * Kept `billTotal` and `needToPay` (bill due) for the transaction strip — these come from the bill records, not payments.
+- Verified with investigation script: funds totalDeposit (June 2026) = ₹10,493, Priya deposit = ₹10,493 (was ₹18,333).
+- Lint: passes (0 errors, 1 pre-existing warning).
+- Browser self-verification (agent-browser):
+  * Payments page → Total Deposit KPI = ₹10,493
+  * Funds page → Total Deposit KPI = ₹10,493 (matches Payments)
+  * Priya row: TOTAL ₹7,840 | DEPOSIT ₹10,493 | DUE ₹0 | Settled ✓
+  * Other users (Ananya, Karan, Rohan, Sneha): DEPOSIT ₹0 (no payments made) ✓
+  * No console/runtime errors.
+
+Stage Summary:
+- Funds page deposit now matches Payments page exactly — both sum approved, non-deleted payments by creation month.
+- Eliminated double-counting of bill-linked payments (the bill's paidAmount is a derived view of the same payments, not a separate money pool).
+- Soft-deleted bills excluded from bill totals.
+- Verified end-to-end: Priya ₹10,493 on both pages; no errors.
