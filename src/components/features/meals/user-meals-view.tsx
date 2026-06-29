@@ -268,37 +268,6 @@ export function UserMealsView() {
 
   return (
     <StaggerGroup className="space-y-4 pb-6">
-      {/* View mode toggle — segmented control */}
-      <StaggerItem>
-        <div className="flex items-center justify-center">
-          <div className="inline-flex items-center gap-1 glass-soft rounded-2xl p-1">
-            {([
-              { mode: "agenda" as const, label: "Agenda", icon: List },
-              { mode: "calendar" as const, label: "Calendar", icon: CalendarDays },
-              { mode: "day" as const, label: "Day", icon: Sun },
-            ]).map((opt) => {
-              const active = viewMode === opt.mode;
-              const Icon = opt.icon;
-              return (
-                <button
-                  key={opt.mode}
-                  onClick={() => setViewMode(opt.mode)}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-[11px] font-medium transition-all shrink-0",
-                    active
-                      ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </StaggerItem>
-
       {/* Picker — month picker for agenda/calendar, day picker for day view */}
       {viewMode === "day" ? (
         <StaggerItem>
@@ -419,6 +388,37 @@ export function UserMealsView() {
               <AnimatedCounter value={viewMode === "day" ? dayStats.locked : stats.locked} />
             </div>
           </GlassCard>
+        </div>
+      </StaggerItem>
+
+      {/* View mode toggle — segmented control (below KPIs) */}
+      <StaggerItem>
+        <div className="flex items-center justify-center">
+          <div className="inline-flex items-center gap-1 glass-soft rounded-2xl p-1">
+            {([
+              { mode: "agenda" as const, label: "Agenda", icon: List },
+              { mode: "calendar" as const, label: "Calendar", icon: CalendarDays },
+              { mode: "day" as const, label: "Day", icon: Sun },
+            ]).map((opt) => {
+              const active = viewMode === opt.mode;
+              const Icon = opt.icon;
+              return (
+                <button
+                  key={opt.mode}
+                  onClick={() => setViewMode(opt.mode)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-[11px] font-medium transition-all shrink-0",
+                    active
+                      ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </StaggerItem>
 
