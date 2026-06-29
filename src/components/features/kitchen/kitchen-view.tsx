@@ -162,11 +162,11 @@ export function KitchenView() {
   const monthTotals = resp?.data?.monthTotals ?? { meals: 0, guests: 0, off: 0 };
   const userMealStatus = resp?.data?.userMealStatus;
 
-  // Admin override + search + sort for user meal status
+  // Admin override + search for user meal status
   const qc = useQueryClient();
   const [mealSearch, setMealSearch] = useState("");
-  const [mealSort, setMealSort] = useState<"name" | "on" | "off">("name");
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const [overrideLoading, setOverrideLoading] = useState<string | null>(null);
 
   const overrideMutation = useMutation({
     mutationFn: async (params: {
@@ -175,6 +175,7 @@ export function KitchenView() {
       serviceDate: string;
       action: "TURN_ON" | "TURN_OFF" | "LOCK" | "UNLOCK";
     }) => {
+      setOverrideLoading(`${params.userId}_${params.mealId}`);
       await api.post("/meals/override", {
         ...params,
         reason: "Admin override from kitchen dashboard",
@@ -182,12 +183,16 @@ export function KitchenView() {
     },
     onSuccess: () => {
       toast.success("Meal overridden successfully");
+      setOverrideLoading(null);
       qc.invalidateQueries({ queryKey: ["kitchen"] });
     },
-    onError: (e: Error) => toast.error(e.message || "Failed to override meal"),
+    onError: (e: Error) => {
+      toast.error(e.message || "Failed to override meal");
+      setOverrideLoading(null);
+    },
   });
 
-  // Filtered + sorted users
+  // Filtered users (search only, no sort)
   const filteredUsers = useMemo(() => {
     if (!userMealStatus) return [];
     let result = userMealStatus;
@@ -200,13 +205,8 @@ export function KitchenView() {
           u.email.toLowerCase().includes(q)
       );
     }
-    result = [...result].sort((a, b) => {
-      if (mealSort === "on") return b.onCount - a.onCount;
-      if (mealSort === "off") return b.offCount - a.offCount;
-      return a.name.localeCompare(b.name);
-    });
     return result;
-  }, [userMealStatus, mealSearch, mealSort]);
+  }, [userMealStatus, mealSearch]);
 
   // USER role or server denied access — kitchen is admin/manager only
   if (isUser || resp?.data?.access === false) {
@@ -328,34 +328,14 @@ export function KitchenView() {
                   <span className="text-xs text-muted-foreground">· {format(date, "d MMM yyyy")}</span>
                 </div>
 
-                {/* Search + sort */}
-                <div className="space-y-2 mb-3">
+                {/* Search */}
+                <div className="mb-3">
                   <GlassInput
                     placeholder="Search by name, room, or email…"
                     value={mealSearch}
                     onChange={(e) => setMealSearch(e.target.value)}
                     icon={<Search className="h-4 w-4" />}
                   />
-                  <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
-                    {([
-                      { key: "name" as const, label: "Name" },
-                      { key: "on" as const, label: "Most ON" },
-                      { key: "off" as const, label: "Most OFF" },
-                    ]).map((s) => (
-                      <button
-                        key={s.key}
-                        onClick={() => setMealSort(s.key)}
-                        className={cn(
-                          "inline-flex items-center h-8 px-2.5 rounded-xl text-[11px] font-medium whitespace-nowrap shrink-0 transition-all",
-                          mealSort === s.key
-                            ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
-                            : "glass-soft text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
                 </div>
 
                 {/* User list — expandable rows */}
@@ -449,9 +429,10 @@ export function KitchenView() {
                                         </div>
                                         {/* Override toggle */}
                                         <button
-                                          title={`Toggle ${m.mealName} — currently ${m.status}`}
-                                          disabled={overrideMutation.isPending}
-                                          onClick={() => {
+                                          title={`Toggle ${m.mealName} — currently ${m.status}. Admin can override anytime before month ends.`}
+                                          disabled={overrideLoading === `${u.userId}_${m.mealId}`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
                                             const action = isOn ? "TURN_OFF" : "TURN_ON";
                                             overrideMutation.mutate({
                                               mealId: m.mealId,
@@ -463,7 +444,7 @@ export function KitchenView() {
                                           className={cn(
                                             "relative inline-flex h-7 w-12 items-center rounded-full transition-all shrink-0",
                                             isOn ? "bg-success shadow-sm shadow-success/30" : "bg-muted",
-                                            "disabled:opacity-50 disabled:cursor-not-allowed"
+                                            overrideLoading === `${u.userId}_${m.mealId}` && "opacity-50 cursor-wait"
                                           )}
                                         >
                                           <motion.span

@@ -75,7 +75,7 @@ export async function POST(req: Request) {
       data: {
         status:
           data.action === "TURN_ON"
-            ? "ADMIN_OVERRIDE"
+            ? "ON"
             : data.action === "TURN_OFF"
               ? "OFF"
               : data.action === "LOCK"
@@ -84,7 +84,7 @@ export async function POST(req: Request) {
                   ? "ON"
                   : entry.status,
         overrideFlag: true,
-        locked: data.action === "LOCK" ? true : data.action === "UNLOCK" ? false : entry.locked,
+        locked: data.action === "LOCK" ? true : false,
         updatedBy: admin.id,
       },
     });
