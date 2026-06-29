@@ -8,6 +8,7 @@ import { AnimatedBackground } from "@/components/glass/animated-background";
 import { api } from "@/lib/api-client";
 import { DashboardView } from "@/components/features/dashboard/dashboard-view";
 import { MealsConfigView } from "@/components/features/meals/meals-config-view";
+import { UserMealsView } from "@/components/features/meals/user-meals-view";
 import { KitchenView } from "@/components/features/kitchen/kitchen-view";
 import { VariablesView } from "@/components/features/variables/variables-view";
 import { BillingView } from "@/components/features/billing/billing-view";
@@ -69,6 +70,7 @@ export default function Page() {
       <AppShell>
         {view === "dashboard" && <DashboardView />}
         {view === "meals" && <MealsConfigView />}
+        {view === "user-meals" && <UserMealsView />}
         {view === "kitchen" && <KitchenView />}
         {view === "variables" && <VariablesView />}
         {view === "billing" && <BillingView />}

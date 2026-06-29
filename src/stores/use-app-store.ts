@@ -6,6 +6,7 @@ import { persist } from "zustand/middleware";
 export type ViewKey =
   | "dashboard"
   | "meals"
+  | "user-meals"
   | "kitchen"
   | "variables"
   | "billing"
