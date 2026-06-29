@@ -41,9 +41,13 @@ export async function PATCH(req: Request) {
     const oldStatus = entry.status;
     if (oldStatus === status) return ok(entry);
 
+    // When a USER toggles their own meal, update originalState to match the new status.
+    // This means the user's choice becomes the new "baseline" — no override badge shows.
+    // Only ADMIN overrides (via /api/meals/override) change status WITHOUT updating originalState,
+    // so the comparison (status !== originalState) correctly detects admin overrides only.
     const updated = await db.mealEntry.update({
       where: { id: entryId },
-      data: { status, updatedBy: user.id },
+      data: { status, originalState: status, updatedBy: user.id },
     });
 
     await db.mealHistory.create({
@@ -96,7 +100,7 @@ export async function POST(req: Request) {
       }
       await db.mealEntry.update({
         where: { id },
-        data: { status, updatedBy: user.id },
+        data: { status, originalState: status, updatedBy: user.id },
       });
       await db.mealHistory.create({
         data: {
