@@ -416,18 +416,25 @@ export function KitchenView() {
                                         <div className="flex-1 min-w-0">
                                           <p className="text-sm font-medium truncate">{m.mealName}</p>
                                           <div className="flex items-center gap-2 mt-0.5">
-                                            <span className={cn(
-                                              "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
-                                              isOn && !isLocked && "bg-success/15 text-success",
-                                              isOn && isLocked && "bg-success/10 text-success/60",
-                                              isOff && "bg-warning/15 text-warning",
-                                              !isOn && !isOff && "bg-muted text-muted-foreground"
-                                            )}>
-                                              {isLocked ? "🔒 Locked" : isOn ? "ON" : isOff ? "OFF" : "—"}
-                                            </span>
-                                            {isOverridden && (
-                                              <span className="inline-flex items-center gap-0.5 text-[10px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-full font-medium">
-                                                <ShieldCheck className="h-2.5 w-2.5" /> Overridden
+                                            {isOverridden ? (
+                                              <>
+                                                {/* Admin has overridden — show colored status */}
+                                                <span className={cn(
+                                                  "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                                                  isOn && "bg-success/15 text-success",
+                                                  isOff && "bg-warning/15 text-warning",
+                                                  !isOn && !isOff && "bg-muted text-muted-foreground"
+                                                )}>
+                                                  {isOn ? "ON" : isOff ? "OFF" : "—"}
+                                                </span>
+                                                <span className="inline-flex items-center gap-0.5 text-[10px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-full font-medium">
+                                                  <ShieldCheck className="h-2.5 w-2.5" /> Overridden
+                                                </span>
+                                              </>
+                                            ) : (
+                                              /* Default state — no colored badge, just neutral text */
+                                              <span className="text-[10px] text-muted-foreground">
+                                                {isLocked ? "🔒 Locked" : "Default"}
                                               </span>
                                             )}
                                           </div>
