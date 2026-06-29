@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/session";
 import { ok, err, handleApiError } from "@/lib/api-response";
 import { logAudit } from "@/lib/audit";
 import { createNotification } from "@/lib/notify";
+import { recomputeBillPaidState } from "@/lib/bill-sync";
 import { z } from "zod";
 
 /** GET /api/payments/refund — lists users with credit balance (overpaid bills).
@@ -105,7 +106,9 @@ export async function POST(req: Request) {
       return err(`User only has ₹${Math.round(totalCredit)} credit (requested ₹${Math.round(data.amount)})`, 422);
     }
 
-    // Create a REFUNDED payment record
+    // Create a REFUNDED payment record. recomputeBillPaidState (called below)
+    // treats REFUNDED payments as negative contributions to paidAmount, so the
+    // bill's paid/due/status stay in sync automatically.
     const payment = await db.payment.create({
       data: {
         userId: data.userId,
@@ -119,27 +122,13 @@ export async function POST(req: Request) {
       },
     });
 
-    // Reduce the bill's paidAmount by the refund amount
-    // If a specific billId was given, reduce that bill. Otherwise, reduce from the
-    // most recent bills until the full refund amount is consumed.
-    let remaining = data.amount;
-    for (const bill of bills) {
-      if (remaining <= 0) break;
-      const credit = Math.max(0, bill.paidAmount - bill.totalAmount);
-      if (credit <= 0) continue;
-      const reduction = Math.min(credit, remaining);
-      const newPaidAmount = bill.paidAmount - reduction;
-      const newDueAmount = Math.max(0, bill.totalAmount - newPaidAmount);
-      const newStatus = newDueAmount === 0 ? "PAID" : (newPaidAmount === 0 ? "GENERATED" : "PARTIALLY_PAID");
-      await db.bill.update({
-        where: { id: bill.id },
-        data: {
-          paidAmount: newPaidAmount,
-          dueAmount: newDueAmount,
-          status: newStatus,
-        },
-      });
-      remaining -= reduction;
+    // Re-sync every affected bill from scratch. If a specific billId was given,
+    // only that bill is affected; otherwise all the user's credit bills are.
+    const affectedBillIds = data.billId
+      ? [data.billId]
+      : Array.from(new Set(bills.map((b) => b.id)));
+    for (const bid of affectedBillIds) {
+      await recomputeBillPaidState(bid);
     }
 
     // Notify the user

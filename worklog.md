@@ -1649,3 +1649,46 @@ Stage Summary:
 - Eliminated double-counting of bill-linked payments (the bill's paidAmount is a derived view of the same payments, not a separate money pool).
 - Soft-deleted bills excluded from bill totals.
 - Verified end-to-end: Priya ₹10,493 on both pages; no errors.
+
+---
+Task ID: PAYMENT-SYNC-AUDIT
+Agent: main (orchestrator)
+Task: Cross-check all payment-related logic, ensure all works correctly without bugs and syncs correctly.
+
+Work Log:
+- Audited all payment endpoints: POST /api/payments (create), PATCH /api/payments/[id] (approve/reject), PUT /api/payments/[id] (edit/void), DELETE /api/payments/[id] (soft-delete), POST /api/payments/[id]/restore, POST /api/payments/refund, POST /api/bills (generation), GET /api/funds.
+
+- Found 4 bugs:
+  1. DOUBLE-COUNT on re-approve: PATCH /api/payments/[id] had no idempotency check — re-approving an already-APPROVED payment added its amount to the bill's paidAmount AGAIN. Confirmed with test: 0 → 1000 → 2000 for a single ₹1000 payment.
+  2. MISSING REVERSAL on reject: Rejecting a previously-APPROVED payment did NOT subtract its amount from the bill's paidAmount (the old code only added on APPROVE, never reversed on REJECT).
+  3. MISSING REVERSAL on soft-delete: DELETE /api/payments/[id] marked the payment DELETED but did NOT reverse the bill's paidAmount. The bill still showed the money as paid.
+  4. Refund + recompute conflict: The refund flow manually reduced bill.paidAmount, but a recompute (which only summed APPROVED payments) would have undone the refund reduction.
+
+- Fix: Created `src/lib/bill-sync.ts` exporting `recomputeBillPaidState(billId)` — the single source of truth. It recomputes a bill's paidAmount/dueAmount/status from scratch by summing APPROVED payments (positive) and REFUNDED payments (negative) on that bill. Excludes VOID/REJECTED/DELETED/soft-deleted payments. Clamps paidAmount at >= 0. Preserves VOID/DELETED bill status (only syncs numbers).
+
+- Rewrote all payment status-change endpoints to call recomputeBillPaidState after changing the payment status:
+  * PATCH /api/payments/[id] (approve/reject): added idempotency check (no-op if already in target status) + recompute.
+  * PUT /api/payments/[id] (void): removed manual bill update, now calls recompute.
+  * DELETE /api/payments/[id] (soft-delete): added recompute after marking DELETED.
+  * POST /api/payments/refund: replaced manual paidAmount reduction loop with recompute (REFUNDED payments are negative contributions).
+  * POST /api/bills (generation): added recompute after updating existing bills — defensive sync to catch any drift.
+
+- Ran comprehensive 10-step sync test (test-sync.ts): PENDING→approve→re-approve(idempotent)→second approve→reject→void→re-approve→soft-delete→overpay→refund. ALL 10 PASSED ✓.
+
+- Re-synced all 17 existing bills — all already consistent (no historical drift, only code paths were buggy).
+
+- Lint: passes (0 errors, 1 pre-existing warning).
+
+- Browser self-verification (agent-browser):
+  * Billing page: Priya June 2026 — TOTAL ₹7,840 | PAID ₹7,840 | DUE ₹0 | Paid ✓
+  * Payments page: Total Deposit KPI = ₹10,493 ✓
+  * Funds page: Total Deposit KPI = ₹10,493 (matches Payments) ✓
+  * Funds page: Priya row — TOTAL ₹7,840 | DEPOSIT ₹10,493 | DUE ₹0 | Settled ✓
+  * All three pages agree. No console/runtime errors.
+
+Stage Summary:
+- Created `recomputeBillPaidState` helper — single source of truth for bill paid/due/status derived from APPROVED (+REFUNDED as negative) payments.
+- Fixed 4 bugs: double-count on re-approve, missing reversal on reject, missing reversal on soft-delete, refund/recompute conflict.
+- All payment status changes (approve, reject, void, soft-delete, refund, bill regeneration) now re-sync the linked bill from scratch — no incremental add/subtract, no drift.
+- Idempotency: re-approving an approved payment is a safe no-op.
+- Verified end-to-end with 10-step DB test + browser cross-check across Billing/Payments/Funds pages. All numbers consistent.

@@ -4,6 +4,7 @@ import { ok, err, handleApiError } from "@/lib/api-response";
 import { logAudit } from "@/lib/audit";
 import { createNotification } from "@/lib/notify";
 import { purgeExpiredBills, getDeletionDate } from "@/lib/user-cleanup";
+import { recomputeBillPaidState } from "@/lib/bill-sync";
 
 /** GET /api/bills — list bills (user sees own; admin sees all).
  *  Optional `month` and `year` query params filter by billing period.
@@ -147,14 +148,12 @@ export async function POST(req: Request) {
       const snapshot = JSON.stringify({ counts, rates: rateMap, roomRent, cleaning });
 
       if (existing) {
-        // Recalculate on an existing bill — preserve paidAmount, recompute due + status
+        // Recalculate on an existing bill — preserve paidAmount, recompute due + status.
+        // After writing, call recomputeBillPaidState to guarantee paidAmount matches
+        // the actual APPROVED payments on this bill (defensive — catches any drift
+        // from manual DB edits or prior bugs).
         const paidAmount = existing.paidAmount;
         const dueAmount = Math.max(0, totalAmount - paidAmount);
-        // Intelligently recompute status based on payment progress:
-        //   - paidAmount >= totalAmount (and total > 0) → PAID
-        //   - paidAmount > 0                             → PARTIALLY_PAID
-        //   - otherwise                                  → GENERATED
-        // OVERDUE is not auto-applied here; it's derived from due date elsewhere.
         let newStatus: string;
         if (totalAmount > 0 && paidAmount >= totalAmount) {
           newStatus = "PAID";
@@ -181,6 +180,8 @@ export async function POST(req: Request) {
             snapshot,
           },
         });
+        // Re-sync paid/due/status from actual APPROVED payments (authoritative)
+        await recomputeBillPaidState(existing.id);
         updated++;
 
         // Notify the user when their bill amount increased (e.g. more meals added

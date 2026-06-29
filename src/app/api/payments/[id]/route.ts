@@ -4,9 +4,13 @@ import { ok, err, handleApiError } from "@/lib/api-response";
 import { logAudit } from "@/lib/audit";
 import { createNotification } from "@/lib/notify";
 import { getDeletionDate } from "@/lib/user-cleanup";
+import { recomputeBillPaidState } from "@/lib/bill-sync";
 import { z } from "zod";
 
-/** POST /api/payments/[id]/approve */
+/** PATCH /api/payments/[id] — approve or reject a payment.
+ *  Idempotent: re-approving an already-approved payment is a no-op (no
+ *  double-counting). Rejecting a previously-approved payment reverses the
+ *  bill update via recomputeBillPaidState. */
 export async function PATCH(
   req: Request,
   ctx: { params: Promise<{ id: string }> }
@@ -22,25 +26,24 @@ export async function PATCH(
     if (payment.deletedAt) return err("Payment is scheduled for deletion", 422);
 
     const newStatus = action === "REJECT" ? "REJECTED" : "APPROVED";
+
+    // Idempotency — no-op if the payment is already in the target status
+    if (payment.status === newStatus) {
+      return ok(payment);
+    }
+
     const updated = await db.payment.update({
       where: { id },
       data: { status: newStatus, approvedBy: user.id },
     });
 
-    if (newStatus === "APPROVED" && payment.billId) {
-      const bill = await db.bill.findUnique({ where: { id: payment.billId } });
-      if (bill) {
-        const paidAmount = bill.paidAmount + payment.amount;
-        const dueAmount = Math.max(0, bill.totalAmount - paidAmount);
-        await db.bill.update({
-          where: { id: bill.id },
-          data: {
-            paidAmount,
-            dueAmount,
-            status: dueAmount === 0 ? "PAID" : "PARTIALLY_PAID",
-          },
-        });
-      }
+    // Re-sync the linked bill (if any) from scratch — this handles both
+    //   - APPROVE: adds the payment to paidAmount
+    //   - REJECT of a previously-APPROVED payment: removes it from paidAmount
+    // recomputeBillPaidState sums all APPROVED non-deleted payments on the
+    // bill, so the result is always correct regardless of prior state.
+    if (payment.billId) {
+      await recomputeBillPaidState(payment.billId);
     }
 
     await createNotification({
@@ -91,32 +94,22 @@ export async function PUT(
     if (!existing) return err("Payment not found", 404);
     if (existing.deletedAt) return err("Payment is scheduled for deletion", 422);
 
-    // VOID action — mark as VOID and reverse any bill update if previously APPROVED
+    // VOID action — mark as VOID. The linked bill (if any) is re-synced from
+    // scratch via recomputeBillPaidState, which removes this payment's
+    // contribution (since it's no longer APPROVED).
     if (data.action === "VOID") {
       if (existing.status === "VOID") return err("Payment is already void", 422);
       if (existing.status === "DELETED") return err("Payment is scheduled for deletion", 422);
-
-      // Reverse the bill update if the payment was APPROVED and linked to a bill
-      if (existing.status === "APPROVED" && existing.billId) {
-        const bill = await db.bill.findUnique({ where: { id: existing.billId } });
-        if (bill) {
-          const paidAmount = Math.max(0, bill.paidAmount - existing.amount);
-          const dueAmount = bill.totalAmount - paidAmount;
-          await db.bill.update({
-            where: { id: bill.id },
-            data: {
-              paidAmount,
-              dueAmount,
-              status: paidAmount === 0 ? "GENERATED" : "PARTIALLY_PAID",
-            },
-          });
-        }
-      }
 
       const updated = await db.payment.update({
         where: { id },
         data: { status: "VOID" },
       });
+
+      // Re-sync the bill — removes this payment's amount from paidAmount
+      if (existing.billId) {
+        await recomputeBillPaidState(existing.billId);
+      }
 
       await createNotification({
         userId: existing.userId,
@@ -180,7 +173,10 @@ export async function PUT(
   }
 }
 
-/** DELETE /api/payments/[id] — soft-delete a single payment (7-day grace period) */
+/** DELETE /api/payments/[id] — soft-delete a single payment (7-day grace period).
+ *  The linked bill (if any) is re-synced so paidAmount no longer includes
+ *  this payment. On restore, the payment reverts to PENDING (not auto-
+ *  approved), so the bill stays consistent until an admin re-approves. */
 export async function DELETE(
   req: Request,
   ctx: { params: Promise<{ id: string }> }
@@ -199,6 +195,12 @@ export async function DELETE(
       where: { id },
       data: { deletedAt: deletionDate, deletedBy: user.id, status: "DELETED", deletionReason: reason || null },
     });
+
+    // Re-sync the linked bill — DELETED payments are excluded from paidAmount
+    if (existing.billId) {
+      await recomputeBillPaidState(existing.billId);
+    }
+
     await logAudit({
       actorId: user.id,
       action: "PAYMENT_SOFT_DELETE",
