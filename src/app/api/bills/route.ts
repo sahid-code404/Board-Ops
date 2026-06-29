@@ -60,18 +60,23 @@ export async function GET(req: Request) {
   }
 }
 
-/** POST /api/bills/generate — generate bills for current period for all active users */
+/** POST /api/bills/generate — generate or refresh bills for a billing period.
+ *  Admins can run this multiple times. Existing non-void, non-deleted bills are
+ *  re-calculated (meal charges updated from current meal entries) while payment
+ *  history is preserved (paidAmount kept, dueAmount + status recomputed). */
 export async function POST(req: Request) {
   try {
     const user = await requireRole("ADMIN");
     const body = await req.json().catch(() => ({}));
     const month = Number(body.month ?? new Date().getMonth());
     const year = Number(body.year ?? new Date().getFullYear());
-    // Optional custom due date from the admin; falls back to 10th of next month
+    // Optional custom due date from the admin. If omitted, existing bills keep
+    // their current due date; new bills default to the 10th of next month.
     const customDueDate = body.dueDate ? new Date(body.dueDate) : null;
+    const defaultDueDate = new Date(year, month + 1, 10);
     const dueDate = customDueDate && !isNaN(customDueDate.getTime())
       ? customDueDate
-      : new Date(year, month + 1, 10);
+      : null; // null = use existing or default
 
     const activeUsers = await db.user.findMany({
       where: { status: "ACTIVE", role: "USER" },
@@ -99,12 +104,21 @@ export async function POST(req: Request) {
     const mealNameById: Record<string, string> = {};
     meals.forEach((m) => (mealNameById[m.id] = m.name));
 
-    let generated = 0;
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+
     for (const u of activeUsers) {
       const existing = await db.bill.findUnique({
         where: { userId_periodMonth_periodYear: { userId: u.id, periodMonth: month, periodYear: year } },
       });
-      if (existing && existing.status !== "DRAFT") continue;
+
+      // Skip VOID bills (deliberately voided by admin — don't resurrect via generation)
+      // and soft-deleted bills (use the restore endpoint instead).
+      if (existing && (existing.status === "VOID" || existing.deletedAt)) {
+        skipped++;
+        continue;
+      }
 
       const entries = await db.mealEntry.findMany({
         where: { userId: u.id, serviceDate: { gte: start, lte: end } },
@@ -123,24 +137,46 @@ export async function POST(req: Request) {
       );
       const otherCharges = roomRent + cleaning;
       const totalAmount = mealCharges + otherCharges;
-
       const snapshot = JSON.stringify({ counts, rates: rateMap, roomRent, cleaning });
 
       if (existing) {
+        // Recalculate on an existing bill — preserve paidAmount, recompute due + status
+        const paidAmount = existing.paidAmount;
+        const dueAmount = Math.max(0, totalAmount - paidAmount);
+        // Intelligently recompute status based on payment progress:
+        //   - paidAmount >= totalAmount (and total > 0) → PAID
+        //   - paidAmount > 0                             → PARTIALLY_PAID
+        //   - otherwise                                  → GENERATED
+        // OVERDUE is not auto-applied here; it's derived from due date elsewhere.
+        let newStatus: string;
+        if (totalAmount > 0 && paidAmount >= totalAmount) {
+          newStatus = "PAID";
+        } else if (paidAmount > 0) {
+          newStatus = "PARTIALLY_PAID";
+        } else {
+          newStatus = "GENERATED";
+        }
+
+        // Due date: use the new one if provided, otherwise keep the existing one,
+        // otherwise fall back to the default.
+        const effectiveDueDate = dueDate ?? existing.dueDate ?? defaultDueDate;
+
         await db.bill.update({
           where: { id: existing.id },
           data: {
             mealCharges,
             otherCharges,
             totalAmount,
-            dueAmount: totalAmount - existing.paidAmount,
-            status: "GENERATED",
+            dueAmount,
+            status: newStatus,
             generatedAt: new Date(),
-            dueDate,
+            dueDate: effectiveDueDate,
             snapshot,
           },
         });
+        updated++;
       } else {
+        // Create a new bill for this period
         await db.bill.create({
           data: {
             userId: u.id,
@@ -153,21 +189,23 @@ export async function POST(req: Request) {
             dueAmount: totalAmount,
             status: "GENERATED",
             generatedAt: new Date(),
-            dueDate,
+            dueDate: dueDate ?? defaultDueDate,
             snapshot,
           },
         });
+        created++;
       }
-      generated++;
     }
+
+    const generated = created + updated;
 
     await logAudit({
       actorId: user.id,
       action: "BILLS_GENERATED",
       entity: "Bill",
-      newValue: { generated, month, year },
+      newValue: { generated, created, updated, skipped, month, year },
     });
-    return ok({ generated, month, year });
+    return ok({ generated, created, updated, skipped, month, year });
   } catch (e) {
     return handleApiError(e);
   }

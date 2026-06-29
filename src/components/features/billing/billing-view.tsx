@@ -266,12 +266,20 @@ export function BillingView() {
 
   const generateMutation = useMutation({
     mutationFn: () =>
-      api.post<ApiResponse<{ generated: number; month: number; year: number }>>(
+      api.post<ApiResponse<{ generated: number; created: number; updated: number; skipped: number; month: number; year: number }>>(
         "/bills",
         { month: genMonth, year: genYear, dueDate: genDueDate || undefined }
       ),
     onSuccess: (r) => {
-      toast.success(`Generated ${r.data.generated} bills for ${MONTHS[genMonth]} ${genYear}`);
+      const { created, updated, skipped } = r.data;
+      const parts: string[] = [];
+      if (created > 0) parts.push(`${created} new`);
+      if (updated > 0) parts.push(`${updated} updated`);
+      const summary = parts.length > 0 ? parts.join(", ") : "No changes";
+      const msg = skipped > 0
+        ? `${summary} · ${skipped} skipped (void/deleted)`
+        : `${summary} for ${MONTHS[genMonth]} ${genYear}`;
+      toast.success(`Bills generated — ${msg}`);
       setGenerateOpen(false);
       qc.invalidateQueries({ queryKey: ["bills"] });
     },
@@ -677,8 +685,10 @@ export function BillingView() {
               Generate Bills
             </DialogTitle>
             <DialogDescription>
-              Generate or refresh bills for all active residents for the
-              selected period. Existing non-void bills will be re-calculated.
+              Generate or refresh bills for all active residents. Run this
+              anytime — existing bills are re-calculated from current meal
+              entries while payment history is preserved. Voided and deleted
+              bills are skipped.
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">

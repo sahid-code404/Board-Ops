@@ -1532,3 +1532,32 @@ Stage Summary:
 - Outstanding KPI removed; admin now sees 3 KPIs (Total Billed, Total Collected, Overdue Amount), users see 2 (Total Billed, Overdue Amount).
 - Fixed grid-cols-3/cols-2 layout (was auto-fit) so the KPIs sit in a clean single row like kitchen.
 - Verified end-to-end in the browser with no errors.
+
+---
+Task ID: BILL-REGEN
+Agent: main (orchestrator)
+Task: Make admin able to generate bills multiple times.
+
+Work Log:
+- Root cause: `POST /api/bills` had a guard on line 107 (`if (existing && existing.status !== "DRAFT") continue;`) that skipped any bill already in GENERATED/PARTIALLY_PAID/PAID/OVERDUE status — so once bills were generated, the admin couldn't regenerate them. Additionally, the update branch force-set `status: "GENERATED"`, which would have wrongly reset a PAID/PARTIALLY_PAID bill back to GENERATED.
+- Rewrote `POST /api/bills` in `src/app/api/bills/route.ts`:
+  * Removed the skip-on-non-DRAFT guard — bills can now be regenerated regardless of current status.
+  * Skip only VOID bills (deliberately voided — don't resurrect via generation) and soft-deleted bills (use the restore endpoint instead). Both are counted as `skipped`.
+  * When updating an existing bill: preserve `paidAmount`, recompute `dueAmount = max(0, totalAmount - paidAmount)`, and intelligently recompute status: `paidAmount >= totalAmount` → PAID, `paidAmount > 0` → PARTIALLY_PAID, else GENERATED. No longer force-resets to GENERATED.
+  * Due date: if the admin provides a new one, use it; otherwise keep the existing bill's due date; otherwise default to 10th of next month. (Previously always reset to default or custom.)
+  * Returns detailed counts: `{ generated, created, updated, skipped, month, year }` instead of just `{ generated, month, year }`.
+  * Audit log updated to include `created`, `updated`, `skipped`.
+- Updated `billing-view.tsx` `generateMutation`:
+  * Response type now includes `created`, `updated`, `skipped`.
+  * Toast message now shows breakdown: e.g. "Bills generated — 6 updated for June 2026" or "Bills generated — 1 new, 5 updated · 1 skipped (void/deleted)".
+- Updated Generate Bills dialog description: "Generate or refresh bills for all active residents. Run this anytime — existing bills are re-calculated from current meal entries while payment history is preserved. Voided and deleted bills are skipped."
+- Lint: `bun run lint` passes (0 errors, 1 pre-existing warning).
+- Browser self-verification (agent-browser): signed in as admin → Billing page (June 2026, 6 existing bills) → opened Generate Bills dialog → clicked Generate (1st time, POST 200) → opened dialog again → clicked Generate (2nd time, POST 200). Verified: still 6 bills (no duplicates), Priya Sharma's bill correctly preserved as "Partially Paid" with Paid ₹4,650 / Due ₹3,190 (total recalculated to ₹7,840), other unpaid bills stayed "Generated". No console/runtime errors.
+
+Stage Summary:
+- Admins can now generate bills multiple times for the same period.
+- Regeneration re-calculates meal charges from current meal entries while preserving payment history (paidAmount kept, dueAmount + status intelligently recomputed).
+- VOID and soft-deleted bills are skipped (not resurrected).
+- Due date is preserved on regeneration unless the admin explicitly provides a new one.
+- Detailed toast feedback: created / updated / skipped counts.
+- Verified end-to-end with two consecutive generations — no duplicates, no payment data lost, no errors.
