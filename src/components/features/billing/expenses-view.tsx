@@ -425,7 +425,7 @@ export function ExpensesView() {
 
   return (
     <StaggerGroup className="space-y-4">
-      {/* Month picker — centered, spreaded */}
+      {/* Month picker — centered capsule with circular arrows + click-to-reset */}
       <StaggerItem>
         <div className="flex items-center justify-center gap-4">
           <motion.button
@@ -441,7 +441,16 @@ export function ExpensesView() {
             <ChevronLeft className="h-5 w-5" />
           </motion.button>
 
-          <div className="flex-1 max-w-[280px] flex items-center justify-center gap-2.5 glass-soft rounded-full px-6 py-2.5">
+          <button
+            onClick={() => {
+              const today = new Date();
+              if (selectedMonth !== today.getMonth() || selectedYear !== today.getFullYear()) {
+                setSelectedMonth(today.getMonth());
+                setSelectedYear(today.getFullYear());
+              }
+            }}
+            className="flex-1 max-w-[280px] flex items-center justify-center gap-2.5 glass-soft rounded-full px-6 py-2.5 transition-all hover:ring-1 hover:ring-primary/30"
+          >
             <Calendar className="h-4 w-4 text-primary shrink-0" />
             <div className="leading-tight text-center">
               <p className="text-sm font-bold text-primary">
@@ -451,7 +460,10 @@ export function ExpensesView() {
                 {selectedYear}
               </p>
             </div>
-          </div>
+            {(selectedMonth !== new Date().getMonth() || selectedYear !== new Date().getFullYear()) && (
+              <RotateCcw className="h-3 w-3 text-muted-foreground shrink-0" />
+            )}
+          </button>
 
           <motion.button
             whileTap={{ scale: 0.9 }}
