@@ -904,7 +904,7 @@ const UserRow = memo(function UserRow({
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-muted-foreground">
-                <span>Joined {format(new Date(user.createdAt), "MMM d, yyyy")}</span>
+                <span>Joined {format(new Date(user.createdAt), "MMM d, yyyy 'at' h:mm a")}</span>
                 {user.lastLoginAt && !user.deletedAt && (
                   <span>Last login {formatDistanceToNow(new Date(user.lastLoginAt), { addSuffix: true })}</span>
                 )}

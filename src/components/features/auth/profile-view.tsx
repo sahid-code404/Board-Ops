@@ -235,7 +235,7 @@ export function ProfileView() {
 
   const sMeta = STATUS_META[me.status] ?? STATUS_META.ACTIVE;
   const rMeta = ROLE_META[me.role];
-  const joined = me.createdAt ? format(new Date(me.createdAt), "MMM d, yyyy") : "—";
+  const joined = me.createdAt ? format(new Date(me.createdAt), "MMM d, yyyy 'at' h:mm a") : "—";
   const lastLogin = me.lastLoginAt
     ? formatDistanceToNow(new Date(me.lastLoginAt), { addSuffix: true })
     : "First login";

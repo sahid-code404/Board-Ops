@@ -199,11 +199,10 @@ function formatMonthYear(month: number, year: number) {
 
 function formatDate(iso: string | null) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  const d = new Date(iso);
+  const datePart = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  const timePart = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+  return `${datePart}, ${timePart}`;
 }
 
 /** Full date-time format: "29 June 2026, 05:28 am" */

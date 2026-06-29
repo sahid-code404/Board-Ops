@@ -332,7 +332,15 @@ function MealCard({ meal }: { meal: MealCount }) {
               Service
             </div>
             <div className="text-xs font-medium tabular-nums">
-              {meal.startTime} – {meal.endTime}
+              {(() => {
+                const to12 = (t: string) => {
+                  const [h, m] = t.split(":").map(Number);
+                  const period = h >= 12 ? "PM" : "AM";
+                  const hr = h % 12 || 12;
+                  return `${hr}:${String(m).padStart(2, "0")} ${period}`;
+                };
+                return `${to12(meal.startTime)} – ${to12(meal.endTime)}`;
+              })()}
             </div>
           </div>
         </div>

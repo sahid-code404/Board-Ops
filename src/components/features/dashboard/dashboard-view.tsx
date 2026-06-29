@@ -165,7 +165,12 @@ export function DashboardView() {
                       <span className="text-muted-foreground">{a.action.toLowerCase().replace(/_/g, " ")}</span>
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {new Date(a.createdAt).toLocaleString()}
+                      {(() => {
+                        const d = new Date(a.createdAt);
+                        const datePart = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+                        const timePart = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+                        return `${datePart}, ${timePart}`;
+                      })()}
                     </p>
                   </div>
                 </div>
