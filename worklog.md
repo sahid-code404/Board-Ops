@@ -1583,3 +1583,21 @@ Stage Summary:
 - Tally reflects actual meal consumption (ON + LOCKED entries) for the selected date's month — matches the same data used by the billing engine.
 - Zero extra DB queries (reuses existing monthEntries); no performance impact.
 - Verified end-to-end in the browser with no errors.
+
+---
+Task ID: KITCHEN-TALLY-VISIBILITY
+Agent: main (orchestrator)
+Task: Fix visibility issue with "Total Meals Consumed Jun 2026 58" pill in kitchen user meal status.
+
+Work Log:
+- Diagnosed with VLM: the count "58" used `text-primary` (bright purple) on `bg-primary/10` (light purple) background → low contrast, number blended into background. VLM rated it "not easy to see".
+- Fixed in `kitchen-view.tsx`: wrapped the count in a solid primary badge — `bg-primary text-primary-foreground` (solid purple background with white text) + `shadow-sm shadow-primary/30` + `min-w-[2.5rem] h-9 rounded-xl`. This guarantees high contrast in both light and dark themes.
+- Also improved label readability: "Total Meals Consumed" changed from `text-muted-foreground` → `text-foreground/80 font-medium` for better contrast against the tinted card.
+- Lint: passes (0 errors, 1 pre-existing warning).
+- VLM re-verification (light mode): 8/10 — "generally visible", "no major visibility problems".
+- VLM re-verification (dark mode): 8/10 — clearly visible.
+- No console/runtime errors.
+
+Stage Summary:
+- The "Total Meals Consumed" count now renders as a solid primary-colored badge with white text (high contrast) instead of low-contrast primary-on-primary-tint text.
+- Verified readable in both light and dark themes via VLM analysis.

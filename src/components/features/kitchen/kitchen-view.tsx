@@ -394,13 +394,13 @@ export function KitchenView() {
                                         <Utensils className="h-4 w-4" />
                                       </div>
                                       <div className="min-w-0">
-                                        <p className="text-[11px] text-muted-foreground leading-tight">Total Meals Consumed</p>
-                                        <p className="text-[10px] text-muted-foreground/80 leading-tight">
+                                        <p className="text-[11px] font-medium text-foreground/80 leading-tight">Total Meals Consumed</p>
+                                        <p className="text-[10px] text-muted-foreground leading-tight">
                                           {format(date, "MMM yyyy")}
                                         </p>
                                       </div>
                                     </div>
-                                    <span className="text-xl font-bold tabular-nums text-primary shrink-0">
+                                    <span className="inline-flex items-center justify-center min-w-[2.5rem] h-9 px-2.5 rounded-xl bg-primary text-primary-foreground text-lg font-bold tabular-nums shrink-0 shadow-sm shadow-primary/30">
                                       {u.monthConsumed}
                                     </span>
                                   </div>
