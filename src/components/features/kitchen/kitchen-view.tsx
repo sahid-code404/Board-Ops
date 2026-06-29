@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 import { addDays, format, isSameDay } from "date-fns";
 import {
   ChevronLeft,
@@ -17,9 +18,11 @@ import {
   RotateCcw,
   Check,
   X,
+  Search,
 } from "lucide-react";
 import { GlassCard } from "@/components/glass/glass-card";
 import { GlassButton } from "@/components/glass/glass-button";
+import { GlassInput } from "@/components/glass/glass-input";
 import { AnimatedCounter } from "@/components/glass/animated-counter";
 import {
   StaggerGroup,
@@ -158,6 +161,51 @@ export function KitchenView() {
   const monthTotals = resp?.data?.monthTotals ?? { meals: 0, guests: 0, off: 0 };
   const userMealStatus = resp?.data?.userMealStatus;
 
+  // Admin override + search + sort for user meal status
+  const qc = useQueryClient();
+  const [mealSearch, setMealSearch] = useState("");
+  const [mealSort, setMealSort] = useState<"name" | "on" | "off">("name");
+
+  const overrideMutation = useMutation({
+    mutationFn: async (params: {
+      mealId: string;
+      userId: string;
+      serviceDate: string;
+      action: "TURN_ON" | "TURN_OFF" | "LOCK" | "UNLOCK";
+    }) => {
+      await api.post("/meals/override", {
+        ...params,
+        reason: "Admin override from kitchen dashboard",
+      });
+    },
+    onSuccess: () => {
+      toast.success("Meal overridden successfully");
+      qc.invalidateQueries({ queryKey: ["kitchen"] });
+    },
+    onError: (e: Error) => toast.error(e.message || "Failed to override meal"),
+  });
+
+  // Filtered + sorted users
+  const filteredUsers = useMemo(() => {
+    if (!userMealStatus) return [];
+    let result = userMealStatus;
+    const q = mealSearch.trim().toLowerCase();
+    if (q) {
+      result = result.filter(
+        (u) =>
+          u.name.toLowerCase().includes(q) ||
+          (u.room || "").toLowerCase().includes(q) ||
+          u.email.toLowerCase().includes(q)
+      );
+    }
+    result = [...result].sort((a, b) => {
+      if (mealSort === "on") return b.onCount - a.onCount;
+      if (mealSort === "off") return b.offCount - a.offCount;
+      return a.name.localeCompare(b.name);
+    });
+    return result;
+  }, [userMealStatus, mealSearch, mealSort]);
+
   // USER role or server denied access — kitchen is admin/manager only
   if (isUser || resp?.data?.access === false) {
     return <AccessRestricted />;
@@ -268,7 +316,7 @@ export function KitchenView() {
             </div>
           </StaggerItem>
 
-          {/* User meal status — admin can see each user's ON/OFF per meal */}
+          {/* User meal status — admin can see + override each user's ON/OFF */}
           {userMealStatus && userMealStatus.length > 0 && (
             <StaggerItem>
               <GlassCard className="p-4" hover={false}>
@@ -276,9 +324,45 @@ export function KitchenView() {
                   <Users className="h-5 w-5 text-primary" />
                   <h3 className="font-semibold">User Meal Status</h3>
                   <span className="text-xs text-muted-foreground">· {format(date, "d MMM yyyy")}</span>
+                  <span className="text-[10px] text-muted-foreground ml-auto">Click a meal icon to override</span>
                 </div>
+
+                {/* Search + sort */}
+                <div className="space-y-2 mb-3">
+                  <GlassInput
+                    placeholder="Search by name, room, or email…"
+                    value={mealSearch}
+                    onChange={(e) => setMealSearch(e.target.value)}
+                    icon={<Search className="h-4 w-4" />}
+                  />
+                  <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+                    {([
+                      { key: "name" as const, label: "Name" },
+                      { key: "on" as const, label: "Most ON" },
+                      { key: "off" as const, label: "Most OFF" },
+                    ]).map((s) => (
+                      <button
+                        key={s.key}
+                        onClick={() => setMealSort(s.key)}
+                        className={cn(
+                          "inline-flex items-center h-8 px-2.5 rounded-xl text-[11px] font-medium whitespace-nowrap shrink-0 transition-all",
+                          mealSort === s.key
+                            ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                            : "glass-soft text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* User list */}
                 <div className="max-h-96 overflow-y-auto no-scrollbar space-y-2">
-                  {userMealStatus.map((u) => (
+                  {filteredUsers.length === 0 ? (
+                    <p className="text-center py-4 text-sm text-muted-foreground">No users match your search.</p>
+                  ) : (
+                    filteredUsers.map((u) => (
                     <div
                       key={u.userId}
                       className="flex items-center gap-3 p-2.5 rounded-2xl glass-soft"
@@ -294,26 +378,38 @@ export function KitchenView() {
                           <p className="text-[11px] text-muted-foreground">Room {u.room}</p>
                         )}
                       </div>
-                      {/* Per-meal status pills */}
+                      {/* Per-meal status pills — clickable for admin override */}
                       <div className="flex items-center gap-1 shrink-0">
                         {u.meals.map((m) => {
                           const isOn = m.status === "ON" || m.status === "LOCKED";
                           const isOff = m.status === "OFF";
                           const isLocked = m.locked || m.status === "LOCKED";
                           return (
-                            <div
+                            <button
                               key={m.mealId}
-                              title={`${m.mealName}: ${m.status}`}
+                              title={`${m.mealName}: ${m.status}${isLocked ? " (locked)" : ""} — click to override`}
+                              disabled={overrideMutation.isPending}
+                              onClick={() => {
+                                // Cycle: ON → OFF → ON (or unlock if locked)
+                                const action = isOn ? "TURN_OFF" : "TURN_ON";
+                                overrideMutation.mutate({
+                                  mealId: m.mealId,
+                                  userId: u.userId,
+                                  serviceDate: dateStr,
+                                  action,
+                                });
+                              }}
                               className={cn(
-                                "grid place-items-center h-7 w-7 rounded-lg text-xs transition-all",
-                                isOn && !isLocked && "bg-success/15 text-success",
-                                isOn && isLocked && "bg-success/10 text-success/60",
-                                isOff && "bg-warning/15 text-warning",
-                                !isOn && !isOff && "bg-muted text-muted-foreground"
+                                "grid place-items-center h-7 w-7 rounded-lg text-xs transition-all hover:scale-110 active:scale-95",
+                                isOn && !isLocked && "bg-success/15 text-success hover:bg-success/25",
+                                isOn && isLocked && "bg-success/10 text-success/60 hover:bg-success/20",
+                                isOff && "bg-warning/15 text-warning hover:bg-warning/25",
+                                !isOn && !isOff && "bg-muted text-muted-foreground hover:bg-muted/60",
+                                "disabled:opacity-50 disabled:cursor-not-allowed"
                               )}
                             >
                               {m.mealIcon}
-                            </div>
+                            </button>
                           );
                         })}
                       </div>
@@ -331,7 +427,8 @@ export function KitchenView() {
                         )}
                       </div>
                     </div>
-                  ))}
+                  ))
+                  )}
                 </div>
               </GlassCard>
             </StaggerItem>
