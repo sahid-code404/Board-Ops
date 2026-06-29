@@ -5,7 +5,7 @@ import { groupedNavForRole } from "./nav-groups";
 import { useAppStore } from "@/stores/use-app-store";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { cn } from "@/lib/utils";
-import { Sparkles, ChevronRight, X, LogOut } from "lucide-react";
+import { Sparkles, ChevronRight, X } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useEffect } from "react";
 
@@ -45,7 +45,6 @@ export function MobileSidebar() {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
   const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
   const user = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
   const role = user?.role ?? "USER";
   const groups = groupedNavForRole(role as "ADMIN" | "USER");
 
@@ -182,20 +181,6 @@ export function MobileSidebar() {
                   </div>
                 ))}
               </nav>
-
-              {/* Sign out */}
-              <div className="p-3 border-t border-border/40">
-                <button
-                  onClick={() => {
-                    setSidebarOpen(false);
-                    logout();
-                  }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
-                >
-                  <LogOut className="h-[18px] w-[18px]" />
-                  Sign Out
-                </button>
-              </div>
             </div>
           </motion.aside>
         </>
