@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { requireAuth, requireRole } from "@/lib/session";
 import { ok, handleApiError } from "@/lib/api-response";
 
-/** GET /api/kitchen — meal counts for today + tomorrow (kitchen dashboard) */
+/** GET /api/kitchen — meal counts for a specific day + month-to-date totals */
 export async function GET(req: Request) {
   try {
     const user = await requireAuth();
@@ -47,12 +47,39 @@ export async function GET(req: Request) {
       };
     });
 
+    // Month-to-date totals — all meal entries + guest meals in the same month
+    // as the selected date
+    const monthStart = new Date(target.getFullYear(), target.getMonth(), 1);
+    const monthEnd = new Date(target.getFullYear(), target.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    const monthEntries = await db.mealEntry.findMany({
+      where: {
+        serviceDate: { gte: monthStart, lte: monthEnd },
+        status: { in: ["ON", "LOCKED"] },
+      },
+    });
+
+    const monthGuestMeals = await db.guestMeal.findMany({
+      where: { serviceDate: { gte: monthStart, lte: monthEnd } },
+    });
+
+    const monthTotals = {
+      meals: monthEntries.length + monthGuestMeals.reduce((s, g) => s + g.guestCount, 0),
+      guests: monthGuestMeals.reduce((s, g) => s + g.guestCount, 0),
+      off: await db.mealEntry.count({
+        where: {
+          serviceDate: { gte: monthStart, lte: monthEnd },
+          status: "OFF",
+        },
+      }),
+    };
+
     // Count active residents (for percentage calculation — excludes guests)
     const activeUsers = await db.user.count({
       where: { status: "ACTIVE", role: "USER" },
     });
 
-    return ok({ date: target.toISOString(), counts, activeUsers });
+    return ok({ date: target.toISOString(), counts, activeUsers, monthTotals });
   } catch (e) {
     return handleApiError(e);
   }

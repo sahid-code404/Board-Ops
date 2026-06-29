@@ -51,6 +51,11 @@ type KitchenResponse = {
   counts: MealCount[];
   activeUsers: number;
   access?: boolean;
+  monthTotals?: {
+    meals: number;
+    guests: number;
+    off: number;
+  };
 };
 
 type ApiResponse<T> = { success: boolean; data: T };
@@ -126,6 +131,8 @@ export function KitchenView() {
     };
   }, [counts]);
 
+  const monthTotals = resp?.data?.monthTotals ?? { meals: 0, guests: 0, off: 0 };
+
   // USER role or server denied access — kitchen is admin/manager only
   if (isUser || resp?.data?.access === false) {
     return <AccessRestricted />;
@@ -183,18 +190,18 @@ export function KitchenView() {
       <StaggerItem>
         <div className="grid grid-cols-3 gap-3">
           <KpiCard
-            icon={Utensils}
-            label="Total Meals"
-            value={totals.meals}
-            color="success"
-            sub="ON + Guests"
-          />
-          <KpiCard
             icon={UserPlus}
             label="Guests"
             value={totals.guests}
             color="primary"
-            sub="External"
+            sub="Today"
+          />
+          <KpiCard
+            icon={Utensils}
+            label="Total Meals"
+            value={monthTotals.meals}
+            color="success"
+            sub="This Month"
           />
           <KpiCard
             icon={Users}
