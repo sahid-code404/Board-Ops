@@ -21,6 +21,7 @@ import {
   Search,
   ChevronDown,
   ShieldCheck,
+  Ban,
 } from "lucide-react";
 import { GlassCard } from "@/components/glass/glass-card";
 import { GlassButton } from "@/components/glass/glass-button";
@@ -171,6 +172,9 @@ export function KitchenView() {
   const [mealSearch, setMealSearch] = useState("");
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [overrideLoading, setOverrideLoading] = useState<string | null>(null);
+  // Tracks which unlocked (read-only) meal toggle the admin just tried to click,
+  // so we can show a red "Not clickable" indicator. Keyed by `${userId}_${mealId}`.
+  const [notClickableHint, setNotClickableHint] = useState<string | null>(null);
 
   const overrideMutation = useMutation({
     mutationFn: async (params: {
@@ -409,6 +413,12 @@ export function KitchenView() {
                                     const isOn = m.status === "ON" || m.status === "LOCKED";
                                     const isLocked = m.locked || m.status === "LOCKED";
                                     const isOverridden = m.overrideFlag;
+                                    // Unlocked meals are READ-ONLY for the admin: the user can still
+                                    // toggle these themselves before the cutoff, so the admin must not
+                                    // override them. Admin override is only available on LOCKED meals.
+                                    const isReadOnly = !isLocked;
+                                    const hintKey = `${u.userId}_${m.mealId}`;
+                                    const showNotClickable = notClickableHint === hintKey;
                                     return (
                                       <div
                                         key={m.mealId}
@@ -424,52 +434,91 @@ export function KitchenView() {
                                         {/* Meal name + status labels */}
                                         <div className="flex-1 min-w-0">
                                           <p className="text-sm font-medium truncate">{m.mealName}</p>
-                                          {/* Show Locked and/or Overridden labels — nothing for default state */}
-                                          {(isLocked || isOverridden) && (
-                                            <div className="flex items-center gap-1.5 mt-0.5">
-                                              {isLocked && (
-                                                <span className="text-[10px] text-destructive flex items-center gap-0.5">
-                                                  <Lock className="h-2.5 w-2.5" /> Locked
-                                                </span>
+                                          {/* Status labels — Locked / Overridden / Read-only / Not clickable */}
+                                          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                            {isLocked && (
+                                              <span className="text-[10px] text-destructive flex items-center gap-0.5">
+                                                <Lock className="h-2.5 w-2.5" /> Locked
+                                              </span>
+                                            )}
+                                            {isOverridden && (
+                                              <span className="inline-flex items-center gap-0.5 text-[10px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-full font-medium">
+                                                <ShieldCheck className="h-2.5 w-2.5" /> Overridden
+                                              </span>
+                                            )}
+                                            {isReadOnly && !showNotClickable && (
+                                              <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                                                Read-only — user can edit
+                                              </span>
+                                            )}
+                                            {showNotClickable && (
+                                              <span className="inline-flex items-center gap-0.5 text-[10px] text-destructive font-semibold animate-in fade-in zoom-in duration-150">
+                                                <Ban className="h-2.5 w-2.5" /> Not clickable
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                        {/* Toggle — shows current ON/OFF state.
+                                            - LOCKED meals: admin can override (clickable).
+                                            - UNLOCKED meals: read-only. Clicking shows a red "Not clickable"
+                                              indicator (red ring on the toggle + red Ban badge) instead of
+                                              toggling. The user still controls unlocked meals themselves. */}
+                                        <div className="relative shrink-0">
+                                          <button
+                                            type="button"
+                                            title={
+                                              isReadOnly
+                                                ? `${m.mealName} — read-only. The user can still change this meal before the cutoff. Admin override is only available after the meal is locked.`
+                                                : `Toggle ${m.mealName} — currently ${m.status}. Admin can override.`
+                                            }
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              // Read-only guard: intercept the click and surface a red
+                                              // "Not clickable" indicator instead of toggling.
+                                              if (isReadOnly) {
+                                                setNotClickableHint(hintKey);
+                                                window.setTimeout(() => {
+                                                  setNotClickableHint((cur) =>
+                                                    cur === hintKey ? null : cur
+                                                  );
+                                                }, 1500);
+                                                return;
+                                              }
+                                              const action = isOn ? "TURN_OFF" : "TURN_ON";
+                                              overrideMutation.mutate({
+                                                mealId: m.mealId,
+                                                userId: u.userId,
+                                                serviceDate: dateStr,
+                                                action,
+                                              });
+                                            }}
+                                            className={cn(
+                                              "relative inline-flex h-7 w-12 items-center rounded-full transition-all shrink-0",
+                                              isOn ? "bg-success shadow-sm shadow-success/30" : "bg-muted",
+                                              isReadOnly &&
+                                                "opacity-70 cursor-not-allowed ring-2 ring-destructive/50 ring-offset-1 ring-offset-background",
+                                              !isReadOnly &&
+                                                overrideLoading === hintKey &&
+                                                "opacity-50 cursor-wait"
+                                            )}
+                                          >
+                                            <motion.span
+                                              layout
+                                              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                                              className={cn(
+                                                "inline-block h-5 w-5 rounded-full bg-white shadow-sm",
+                                                isOn ? "ml-auto mr-1" : "ml-1"
                                               )}
-                                              {isOverridden && (
-                                                <span className="inline-flex items-center gap-0.5 text-[10px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-full font-medium">
-                                                  <ShieldCheck className="h-2.5 w-2.5" /> Overridden
-                                                </span>
-                                              )}
-                                            </div>
+                                            />
+                                          </button>
+                                          {/* Red "Not clickable" badge on the toggle corner —
+                                              appears when the admin attempts to click a read-only toggle. */}
+                                          {showNotClickable && (
+                                            <span className="absolute -top-1.5 -right-1.5 grid place-items-center h-4 w-4 rounded-full bg-destructive text-destructive-foreground shadow-sm animate-in fade-in zoom-in duration-150 pointer-events-none">
+                                              <Ban className="h-2.5 w-2.5" />
+                                            </span>
                                           )}
                                         </div>
-                                        {/* Toggle — default color (success green) when ON, dark gray when OFF.
-                                            Same color regardless of override state. */}
-                                        <button
-                                          title={`Toggle ${m.mealName} — currently ${m.status}. Admin can override anytime before month ends.`}
-                                          disabled={overrideLoading === `${u.userId}_${m.mealId}`}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            const action = isOn ? "TURN_OFF" : "TURN_ON";
-                                            overrideMutation.mutate({
-                                              mealId: m.mealId,
-                                              userId: u.userId,
-                                              serviceDate: dateStr,
-                                              action,
-                                            });
-                                          }}
-                                          className={cn(
-                                            "relative inline-flex h-7 w-12 items-center rounded-full transition-all shrink-0",
-                                            isOn ? "bg-success shadow-sm shadow-success/30" : "bg-muted",
-                                            overrideLoading === `${u.userId}_${m.mealId}` && "opacity-50 cursor-wait"
-                                          )}
-                                        >
-                                          <motion.span
-                                            layout
-                                            transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                                            className={cn(
-                                              "inline-block h-5 w-5 rounded-full bg-white shadow-sm",
-                                              isOn ? "ml-auto mr-1" : "ml-1"
-                                            )}
-                                          />
-                                        </button>
                                       </div>
                                     );
                                   })}

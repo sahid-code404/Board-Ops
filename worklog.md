@@ -1808,3 +1808,32 @@ Stage Summary:
 - Covers all payment-related flows: bill generation → payment submission → approval → refund, plus expenses and funds aggregation.
 - Shows both User and Admin perspectives via swimlane layout with role badges on every process.
 - Includes data store schemas, the funds aggregation formula, and the bill↔payment sync rules.
+
+---
+Task ID: KITCHEN-TOGGLE-READONLY
+Agent: main (orchestrator)
+Task: Re-implement the lost kitchen-view change — show the toggle in ON/OFF state (disabled/read-only) for unlocked meals, with a red "Not clickable" indicator when the admin tries to interact. (Previous session's work was lost when context ran out before saving.)
+
+Work Log:
+- Diagnosed the issue: the previous session was mid-task on the kitchen-view toggle read-only feature when context ran out. The work was never written to the file — `kitchen-view.tsx` still had the old fully-clickable toggle for ALL meals (line 445-472), with no read-only state and no red indicator. Confirmed via `git log` (last 2 commits only touched the DB, not source) and file mtime (Jun 29 18:18).
+- Added `Ban` icon to the lucide-react imports (for the "Not clickable" badge).
+- Added `notClickableHint` state (`useState<string | null>`) keyed by `${userId}_${mealId}` — tracks which read-only toggle the admin just attempted to click, so we can show the red indicator.
+- Rewrote the meal toggle block in `kitchen-view.tsx`:
+  * New `isReadOnly = !isLocked` — unlocked meals (before cutoff) are read-only for the admin; the user can still toggle these themselves. Admin override is only available on LOCKED meals (past cutoff).
+  * Read-only toggle: shows current ON/OFF state (green when ON, gray when OFF) but with `opacity-70`, `cursor-not-allowed`, and a `ring-2 ring-destructive/50` red ring + offset to signal read-only.
+  * Click guard: `onClick` intercepts read-only clicks and sets `notClickableHint` (auto-clears after 1.5s) instead of calling `overrideMutation.mutate`. No `POST /api/meals/override` fires.
+  * Red "Not clickable" indicator appears in two places on attempted click: (1) a red Ban badge on the top-right corner of the toggle (`bg-destructive` circle, animate-in fade+zoom), and (2) a red "Not clickable" text label under the meal name (replaces the muted "Read-only — user can edit" label).
+  * Status labels now always render the row (no conditional wrapper) so the read-only / not-clickable labels have a stable slot. Locked meals show "Locked"; overridden meals show "Overridden"; unlocked meals show "Read-only — user can edit" (muted) which swaps to "Not clickable" (destructive) on click attempt.
+  * Locked meals: unchanged behavior — toggle is clickable, fires `POST /api/meals/override`, shows success toast.
+- Lint: passes (0 errors, 1 pre-existing warning in variables-view.tsx).
+- Browser self-verification (agent-browser): signed in as admin → Counts (Kitchen) page → expanded Ananya Iyer's meal status.
+  * Morning Meal (LOCKED, past cutoff): toggle title = "Toggle Morning Meal — currently ON. Admin can override." Clicked → `POST /api/meals/override 200` → state flipped to OFF, "Locked" + "Overridden" badges shown. Admin override works. ✓
+  * Dinner (UNLOCKED, before cutoff): toggle title = "Dinner — read-only. The user can still change this meal before the cutoff. Admin override is only available after the meal is locked." Label = "Read-only — user can edit" (muted). Red ring on toggle. Clicked → NO override request fired (confirmed in dev.log) → label swapped to red "Not clickable" + red Ban badge appeared on toggle corner. Auto-cleared after 1.5s. ✓
+  * No console/runtime errors.
+
+Stage Summary:
+- Kitchen-view meal toggles now have two distinct modes:
+  - LOCKED meals (past cutoff): admin can override (clickable, fires override API). Unchanged.
+  - UNLOCKED meals (before cutoff): read-only. Toggle shows current ON/OFF state with a red ring + reduced opacity + not-allowed cursor. Clicking shows a red "Not clickable" indicator (Ban badge on toggle + red text label) for 1.5s. No override fires.
+- This prevents admins from overriding meals the user can still control themselves, while keeping admin override available for locked meals (the legitimate use case).
+- Re-implementation complete and verified end-to-end in the browser.
