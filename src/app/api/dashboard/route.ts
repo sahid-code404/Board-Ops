@@ -36,20 +36,22 @@ export async function GET() {
     });
 
     // ── KPI counts ──
-    const totalUsers = await db.user.count({ where: { status: "ACTIVE", role: "USER" } });
-    const pendingUsers = await db.user.count({ where: { status: "PENDING" } });
+    // Total active users = residents + admins (both count as users of the system)
+    const totalUsers = await db.user.count({ where: { status: "ACTIVE", deletedAt: null } });
+    const pendingUsers = await db.user.count({ where: { status: "PENDING", deletedAt: null } });
+    // Meal counts — exclude admin users (admins don't count as residents for meals)
     const todayOnCount = await db.mealEntry.count({
-      where: { serviceDate: today, status: "ON" },
+      where: { serviceDate: today, status: "ON", user: { role: "USER" } },
     });
     const todayOffCount = await db.mealEntry.count({
-      where: { serviceDate: today, status: "OFF" },
+      where: { serviceDate: today, status: "OFF", user: { role: "USER" } },
     });
 
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
     const totalRevenue = await db.payment.aggregate({
-      where: { status: "APPROVED", createdAt: { gte: startOfMonth, lte: endOfMonth } },
+      where: { status: "APPROVED", createdAt: { gte: startOfMonth, lte: endOfMonth }, user: { role: "USER" } },
       _sum: { amount: true },
     });
     const totalExpenses = await db.expense.aggregate({
@@ -57,16 +59,34 @@ export async function GET() {
       _sum: { amount: true },
     });
     const pendingBills = await db.bill.count({
-      where: { status: { in: ["GENERATED", "PARTIALLY_PAID", "OVERDUE"] } },
+      where: { status: { in: ["GENERATED", "PARTIALLY_PAID", "OVERDUE"] }, user: { role: "USER" } },
     });
+
+    // PRD: Calculate current meal charge = (total expenses - guest revenue) / total resident meals
+    // Exclude admin users' meals — only resident meals count
+    const totalResidentMeals = await db.mealEntry.count({
+      where: { serviceDate: { gte: startOfMonth, lte: endOfMonth }, status: { in: ["ON", "LOCKED"] }, user: { role: "USER" } },
+    });
+    const guestMeals = await db.guestMeal.findMany({
+      where: { serviceDate: { gte: startOfMonth, lte: endOfMonth } },
+      select: { guestCount: true },
+    });
+    const totalGuestMeals = guestMeals.reduce((s, g) => s + (g.guestCount || 1), 0);
+    const guestChargeVar = await db.variable.findUnique({ where: { key: "guest_meal_rate" } });
+    const guestRate = guestChargeVar ? parseFloat(guestChargeVar.value) || 0 : 0;
+    const guestRevenue = totalGuestMeals * guestRate;
+    const totalExpensesAmount = totalExpenses._sum.amount ?? 0;
+    const currentMealCharge = totalResidentMeals > 0
+      ? Math.max(0, (totalExpensesAmount - guestRevenue) / totalResidentMeals)
+      : 0;
 
     // ── 7-day meal trend ──
     const trend: { date: string; on: number; off: number }[] = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
-      const on = await db.mealEntry.count({ where: { serviceDate: d, status: "ON" } });
-      const off = await db.mealEntry.count({ where: { serviceDate: d, status: "OFF" } });
+      const on = await db.mealEntry.count({ where: { serviceDate: d, status: "ON", user: { role: "USER" } } });
+      const off = await db.mealEntry.count({ where: { serviceDate: d, status: "OFF", user: { role: "USER" } } });
       trend.push({
         date: d.toISOString().slice(0, 10),
         on,
@@ -106,10 +126,10 @@ export async function GET() {
         pendingUsers,
         todayOnCount,
         todayOffCount,
-        totalRevenue: totalRevenue._sum.amount ?? 0,
-        totalExpenses: totalExpenses._sum.amount ?? 0,
+        totalExpenses: totalExpensesAmount,
         pendingBills,
-        netBalance: (totalRevenue._sum.amount ?? 0) - (totalExpenses._sum.amount ?? 0),
+        currentMealCharge,
+        totalResidentMeals,
       },
       trend,
       expenseBreakdown: Object.entries(byCategory).map(([category, amount]) => ({ category, amount })),

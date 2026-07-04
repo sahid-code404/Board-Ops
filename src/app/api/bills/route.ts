@@ -5,6 +5,7 @@ import { logAudit } from "@/lib/audit";
 import { createNotification } from "@/lib/notify";
 import { purgeExpiredBills, getDeletionDate } from "@/lib/user-cleanup";
 import { recomputeBillPaidState } from "@/lib/bill-sync";
+import { getReadiness } from "@/lib/monthly-closing";
 
 /** GET /api/bills — list bills (user sees own; admin sees all).
  *  Optional `month` and `year` query params filter by billing period.
@@ -50,6 +51,9 @@ export async function GET(req: Request) {
         ]},
       ];
     }
+    // Exclude bills for admin users — admins are not residents
+    where.user = { role: "USER" };
+
     const bills = await db.bill.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -78,10 +82,28 @@ export async function POST(req: Request) {
     const month = Number(body.month ?? new Date().getMonth());
     const year = Number(body.year ?? new Date().getFullYear());
     const periodLabel = `${MONTHS[month] ?? `Month ${month + 1}`} ${year}`;
+
+    // PRD: Bill generation requires ALL readiness items to be "ready" — no errors AND no warnings.
+    // Admins must resolve all issues (missing expenses, invalid formula, pending payments, etc.)
+    // before bills can be generated.
+    const readiness = await getReadiness(month, year);
+    if (!readiness.canClose) {
+      const issues = readiness.items
+        .filter((i) => i.status !== "ready")
+        .map((i) => `${i.label}: ${i.detail}`);
+      return err(
+        `Cannot generate bills for ${periodLabel}. Resolve all issues first:\n${issues.join("\n")}`,
+        422
+      );
+    }
+
     // Optional custom due date from the admin. If omitted, existing bills keep
     // their current due date; new bills default to the 10th of next month.
     const customDueDate = body.dueDate ? new Date(body.dueDate) : null;
-    const defaultDueDate = new Date(year, month + 1, 10);
+    // Read due date day from policy variable (default 10th)
+    const dueDateDayVar = await db.variable.findUnique({ where: { key: "policy.billing.dueDateDay" } });
+    const dueDateDay = dueDateDayVar ? parseInt(dueDateDayVar.value) || 10 : 10;
+    const defaultDueDate = new Date(year, month + 1, dueDateDay);
     const dueDate = customDueDate && !isNaN(customDueDate.getTime())
       ? customDueDate
       : null; // null = use existing or default
@@ -90,16 +112,8 @@ export async function POST(req: Request) {
       where: { status: "ACTIVE", role: "USER" },
     });
 
-    // Load meal rates from variables (DB-driven)
-    const rateVars = await db.variable.findMany({
-      where: { key: { startsWith: "meal.rate." }, status: "ACTIVE" },
-    });
-    const rateMap: Record<string, number> = {};
-    rateVars.forEach((v) => {
-      const mealName = v.key.replace("meal.rate.", "");
-      rateMap[mealName] = Number(v.value) || 0;
-    });
-
+    // PRD: Meal charge is a SINGLE dynamic value = (Total Expenses - Guest Revenue) / Total Resident Meals
+    // NOT fixed per-meal rates. Calculated from the month's actual expenses and meal counts.
     const roomRentVar = await db.variable.findUnique({ where: { key: "billing.roomRent" } });
     const cleaningVar = await db.variable.findUnique({ where: { key: "billing.cleaningCharges" } });
     const roomRent = roomRentVar ? Number(roomRentVar.value) : 0;
@@ -108,9 +122,43 @@ export async function POST(req: Request) {
     const start = new Date(year, month, 1);
     const end = new Date(year, month + 1, 0, 23, 59, 59, 999);
 
+    // Calculate total expenses for the period
+    const expenses = await db.expense.findMany({
+      where: { expenseDate: { gte: start, lte: end }, deletedAt: null, status: { not: "DELETED" } },
+      select: { amount: true },
+    });
+    const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+
+    // Calculate total resident meals + guest meals for the period
     const meals = await db.mealConfiguration.findMany();
     const mealNameById: Record<string, string> = {};
     meals.forEach((m) => (mealNameById[m.id] = m.name));
+
+    // Exclude admin users' meals — only resident meals count
+    const allMealEntries = await db.mealEntry.findMany({
+      where: { serviceDate: { gte: start, lte: end }, status: { in: ["ON", "LOCKED"] }, user: { role: "USER" } },
+    });
+    const totalResidentMeals = allMealEntries.length;
+
+    // Guest meals + revenue
+    const guestMeals = await db.guestMeal.findMany({
+      where: { serviceDate: { gte: start, lte: end } },
+      include: { meal: true },
+    });
+    let totalGuestMeals = 0;
+    let guestRevenue = 0;
+    // Load guest meal charge variable if it exists
+    const guestChargeVar = await db.variable.findUnique({ where: { key: "billing.guestMealCharge" } });
+    const guestChargePerMeal = guestChargeVar ? Number(guestChargeVar.value) : 0;
+    for (const g of guestMeals) {
+      totalGuestMeals += g.guestCount || 1;
+      guestRevenue += (g.guestCount || 1) * guestChargePerMeal;
+    }
+
+    // PRD: per-meal charge = (Total Expenses - Guest Revenue) / Total Resident Meals
+    const perMealCharge = totalResidentMeals > 0
+      ? Math.max(0, (totalExpenses - guestRevenue) / totalResidentMeals)
+      : 0;
 
     let created = 0;
     let updated = 0;
@@ -139,13 +187,22 @@ export async function POST(req: Request) {
         }
       });
 
-      const mealCharges = Object.entries(counts).reduce(
-        (sum, [name, count]) => sum + (rateMap[name] || 0) * count,
-        0
-      );
+      // PRD: meal charges = resident's total meal count × per-meal charge (dynamic, not fixed rates)
+      const residentMealCount = Object.values(counts).reduce((s, c) => s + c, 0);
+      const mealCharges = Math.round(residentMealCount * perMealCharge);
       const otherCharges = roomRent + cleaning;
       const totalAmount = mealCharges + otherCharges;
-      const snapshot = JSON.stringify({ counts, rates: rateMap, roomRent, cleaning });
+      const snapshot = JSON.stringify({
+        counts,
+        residentMealCount,
+        perMealCharge,
+        mealCharges,
+        roomRent,
+        cleaning,
+        totalExpenses,
+        guestRevenue,
+        totalResidentMeals,
+      });
 
       if (existing) {
         // Recalculate on an existing bill — preserve paidAmount, recompute due + status.

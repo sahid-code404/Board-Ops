@@ -224,14 +224,34 @@ export function BillingView() {
   }, [searchInput]);
   const [statusFilter, setStatusFilter] = useState<BillStatus | "ALL" | "DELETED">("ALL");
   const [generateOpen, setGenerateOpen] = useState(false);
-  const [genMonth, setGenMonth] = useState<number>(new Date().getMonth());
-  const [genYear, setGenYear] = useState<number>(new Date().getFullYear());
+  // Default to last month — bills can only be generated for past months
+  const nowDate = new Date();
+  const [genMonth, setGenMonth] = useState<number>(
+    nowDate.getMonth() === 0 ? 11 : nowDate.getMonth() - 1
+  );
+  const [genYear, setGenYear] = useState<number>(
+    nowDate.getMonth() === 0 ? nowDate.getFullYear() - 1 : nowDate.getFullYear()
+  );
   // Default due date = 10th of next month (matches the backend default)
   const defaultDueDate = (() => {
     const d = new Date(genYear, genMonth + 1, 10);
     return d.toISOString().slice(0, 10);
   })();
   const [genDueDate, setGenDueDate] = useState<string>(defaultDueDate);
+
+  // Readiness checklist — fetched when the Generate dialog opens
+  const { data: readiness, isLoading: readinessLoading } = useQuery({
+    queryKey: ["billing-readiness", { month: genMonth, year: genYear }],
+    queryFn: async () => {
+      const r = await api.get<ApiResponse<{
+        canClose: boolean;
+        items: { key: string; label: string; status: "ready" | "warning" | "error"; detail: string; count?: number }[];
+      }>>(`/billing-cycles/readiness?month=${genMonth}&year=${genYear}`);
+      return r.data;
+    },
+    enabled: generateOpen,
+    placeholderData: (prev) => prev,
+  });
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const [voidTarget, setVoidTarget] = useState<Bill | null>(null);
   const now = new Date();
@@ -469,12 +489,21 @@ export function BillingView() {
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => {
+              // Don't allow navigating past the current month
+              const today = new Date();
+              const currentPeriod = today.getFullYear() * 12 + today.getMonth();
+              const nextPeriod = selectedYear * 12 + selectedMonth + 1;
+              if (nextPeriod > currentPeriod) return;
               const d = new Date(selectedYear, selectedMonth + 1, 1);
               setSelectedMonth(d.getMonth());
               setSelectedYear(d.getFullYear());
             }}
             aria-label="Next month"
-            className="grid place-items-center h-10 w-10 rounded-full glass-strong shrink-0 ring-1 ring-border/40 hover:ring-primary/40 transition-all"
+            className={`grid place-items-center h-10 w-10 rounded-full glass-strong shrink-0 ring-1 ring-border/40 transition-all ${
+              selectedYear * 12 + selectedMonth >= new Date().getFullYear() * 12 + new Date().getMonth()
+                ? "opacity-30 cursor-not-allowed"
+                : "hover:ring-primary/40"
+            }`}
           >
             <ChevronRight className="h-5 w-5" />
           </motion.button>
@@ -676,71 +705,107 @@ export function BillingView() {
         )}
       </StaggerItem>
 
-      {/* Generate Bills Dialog */}
+      {/* Generate Bills Dialog — with integrated readiness checklist */}
       <Dialog open={generateOpen} onOpenChange={setGenerateOpen}>
-        <DialogContent className="rounded-3xl">
+        <DialogContent className="rounded-3xl max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-primary" />
               Generate Bills
             </DialogTitle>
             <DialogDescription>
-              Generate or refresh bills for all active residents. Run this
-              anytime — existing bills are re-calculated from current meal
-              entries while payment history is preserved. Voided and deleted
-              bills are skipped.
+              Generate bills for a past month. All checks must pass before generation.
             </DialogDescription>
           </DialogHeader>
+
+          {/* Month/Year picker — past months only */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground ml-1">
-                Month
-              </label>
+              <label className="text-xs font-medium text-muted-foreground ml-1">Month</label>
               <Select
                 value={String(genMonth)}
                 onValueChange={(v) => setGenMonth(Number(v))}
               >
-                <SelectTrigger className="w-full h-11 rounded-2xl">
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger className="w-full h-10 rounded-2xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {MONTHS.map((m, i) => (
-                    <SelectItem key={m} value={String(i)}>
-                      {m}
-                    </SelectItem>
-                  ))}
+                  {MONTHS.map((m, i) => {
+                    const currentPeriod = now.getFullYear() * 12 + now.getMonth();
+                    const itemPeriod = genYear * 12 + i;
+                    if (itemPeriod >= currentPeriod) return null; // skip current/future months
+                    return <SelectItem key={m} value={String(i)}>{m}</SelectItem>;
+                  })}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground ml-1">
-                Year
-              </label>
+              <label className="text-xs font-medium text-muted-foreground ml-1">Year</label>
               <Select
                 value={String(genYear)}
                 onValueChange={(v) => setGenYear(Number(v))}
               >
-                <SelectTrigger className="w-full h-11 rounded-2xl">
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger className="w-full h-10 rounded-2xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {Array.from({ length: 5 }).map((_, i) => {
-                    const y = new Date().getFullYear() - 2 + i;
-                    return (
-                      <SelectItem key={y} value={String(y)}>
-                        {y}
-                      </SelectItem>
-                    );
+                    const y = now.getFullYear() - 4 + i; // 4 years ago to current year — no future years
+                    return <SelectItem key={y} value={String(y)}>{y}</SelectItem>;
                   })}
                 </SelectContent>
               </Select>
             </div>
           </div>
+
+          {/* Readiness checklist */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Readiness Check</p>
+              {readiness && (
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  readiness.canClose ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive"
+                }`}>
+                  {readiness.canClose ? "ALL PASSED ✓" : `${readiness.items.filter(i => i.status !== "ready").length} ISSUES`}
+                </span>
+              )}
+            </div>
+            {readinessLoading ? (
+              <div className="space-y-1.5">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="h-8 rounded-xl bg-muted animate-pulse" />
+                ))}
+              </div>
+            ) : readiness ? (
+              <div className="space-y-1 max-h-48 overflow-y-auto">
+                {readiness.items.map((item) => (
+                  <div
+                    key={item.key}
+                    className={`flex items-start gap-2 p-2 rounded-xl text-xs ${
+                      item.status === "ready" ? "bg-success/5" :
+                      item.status === "warning" ? "bg-warning/5" : "bg-destructive/5"
+                    }`}
+                  >
+                    <span className="shrink-0 mt-0.5">
+                      {item.status === "ready" && <span className="text-success">✓</span>}
+                      {item.status === "warning" && <span className="text-warning">⚠</span>}
+                      {item.status === "error" && <span className="text-destructive">✗</span>}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <span className={`font-medium ${item.status === "ready" ? "text-success" : item.status === "warning" ? "text-warning" : "text-destructive"}`}>
+                        {item.label}
+                      </span>
+                      {item.status !== "ready" && (
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{item.detail}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">Loading checklist…</p>
+            )}
+          </div>
+
           {/* Due date picker */}
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground ml-1">
-              Due Date
-            </label>
+            <label className="text-xs font-medium text-muted-foreground ml-1">Due Date</label>
             <GlassInput
               type="date"
               value={genDueDate}
@@ -748,19 +813,16 @@ export function BillingView() {
               icon={<Calendar className="h-4 w-4" />}
             />
             <p className="text-[11px] text-muted-foreground ml-1">
-              Defaults to the 10th of next month. All generated bills will use this due date.
+              Defaults to the 10th of next month.
             </p>
           </div>
+
           <DialogFooter>
-            <GlassButton
-              variant="ghost"
-              onClick={() => setGenerateOpen(false)}
-            >
-              Cancel
-            </GlassButton>
+            <GlassButton variant="ghost" onClick={() => setGenerateOpen(false)}>Cancel</GlassButton>
             <GlassButton
               onClick={() => generateMutation.mutate()}
               loading={generateMutation.isPending}
+              disabled={!readiness?.canClose}
             >
               <Sparkles className="h-4 w-4" />
               Generate

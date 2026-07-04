@@ -17,7 +17,9 @@ export async function GET(req: Request) {
     // "DELETED" is a client-side filter (checks deletedAt), not a DB status
     const dbStatus = status && status !== "DELETED" ? status : undefined;
 
+    // Show all users (residents + admins) in user management
     const where = {
+      deletedAt: null,
       ...(dbStatus ? { status: dbStatus } : {}),
       ...(search
         ? {
@@ -48,6 +50,14 @@ export async function GET(req: Request) {
         lastLoginAt: true,
         deletedAt: true,
         deletionReason: true,
+        // PRD Module 03 — registration review metadata
+        emailVerified: true,
+        institutionName: true,
+        institutionUserId: true,
+        changesRequested: true,
+        changesRequestReason: true,
+        changesRequestedAt: true,
+        rejectionReason: true,
       },
     });
     return ok(users);

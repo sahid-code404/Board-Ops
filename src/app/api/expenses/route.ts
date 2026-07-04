@@ -85,7 +85,7 @@ export async function POST(req: Request) {
         paidTo: data.paidTo || null,
         status: "APPROVED",
         createdBy: user.id,
-        currency: "INR",
+        currency: (await db.institution.findFirst())?.currency || "INR",
       },
     });
 

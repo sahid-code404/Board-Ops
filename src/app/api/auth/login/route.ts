@@ -38,6 +38,14 @@ export async function POST(req: Request) {
       return err("Your account is no longer active", 403);
     if (user.status !== "ACTIVE") return err("Account access denied", 403);
 
+    // PRD Module 03 — require email verification before login. Pending users
+    // who haven't verified their email get a clear message pointing them back
+    // to the verification flow (the registration-status screen handles
+    // resend / status polling without auth).
+    if (!user.emailVerified) {
+      return err("Please verify your email address first. Use the verification link sent to your inbox, or check your registration status page.", 403);
+    }
+
     const token = generateToken();
     const expiresAt = getTokenExpiry(30);
     await db.userSession.create({

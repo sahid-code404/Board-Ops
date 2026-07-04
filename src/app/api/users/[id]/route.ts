@@ -81,6 +81,13 @@ export async function PATCH(
         break;
       case "ASSIGN_ROLE":
         if (!role) return err("Role is required", 400);
+        // Prevent the last admin from demoting themselves — system would collapse
+        if (user.role === "ADMIN" && role !== "ADMIN") {
+          const adminCount = await db.user.count({ where: { role: "ADMIN", status: "ACTIVE", deletedAt: null } });
+          if (adminCount <= 1) {
+            return err("Cannot demote the last remaining admin. Promote another user to admin first.", 422);
+          }
+        }
         newRole = role;
         notifyType = "INFO";
         notifyTitle = "Role Updated";
@@ -92,6 +99,27 @@ export async function PATCH(
       where: { id },
       data: { status: newStatus, role: newRole },
     });
+
+    // PRD Module 03 — DEC-015: keep the RegistrationRequest history complete.
+    // On APPROVE / REJECT-equivalent actions, update the latest request so the
+    // review cycle has a final status (APPROVED / etc.).
+    if (action === "APPROVE" || action === "ARCHIVE" || action === "DEACTIVATE") {
+      const latest = await db.registrationRequest.findFirst({
+        where: { userId: id },
+        orderBy: { cycle: "desc" },
+      });
+      if (latest && latest.status === "PENDING_REVIEW") {
+        await db.registrationRequest.update({
+          where: { id: latest.id },
+          data: {
+            status: action === "APPROVE" ? "APPROVED" : "REJECTED",
+            reviewedBy: admin.id,
+            reviewedAt: new Date(),
+            reason,
+          },
+        });
+      }
+    }
 
     if (notifyTitle) {
       await createNotification({

@@ -19,17 +19,26 @@ export async function GET(req: Request) {
       orderBy: { displayOrder: "asc" },
     });
 
+    // Exclude admin users' meals — only resident meals count in kitchen
+    const adminIds = await db.user.findMany({
+      where: { role: { in: ["ADMIN", "SUPER_ADMIN"] } },
+      select: { id: true },
+    });
+    const adminIdSet = new Set(adminIds.map((u) => u.id));
+
     const entries = await db.mealEntry.findMany({
       where: { serviceDate: target },
     });
+    // Filter out admin entries
+    const residentEntries = entries.filter((e) => !adminIdSet.has(e.userId));
 
     const guestMeals = await db.guestMeal.findMany({
       where: { serviceDate: target },
     });
 
     const counts = meals.map((m) => {
-      const on = entries.filter((e) => e.mealId === m.id && (e.status === "ON" || e.status === "LOCKED")).length;
-      const off = entries.filter((e) => e.mealId === m.id && e.status === "OFF").length;
+      const on = residentEntries.filter((e) => e.mealId === m.id && (e.status === "ON" || e.status === "LOCKED")).length;
+      const off = residentEntries.filter((e) => e.mealId === m.id && e.status === "OFF").length;
       const guests = guestMeals
         .filter((g) => g.mealId === m.id)
         .reduce((sum, g) => sum + g.guestCount, 0);

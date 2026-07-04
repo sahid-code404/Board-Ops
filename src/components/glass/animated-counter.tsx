@@ -30,10 +30,15 @@ export function AnimatedCounter({
 
   useEffect(() => {
     return spring.on("change", (v) => {
-      const n = Math.round(v);
-      setDisplay(format ? format(n) : n.toLocaleString());
+      // If the value has decimals, show 2 decimal places; otherwise show as integer
+      const hasDecimals = value % 1 !== 0;
+      const n = hasDecimals ? Math.round(v * 100) / 100 : Math.round(v);
+      const formatted = hasDecimals
+        ? n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : n.toLocaleString("en-IN");
+      setDisplay(format ? format(n) : formatted);
     });
-  }, [spring, format]);
+  }, [spring, format, value]);
 
   return (
     <motion.span ref={ref} className={className}>

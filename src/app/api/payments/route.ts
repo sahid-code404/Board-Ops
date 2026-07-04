@@ -48,6 +48,9 @@ export async function GET(req: Request) {
       where.createdAt = { gte: start, lte: end };
     }
 
+    // Exclude payments made by admin users — admins are not residents
+    where.user = { role: "USER" };
+
     const payments = await db.payment.findMany({
       where,
       orderBy: { createdAt: "desc" },

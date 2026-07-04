@@ -34,6 +34,19 @@ model User {
   twoFactorEnabled Boolean       @default(false)
   twoFactorSecret String?
   twoFactorBackupCodes String?  // JSON array of hashed backup codes
+  // Password reset (PRD 03.12 — Forgot Password flow)
+  resetOtpHash     String?     // SHA-256 hash of the reset OTP
+  resetOtpExpires  DateTime?   // OTP expiry time
+  // Email verification + Institution fields (PRD Module 03 — DEC-015/016/017)
+  institutionName     String?   // configurable; pre-filled for single-institution deployments
+  institutionUserId   String?   // roll no / employee id / etc. Unique per institution (for v1, just unique)
+  emailVerified       Boolean   @default(false)
+  emailVerifyToken    String?   // hashed OTP token (sha256 hex)
+  emailVerifyExpires  DateTime?
+  changesRequested    String?   // JSON array of fields requiring correction, set by admin
+  changesRequestReason String?  // admin's reason for requesting changes
+  changesRequestedAt  DateTime?
+  changesRequestedBy  String?
   lastLoginAt     DateTime?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
@@ -47,13 +60,43 @@ model User {
   bills            Bill[]
   payments         Payment[]
   expenses         Expense[]
+  purchases        Purchase[]
+  refunds          Refund[]
+  adjustments      Adjustment[]
+  adjustmentsMade  Adjustment[] @relation("AdjustmentCreator")
+  ledgerEntries    LedgerEntry[]
+  restrictions     Restriction[]
+  announcements    Announcement[]
   notifications    Notification[]
+  backgroundTasks  BackgroundTask[]
   auditLogs        AuditLog[]      @relation("AuditActor")
   leaveApplications LeaveApplication[]
   guestMeals       GuestMeal[]
   staffRecords     StaffRecord[]
   formulaVersions  FormulaVersion[]
   loginHistory     LoginHistory[]
+  registrationRequests RegistrationRequest[]
+}
+
+// ─────────────────────────────────────────────────────────────
+// REGISTRATION REQUESTS — Review history (one row per cycle)
+// PRD Module 03 — DEC-015: Resident approval Review → Approve/Reject/Request Changes workflow
+// ─────────────────────────────────────────────────────────────
+
+model RegistrationRequest {
+  id          String   @id @default(cuid())
+  userId      String
+  cycle       Int      @default(1)  // 1 = first submission, 2 = after resubmit, etc.
+  status      String   // PENDING_REVIEW | APPROVED | REJECTED | CHANGES_REQUESTED | RESUBMITTED
+  fields      String?  // JSON: snapshot of submitted fields for this cycle
+  reason      String?  // admin reason (for reject / request changes)
+  fieldsNeedingCorrection String? // JSON array of field keys the admin wants corrected
+  reviewedBy  String?
+  reviewedAt  DateTime?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model UserSession {
@@ -302,11 +345,70 @@ model FormulaVersion {
 }
 
 // ─────────────────────────────────────────────────────────────
+// MONTHLY CLOSING ENGINE (PRD Module 13 — Monthly Closing Engine)
+// ─────────────────────────────────────────────────────────────
+
+model BillingCycle {
+  id              String    @id @default(cuid())
+  periodMonth     Int       // 0-indexed (0 = January)
+  periodYear      Int
+  status          String    @default("OPEN") // OPEN | PREPARING | SNAPSHOT_CREATED | BILLS_GENERATED | SETTLED | CLOSED | FAILED
+  // Readiness checklist results (stored when the admin runs the pre-closing review)
+  readiness       String?   // JSON: { meals: "ready"|"warning"|"error", expenses, variables, formula, payments, ... }
+  // Snapshot reference
+  snapshotId      String?   @unique
+  // Closing metadata
+  startedBy       String?
+  startedAt       DateTime?
+  closedBy        String?
+  closedAt        DateTime?
+  // Summary stats (populated after closing)
+  totalExpenses   Float     @default(0)
+  totalMeals      Int       @default(0)
+  totalGuestMeals Int       @default(0)
+  mealCharge      Float     @default(0)
+  billsGenerated  Int       @default(0)
+  refundQueueTotal Float    @default(0)
+  outstandingDue  Float     @default(0)
+  // Error info (if status=FAILED)
+  errorMessage    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  snapshot        MonthlySnapshot?
+  bills           Bill[]
+
+  @@unique([periodMonth, periodYear])
+  @@index([status])
+}
+
+model MonthlySnapshot {
+  id              String    @id @default(cuid())
+  billingCycleId  String    @unique
+  // Frozen JSON blobs — immutable after creation
+  mealsData       String    // JSON: per-resident meal counts, guest meals, overrides
+  expensesData    String    // JSON: all approved expenses + purchases with items
+  variablesData   String    // JSON: all active variable key→value pairs
+  formulaData     String    // JSON: formula key→{expression, version} for every active formula
+  // Computed totals (denormalized for quick access)
+  totalExpenses   Float
+  totalResidentMeals Int
+  totalGuestMeals Int
+  guestRevenue    Float
+  mealCharge      Float     // the calculated per-meal charge
+  createdAt       DateTime  @default(now())
+  billingCycle    BillingCycle @relation(fields: [billingCycleId], references: [id], onDelete: Cascade)
+
+  @@index([billingCycleId])
+}
+
+// ─────────────────────────────────────────────────────────────
 // BILLING, PAYMENTS & EXPENSES
 // ─────────────────────────────────────────────────────────────
 
 model Bill {
   id           String   @id @default(cuid())
+  billNumber   String?  // Human-readable reference (e.g. BILL-2026-0001). Configurable format (DEC-031).
   userId       String
   periodMonth  Int
   periodYear   Int
@@ -316,21 +418,30 @@ model Bill {
   totalAmount  Float    @default(0)
   paidAmount   Float    @default(0)
   dueAmount    Float    @default(0)
+  previousDue  Float    @default(0) // PRD DEC-027: previous outstanding carried separately (not added to totalAmount)
   status       String   @default("DRAFT") // DRAFT | GENERATED | PARTIALLY_PAID | PAID | OVERDUE | VOID | DELETED
   generatedAt  DateTime?
   dueDate      DateTime?
   snapshot     String?  // JSON snapshot of calculation
+  billingCycleId String? // links to the BillingCycle that generated this bill (null for legacy bills)
+  // Formula snapshot — the exact formula version + expression used to generate this bill (PRD DEC-012)
+  formulaKey       String?  // e.g. "formula.mealCharges"
+  formulaVersion   Int?     // version number at generation time
+  formulaExpression String? // the expression text (fully reproducible)
   deletedAt    DateTime? // Soft-delete: scheduled for permanent deletion after 7 days
   deletedBy    String?
   deletionReason String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  billingCycle BillingCycle? @relation(fields: [billingCycleId], references: [id], onDelete: SetNull)
   payments     Payment[]
+  refunds      Refund[]
 
   @@unique([userId, periodMonth, periodYear])
   @@index([status])
   @@index([deletedAt])
+  @@index([billNumber])
 }
 
 model Payment {
@@ -343,6 +454,11 @@ model Payment {
   reference       String?
   notes           String?
   approvedBy      String?
+  // PRD: Effective billing cycle — auto-determined when the payment is approved.
+  // If the current period's billing cycle is already CLOSED, the payment applies
+  // to the NEXT cycle. Otherwise it applies to the current cycle.
+  effectiveMonth  Int?     // 0-indexed
+  effectiveYear   Int?
   deletedAt       DateTime? // Soft-delete: scheduled for permanent deletion after 7 days
   deletedBy       String?
   deletionReason  String?
@@ -350,9 +466,11 @@ model Payment {
   updatedAt       DateTime @updatedAt
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   bill            Bill?    @relation(fields: [billId], references: [id], onDelete: SetNull)
+  ledgerEntries   LedgerEntry[]
 
   @@index([userId, status])
   @@index([deletedAt])
+  @@index([effectiveMonth, effectiveYear])
 }
 
 model Expense {
@@ -369,15 +487,261 @@ model Expense {
   receiptUrl      String?
   status          String   @default("APPROVED") // APPROVED | LOCKED | DELETED
   createdBy       String?
+  lockedAt        DateTime? // PRD DEC-030: set when the monthly snapshot freezes this expense. Locked expenses are immutable.
+  lockedByCycleId String?  // links to the BillingCycle that locked this expense
   deletedAt       DateTime? // Soft-delete: scheduled for permanent deletion after 7 days
   deletedBy       String?
   deletionReason  String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   user            User?    @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  purchase        Purchase?
 
   @@index([category, expenseDate])
   @@index([deletedAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// PRODUCT CATALOG, UNITS & PURCHASES (PRD Module: Purchase & Expense Engine)
+// ─────────────────────────────────────────────────────────────
+
+model Unit {
+  id        String   @id @default(cuid())
+  name      String   @unique  // kg, gm, litre, ml, piece, packet, bottle, sack, bundle, dozen
+  category  String   @default("QUANTITY")  // WEIGHT | VOLUME | QUANTITY | OTHER
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products      Product[]
+}
+
+model Product {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  slug          String   @unique
+  category      String   @default("GENERAL")  // Non-Veg | Veg | Grains | Oil | Dairy | etc.
+  defaultUnitId String?
+  defaultUnit   Unit?    @relation(fields: [defaultUnitId], references: [id])
+  isActive      Boolean  @default(true)
+  archivedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  purchaseItems PurchaseItem[]
+
+  @@index([category])
+  @@index([isActive])
+}
+
+model Purchase {
+  id              String   @id @default(cuid())
+  vendor          String
+  purchaseDate    DateTime
+  totalAmount     Float
+  receiptUrl      String?
+  notes           String?
+  expenseId       String?  @unique // links to the Expense record (so existing totals/reports still work)
+  expense         Expense? @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+  createdBy       String?
+  user            User?    @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  status          String   @default("APPROVED")  // APPROVED | LOCKED | DELETED (mirrors Expense)
+  deletedAt       DateTime?
+  deletedBy       String?
+  deletionReason  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  items           PurchaseItem[]
+
+  @@index([purchaseDate])
+  @@index([deletedAt])
+}
+
+model PurchaseItem {
+  id          String   @id @default(cuid())
+  purchaseId  String
+  purchase    Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName String   // snapshot of product name at purchase time
+  category    String   @default("GENERAL")  // snapshot
+  quantity    Float
+  unit        String   // snapshot (kg, gm, piece, etc.) — not a FK so historical purchases don't break if unit is renamed
+  rate        Float    @default(0)  // unit price
+  total       Float    // quantity * rate
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  @@index([purchaseId])
+  @@index([productId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// REFUNDS & ADJUSTMENTS (PRD Module: Resident Fund Engine + Billing Engine v2)
+// ─────────────────────────────────────────────────────────────
+
+// PRD DEC-029: Partial refunds supported. A Refund tracks the full refund amount,
+// how much has been paid so far, and the remaining amount. Multiple partial
+// payments can be recorded until the refund is fully completed.
+model Refund {
+  id              String   @id @default(cuid())
+  refundNumber    String?  // Human-readable reference (e.g. REF-2026-0001)
+  userId          String
+  billId          String?  // the bill that triggered this refund (null for direct/unlinked)
+  billingCycleId  String?  // the cycle that generated this refund
+  // Full refund amount (the total the resident is owed)
+  amount          Float
+  // How much has been paid out so far (sum of all partial refund payments)
+  paidAmount      Float    @default(0)
+  // Remaining = amount - paidAmount (computed, but stored for query convenience)
+  remainingAmount Float    @default(0)
+  status          String   @default("PENDING") // PENDING | PARTIALLY_PAID | COMPLETED | CANCELLED
+  method          String?  // UPI | CASH | BANK_TRANSFER | CHEQUE
+  reference       String?  // transaction reference number
+  notes           String?
+  processedBy     String?
+  processedAt     DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bill            Bill?    @relation(fields: [billId], references: [id], onDelete: SetNull)
+  transactions    RefundTransaction[]
+
+  @@index([userId, status])
+  @@index([billingCycleId])
+}
+
+// Individual partial refund payments (DEC-029). Each partial payment is recorded
+// here — the sum of these equals Refund.paidAmount.
+model RefundTransaction {
+  id          String   @id @default(cuid())
+  refundId    String
+  amount      Float    // this partial payment amount
+  method      String?  // UPI | CASH | BANK_TRANSFER | CHEQUE
+  reference   String?  // transaction reference
+  notes       String?
+  processedBy String?
+  createdAt   DateTime @default(now())
+  refund      Refund   @relation(fields: [refundId], references: [id], onDelete: Cascade)
+
+  @@index([refundId])
+}
+
+// PRD DEC-033 / AP-007: Adjustment Entries — correct historical financial records
+// WITHOUT editing or deleting them. An adjustment is a separate record that
+// references the original entity and records the correction amount + reason.
+// Approved financial transactions are immutable; corrections use adjustments.
+model Adjustment {
+  id              String   @id @default(cuid())
+  adjustmentNumber String? // Human-readable reference (e.g. ADJ-2026-0001)
+  userId          String?  // affected resident (null for institution-level adjustments)
+  // What entity is being adjusted
+  entityType      String   // Payment | Refund | Bill | Expense
+  entityId        String
+  // The correction
+  amount          Float    // positive = adds to balance, negative = subtracts
+  reason          String   // mandatory
+  notes           String?
+  // Who and when
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  creator         User?    @relation("AdjustmentCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entityType, entityId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// FINANCIAL LEDGER (PRD: Resident Ledger — accounting backbone)
+// Every financial event creates a ledger entry. Balances are derived
+// from the sum of entries, never stored directly. This is the single
+// source of truth for a resident's financial position.
+// ─────────────────────────────────────────────────────────────
+
+model LedgerEntry {
+  id              String   @id @default(cuid())
+  userId          String
+  // What type of event
+  type            String   // DEPOSIT | BILL_SETTLEMENT | REFUND | ADJUSTMENT | PURCHASE | EXPENSE
+  // Credit/debit (from the resident's perspective)
+  // DEPOSIT: credit (+) — money in
+  // BILL_SETTLEMENT: debit (-) — money out (bill deducted)
+  // REFUND: debit (-) — money returned to resident
+  // ADJUSTMENT: credit or debit depending on sign
+  amount          Float    // positive = credit (adds to balance), negative = debit
+  // Running balance after this entry (for quick display — the authoritative
+  // balance is always the sum of all entries, but storing the running balance
+  // avoids re-summing on every query)
+  runningBalance  Float    @default(0)
+  // Reference to the source entity
+  entityType      String   // Payment | Bill | Refund | Adjustment | Expense | Purchase
+  entityId        String?
+  // Description for the human-readable ledger
+  description     String
+  // Billing cycle this entry applies to
+  billingMonth    Int?
+  billingYear     Int?
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payment         Payment? @relation(fields: [entityId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([entityType, entityId])
+  @@index([billingMonth, billingYear])
+}
+
+// ─────────────────────────────────────────────────────────────
+// RESTRICTION ENGINE (PRD Module: Restriction Engine — DEC-008)
+// Controls resident access based on financial or administrative conditions.
+// Financial restrictions are auto-applied when balance falls below threshold
+// and the grace period expires. Admins can manually apply/exempt restrictions.
+// ─────────────────────────────────────────────────────────────
+
+model Restriction {
+  id              String    @id @default(cuid())
+  userId          String
+  type            String    // FINANCIAL | ADMINISTRATIVE
+  reason          String    // mandatory
+  source          String    @default("AUTOMATIC") // AUTOMATIC | MANUAL
+  status          String    @default("ACTIVE") // ACTIVE | LIFTED | EXEMPTED | EXPIRED
+  appliedBy       String?   // null for automatic
+  appliedAt       DateTime  @default(now())
+  expiresAt       DateTime? // null = indefinite
+  liftedBy        String?
+  liftedAt        DateTime?
+  liftReason      String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([type, status])
+}
+
+// ─────────────────────────────────────────────────────────────
+// INSTITUTION CANDAR (PRD Module 19 — Institution Calendar)
+// Centralized scheduler for holidays, festival closures, special meal days,
+// billing dates, refund dates, and maintenance windows. Every module reads
+// from this calendar. Holidays automatically disable meals.
+// ─────────────────────────────────────────────────────────────
+
+model Holiday {
+  id              String   @id @default(cuid())
+  name            String   // e.g. "Durga Puja", "Independence Day"
+  description     String?
+  type            String   @default("HOLIDAY") // HOLIDAY | FESTIVAL | SPECIAL_MEAL | BILLING_DAY | REFUND_DAY | MAINTENANCE
+  startDate       DateTime
+  endDate         DateTime
+  mealsDisabled   Boolean  @default(true) // PRD DEC-024: holidays automatically make meals unavailable
+  status          String   @default("ACTIVE") // ACTIVE | ARCHIVED
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([startDate, endDate])
+  @@index([type, status])
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -399,6 +763,36 @@ model Notification {
   @@index([userId, readAt])
 }
 
+// ─────────────────────────────────────────────────────────────
+// ANNOUNCEMENTS (PRD Module 16 — Notification & Announcement Engine)
+// Institution-wide communication, separate from personal notifications.
+// Pinned on resident dashboards until expiry. Targeted delivery.
+// ─────────────────────────────────────────────────────────────
+
+model Announcement {
+  id              String    @id @default(cuid())
+  title           String
+  body            String
+  type            String    @default("INFO") // INFO | WARNING | MAINTENANCE | EVENT
+  priority        String    @default("NORMAL") // NORMAL | HIGH | URGENT
+  // Targeting: ALL | RESIDENTS | ADMINS
+  targetAudience  String    @default("ALL")
+  // Pinned on dashboards until expiry
+  isPinned        Boolean   @default(true)
+  // Lifecycle
+  status          String    @default("PUBLISHED") // DRAFT | SCHEDULED | PUBLISHED | EXPIRED | ARCHIVED
+  publishedAt     DateTime?
+  expiresAt       DateTime? // null = indefinite
+  // Author
+  createdBy       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  user            User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@index([status, publishedAt])
+  @@index([targetAudience, status])
+}
+
 model AuditLog {
   id           String   @id @default(cuid())
   actorId      String?
@@ -415,6 +809,41 @@ model AuditLog {
 
   @@index([entity, entityId])
   @@index([actorId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// BACKGROUND TASK ENGINE (PRD Engineering Improvement)
+// Tracks async operations: monthly closing, large exports, session
+// cleanup, scheduled announcements. Each task has status, progress,
+// error info, and retry tracking.
+// ─────────────────────────────────────────────────────────────
+
+model BackgroundTask {
+  id           String    @id @default(cuid())
+  type         String    // MONTHLY_CLOSING | REPORT_EXPORT | SESSION_CLEANUP | ANNOUNCEMENT_SCHEDULE | BILL_GENERATION
+  status       String    @default("QUEUED") // QUEUED | RUNNING | COMPLETED | FAILED | CANCELLED
+  progress     Int       @default(0) // 0-100
+  // Payload (JSON) — the task parameters
+  payload      String?
+  // Result (JSON) — the task output on completion
+  result       String?
+  // Error info
+  errorMessage String?
+  // Retry tracking
+  retryCount   Int       @default(0)
+  maxRetries   Int       @default(3)
+  // Scheduling
+  scheduledFor DateTime?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  // Trigger
+  triggeredBy  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  user         User?     @relation(fields: [triggeredBy], references: [id], onDelete: SetNull)
+
+  @@index([status, scheduledFor])
+  @@index([type, status])
 }
 
 // ─────────────────────────────────────────────────────────────

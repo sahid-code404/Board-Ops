@@ -64,18 +64,34 @@ export function TopBar() {
   const { data: unreadCount = 0 } = useQuery({
     queryKey: ["notifications", "unread-count"],
     queryFn: async () => {
-      const res = await api.get<{ success: boolean; data: { unreadCount: number } }>(
+      const res = await api.get<{ success: boolean; data: { unreadCount: number; notifications: Array<{ id: string; title: string; description: string | null; type: string; priority: string; route: string | null; readAt: string | null; createdAt: string }> } }>(
         "/notifications?unread=true"
       );
-      return res.data.unreadCount;
+      return res.data;
     },
     enabled: !!token,
     refetchInterval: 30_000,
     staleTime: 10_000,
   });
 
+  const unreadNum = unreadCount?.unreadCount ?? 0;
+  const recentNotifs = unreadCount?.notifications ?? [];
+  const [notifPanelOpen, setNotifPanelOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  // Close panel on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifPanelOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   const label = NAV_LABELS[view] ?? "BoardOps";
-  const showBadge = unreadCount > 0;
+  const showBadge = unreadNum > 0;
 
   return (
     <header className="sticky top-0 z-30 safe-top px-3 sm:px-4 lg:px-6 pt-3">
@@ -127,32 +143,96 @@ export function TopBar() {
           currentTheme={user?.theme || theme || "system"}
         />
 
-        {/* Notifications — routes to notifications page, shows unread count badge */}
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={() => setView("notifications")}
-          aria-label={`Notifications${showBadge ? ` (${formatBadge(unreadCount)} unread)` : ""}`}
-          className={cn(
-            "relative grid place-items-center h-10 w-10 rounded-2xl glass-soft shrink-0 transition-colors",
-            view === "notifications" ? "text-primary ring-2 ring-primary/50" : "text-foreground"
-          )}
-        >
-          <Bell className="h-[18px] w-[18px]" />
+        {/* Notifications — dropdown panel with recent notifications */}
+        <div className="relative shrink-0" ref={notifRef}>
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => { setNotifPanelOpen(false); setView("notifications"); }}
+            aria-label={`Notifications${showBadge ? ` (${formatBadge(unreadNum)} unread)` : ""}`}
+            className={cn(
+              "relative grid place-items-center h-10 w-10 rounded-2xl glass-soft transition-colors",
+              view === "notifications" ? "text-primary ring-2 ring-primary/50" : "text-foreground"
+            )}
+          >
+            <Bell className="h-[18px] w-[18px]" />
+            <AnimatePresence>
+              {showBadge && (
+                <motion.span
+                  key={unreadNum}
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  exit={{ scale: 0 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 25 }}
+                  className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-white text-[10px] font-bold grid place-items-center ring-2 ring-background"
+                >
+                  {formatBadge(unreadNum)}
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </motion.button>
+
+          {/* Notification dropdown panel */}
           <AnimatePresence>
-            {showBadge && (
-              <motion.span
-                key={unreadCount}
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                exit={{ scale: 0 }}
-                transition={{ type: "spring", stiffness: 500, damping: 25 }}
-                className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-white text-[10px] font-bold grid place-items-center ring-2 ring-background"
+            {notifPanelOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                transition={{ duration: 0.15 }}
+                className="absolute right-0 top-12 w-80 max-w-[calc(100vw-1.5rem)] glass rounded-3xl shadow-xl overflow-hidden z-50"
               >
-                {formatBadge(unreadCount)}
-              </motion.span>
+                <div className="p-3 border-b border-border/50 flex items-center justify-between">
+                  <p className="text-sm font-semibold">
+                    Notifications {unreadNum > 0 && <span className="text-destructive">({unreadNum} unread)</span>}
+                  </p>
+                  <button
+                    onClick={() => { setNotifPanelOpen(false); setView("notifications"); }}
+                    className="text-[10px] text-primary hover:underline"
+                  >
+                    View all
+                  </button>
+                </div>
+                <div className="max-h-80 overflow-y-auto">
+                  {recentNotifs.length === 0 ? (
+                    <div className="p-6 text-center">
+                      <Check className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+                      <p className="text-xs text-muted-foreground">You're all caught up</p>
+                    </div>
+                  ) : (
+                    recentNotifs.slice(0, 8).map((n) => (
+                      <button
+                        key={n.id}
+                        onClick={() => {
+                          setNotifPanelOpen(false);
+                          if (n.route) {
+                            const viewKey = n.route.replace(/^\//, "").split("/")[0] as never;
+                            setView(viewKey);
+                          } else {
+                            setView("notifications");
+                          }
+                        }}
+                        className="w-full text-left p-3 hover:bg-secondary/50 transition-colors border-b border-border/30 last:border-0 flex items-start gap-2"
+                      >
+                        <span className={cn(
+                          "h-2 w-2 rounded-full shrink-0 mt-1.5",
+                          n.priority === "URGENT" ? "bg-destructive" :
+                          n.priority === "HIGH" ? "bg-warning" : "bg-primary"
+                        )} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-medium truncate">{n.title}</p>
+                          {n.description && <p className="text-[10px] text-muted-foreground truncate">{n.description}</p>}
+                          <p className="text-[9px] text-muted-foreground mt-0.5">
+                            {new Date(n.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          </p>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </motion.div>
             )}
           </AnimatePresence>
-        </motion.button>
+        </div>
 
         {/* Profile avatar — routes to profile page */}
         <motion.button

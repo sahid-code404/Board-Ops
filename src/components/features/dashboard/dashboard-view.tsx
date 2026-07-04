@@ -32,10 +32,10 @@ type DashboardData = {
     pendingUsers: number;
     todayOnCount: number;
     todayOffCount: number;
-    totalRevenue: number;
+    currentMealCharge: number;
+    totalResidentMeals: number;
     totalExpenses: number;
     pendingBills: number;
-    netBalance: number;
   };
   trend: Array<{ date: string; on: number; off: number }>;
   expenseBreakdown: Array<{ category: string; amount: number }>;
@@ -78,10 +78,10 @@ export function DashboardView() {
 
   const kpis = data.isAdmin
     ? [
-        { label: "Active Users", value: data.kpis.totalUsers, icon: Users, color: "primary", change: "+2 this week", route: "users" as const },
+        { label: "Total Users", value: data.kpis.totalUsers, icon: Users, color: "primary", change: "active members", route: "users" as const },
         { label: "Meals ON Today", value: data.kpis.todayOnCount, icon: Utensils, color: "success", change: `${data.kpis.todayOffCount} OFF`, route: "kitchen" as const },
-        { label: "Revenue (Month)", value: data.kpis.totalRevenue, icon: Wallet, color: "info", change: "₹", prefix: "₹", route: "payments" as const },
-        { label: "Net Balance", value: data.kpis.netBalance, icon: TrendingUp, color: "warning", change: "vs expenses", prefix: "₹", route: "expenses" as const },
+        { label: "Expenses (Month)", value: data.kpis.totalExpenses, icon: Wallet, color: "warning", change: `₹${data.kpis.totalExpenses.toLocaleString("en-IN")}`, prefix: "₹", route: "expenses" as const },
+        { label: "Meal Charge", value: data.kpis.currentMealCharge, icon: TrendingUp, color: "info", change: `${data.kpis.totalResidentMeals} meals`, prefix: "₹", route: "billing" as const },
       ]
     : [
         { label: "Meals ON Today", value: data.todayMeals.filter((m) => m.status === "ON").length, icon: Utensils, color: "success", change: `${data.todayMeals.filter((m) => m.status === "OFF").length} OFF`, route: "billing" as const },

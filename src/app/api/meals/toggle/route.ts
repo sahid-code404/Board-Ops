@@ -4,6 +4,7 @@ import { ok, err, handleApiError } from "@/lib/api-response";
 import { isLocked } from "@/lib/meal-engine";
 import { logAudit } from "@/lib/audit";
 import { createNotification } from "@/lib/notify";
+import { evaluateRestrictions } from "@/lib/restriction-engine";
 import { z } from "zod";
 
 const toggleSchema = z.object({
@@ -14,6 +15,8 @@ const toggleSchema = z.object({
 /**
  * PATCH /api/meals/toggle
  * Toggle a meal entry's status. Backend validates cutoff.
+ * PRD: Residents with an active financial restriction (not exempted) cannot
+ * turn meals ON. They can still turn meals OFF.
  */
 export async function PATCH(req: Request) {
   try {
@@ -27,6 +30,17 @@ export async function PATCH(req: Request) {
     });
     if (!entry) return err("Meal entry not found", 404);
     if (entry.userId !== user.id) return err("This meal entry does not belong to you", 403);
+
+    // PRD: check financial restrictions — residents can't turn meals ON when restricted
+    if (status === "ON") {
+      const restrictionEval = await evaluateRestrictions(user.id);
+      if (!restrictionEval.canBookMeals) {
+        return err(
+          `Meal booking is restricted. ${restrictionEval.restrictionReason || "Please contact the administrator."}`,
+          403
+        );
+      }
+    }
 
     if (entry.locked || isLocked(entry.editableUntil)) {
       if (entry.status === "LOCKED") return err("This meal is locked and cannot be changed", 422);

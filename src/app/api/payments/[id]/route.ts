@@ -5,12 +5,15 @@ import { logAudit } from "@/lib/audit";
 import { createNotification } from "@/lib/notify";
 import { getDeletionDate } from "@/lib/user-cleanup";
 import { recomputeBillPaidState } from "@/lib/bill-sync";
+import { getEffectiveBillingCycle, createLedgerEntry } from "@/lib/resident-fund";
+import { checkAndLiftFinancialRestriction } from "@/lib/restriction-engine";
 import { z } from "zod";
 
 /** PATCH /api/payments/[id] — approve or reject a payment.
  *  Idempotent: re-approving an already-approved payment is a no-op (no
  *  double-counting). Rejecting a previously-approved payment reverses the
- *  bill update via recomputeBillPaidState. */
+ *  bill update via recomputeBillPaidState.
+ *  On APPROVE: sets the effective billing cycle + creates a ledger entry. */
 export async function PATCH(
   req: Request,
   ctx: { params: Promise<{ id: string }> }
@@ -32,24 +35,75 @@ export async function PATCH(
       return ok(payment);
     }
 
+    // PRD: determine the effective billing cycle when approving
+    let effectiveMonth: number | undefined;
+    let effectiveYear: number | undefined;
+    if (newStatus === "APPROVED") {
+      const cycle = await getEffectiveBillingCycle();
+      effectiveMonth = cycle.month;
+      effectiveYear = cycle.year;
+    }
+
     const updated = await db.payment.update({
       where: { id },
-      data: { status: newStatus, approvedBy: user.id },
+      data: {
+        status: newStatus,
+        approvedBy: user.id,
+        ...(effectiveMonth !== undefined ? { effectiveMonth, effectiveYear } : {}),
+      },
     });
 
-    // Re-sync the linked bill (if any) from scratch — this handles both
-    //   - APPROVE: adds the payment to paidAmount
-    //   - REJECT of a previously-APPROVED payment: removes it from paidAmount
-    // recomputeBillPaidState sums all APPROVED non-deleted payments on the
-    // bill, so the result is always correct regardless of prior state.
+    // PRD: create a ledger entry on APPROVE (credit the resident's fund account)
+    // On REJECT of a previously-APPROVED payment: create a reversing ledger entry (debit)
+    if (newStatus === "APPROVED") {
+      await createLedgerEntry({
+        userId: payment.userId,
+        type: "DEPOSIT",
+        amount: payment.amount, // positive = credit
+        entityType: "Payment",
+        entityId: payment.id,
+        description: `Deposit approved: ₹${Math.round(payment.amount).toLocaleString("en-IN")} via ${payment.method}`,
+        billingMonth: effectiveMonth,
+        billingYear: effectiveYear,
+      });
+    } else if (payment.status === "APPROVED") {
+      // Rejecting a previously-approved payment → reverse the deposit
+      await createLedgerEntry({
+        userId: payment.userId,
+        type: "ADJUSTMENT",
+        amount: -payment.amount, // negative = debit (reversal)
+        entityType: "Payment",
+        entityId: payment.id,
+        description: `Deposit reversed (payment rejected): -₹${Math.round(payment.amount).toLocaleString("en-IN")}`,
+      });
+    }
+
+    // Re-sync the linked bill (if any) from scratch
     if (payment.billId) {
       await recomputeBillPaidState(payment.billId);
+    }
+
+    // PRD: after approving a payment, check if the financial restriction should be lifted
+    if (newStatus === "APPROVED") {
+      const liftResult = await checkAndLiftFinancialRestriction(payment.userId);
+      if (liftResult.lifted) {
+        await createNotification({
+          userId: payment.userId,
+          title: "Meal restriction lifted",
+          description: "Your available balance has been restored. Meal booking is now enabled. Please review and re-book any future meals that were turned off.",
+          type: "SUCCESS",
+          priority: "HIGH",
+          route: "user-meals",
+        });
+      }
     }
 
     await createNotification({
       userId: payment.userId,
       title: `Payment ${newStatus.toLowerCase()}`,
-      description: `Your payment of ₹${payment.amount} via ${payment.method} has been ${newStatus.toLowerCase()}.`,
+      description: newStatus === "APPROVED"
+        ? `Your payment of ₹${payment.amount} via ${payment.method} has been approved. ${effectiveMonth !== undefined ? `Effective billing cycle: ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][effectiveMonth]} ${effectiveYear}.` : ""}`
+        : `Your payment of ₹${payment.amount} via ${payment.method} has been rejected.`,
       type: newStatus === "APPROVED" ? "SUCCESS" : "WARNING",
       priority: "HIGH",
       route: "billing",
@@ -61,7 +115,7 @@ export async function PATCH(
       entity: "Payment",
       entityId: id,
       oldValue: payment,
-      newValue: updated,
+      newValue: { ...updated, effectiveMonth, effectiveYear },
     });
     return ok(updated);
   } catch (e) {

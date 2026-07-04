@@ -5,21 +5,24 @@ import { useAuthStore, type CurrentUser } from "@/stores/use-auth-store";
 import { AuthScreen } from "@/components/features/auth/auth-screen";
 import { AppShell } from "@/components/layout/app-shell";
 import { AnimatedBackground } from "@/components/glass/animated-background";
+import { GlassButton } from "@/components/glass/glass-button";
 import { api } from "@/lib/api-client";
+import { ShieldX } from "lucide-react";
 import { DashboardView } from "@/components/features/dashboard/dashboard-view";
 import { MealsConfigView } from "@/components/features/meals/meals-config-view";
 import { UserMealsView } from "@/components/features/meals/user-meals-view";
 import { KitchenView } from "@/components/features/kitchen/kitchen-view";
-import { VariablesView } from "@/components/features/variables/variables-view";
-import { BillingView } from "@/components/features/billing/billing-view";
+import { BillingHubView } from "@/components/features/billing/billing-hub-view";
 import { PaymentsView } from "@/components/features/billing/payments-view";
-import { ExpensesView } from "@/components/features/billing/expenses-view";
+import { ExpensesHubView } from "@/components/features/billing/expenses-hub-view";
 import { FundsView } from "@/components/features/billing/funds-view";
-import { NotificationsView } from "@/components/features/notifications/notifications-view";
-import { SettingsView } from "@/components/features/settings/settings-view";
+import { FormulaEngineView } from "@/components/features/variables/formula-engine-view";
 import { UsersView } from "@/components/features/users/users-view";
+import { ReportsView } from "@/components/features/reports/reports-view";
+import { NotificationsHubView } from "@/components/features/notifications/notifications-hub-view";
+import { SettingsHubView } from "@/components/features/settings/settings-hub-view";
+import { SystemHubView } from "@/components/features/system/system-hub-view";
 import { ProfileView } from "@/components/features/auth/profile-view";
-import { PersonalizationView } from "@/components/features/personalization/personalization-view";
 import { useAppStore } from "@/stores/use-app-store";
 import { CommandPalette } from "@/components/layout/command-palette";
 import { ShimmerSkeleton } from "@/components/glass/shimmer-skeleton";
@@ -44,7 +47,6 @@ export default function Page() {
   });
 
   if (isError && token) {
-    // Token invalid — clear it once. Using a microtask to avoid setState during render.
     queueMicrotask(() => clearAuth());
   }
 
@@ -65,23 +67,55 @@ export default function Page() {
     return <AuthScreen />;
   }
 
+  const userRole = user?.role || "USER";
+  const isAdmin = userRole === "ADMIN" || userRole === "SUPER_ADMIN";
+
+  // Permission guard: residents can only access their allowed views
+  const adminOnlyViews = ["meals", "kitchen", "expenses", "funds", "formula-engine", "users", "reports", "settings", "system"];
+  const isForbidden = !isAdmin && adminOnlyViews.includes(view);
+
+  if (isForbidden) {
+    return (
+      <>
+        <AnimatedBackground />
+        <AppShell>
+          <div className="min-h-[60vh] grid place-items-center">
+            <div className="text-center space-y-3">
+              <div className="grid place-items-center h-16 w-16 rounded-3xl bg-destructive/10 mx-auto">
+                <ShieldX className="h-8 w-8 text-destructive" />
+              </div>
+              <h2 className="text-xl font-bold">Access Restricted</h2>
+              <p className="text-sm text-muted-foreground max-w-xs">
+                You don&apos;t have permission to access this section. Contact your administrator if you believe this is incorrect.
+              </p>
+              <GlassButton size="sm" onClick={() => useAppStore.getState().setView("dashboard")}>
+                Back to Dashboard
+              </GlassButton>
+            </div>
+          </div>
+        </AppShell>
+      </>
+    );
+  }
+
   return (
     <>
       <AnimatedBackground />
       <AppShell>
         {view === "dashboard" && <DashboardView />}
-        {view === "meals" && <MealsConfigView />}
+        {view === "meals" && isAdmin && <MealsConfigView />}
         {view === "user-meals" && <UserMealsView />}
-        {view === "kitchen" && <KitchenView />}
-        {view === "variables" && <VariablesView />}
-        {view === "billing" && <BillingView />}
+        {view === "kitchen" && isAdmin && <KitchenView />}
+        {view === "billing" && <BillingHubView />}
         {view === "payments" && <PaymentsView />}
-        {view === "expenses" && <ExpensesView />}
-        {view === "funds" && <FundsView />}
-        {view === "notifications" && <NotificationsView />}
-        {view === "settings" && <SettingsView />}
-        {view === "personalization" && <PersonalizationView />}
-        {view === "users" && <UsersView />}
+        {view === "expenses" && isAdmin && <ExpensesHubView />}
+        {view === "funds" && isAdmin && <FundsView />}
+        {view === "formula-engine" && isAdmin && <FormulaEngineView />}
+        {view === "users" && isAdmin && <UsersView />}
+        {view === "reports" && isAdmin && <ReportsView />}
+        {view === "notifications" && <NotificationsHubView />}
+        {view === "settings" && isAdmin && <SettingsHubView />}
+        {view === "system" && isAdmin && <SystemHubView />}
         {view === "profile" && <ProfileView />}
       </AppShell>
       <CommandPalette />

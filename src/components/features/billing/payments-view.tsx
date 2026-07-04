@@ -301,9 +301,8 @@ export function PaymentsView() {
     placeholderData: (prev) => prev,
   });
 
-  // Fetch users with refundable credit (admin only) — powers the "Refund
-  // Pending" KPI and keeps the Pay Refund button count in sync. Refetches
-  // whenever payments or bills change.
+  // Fetch pending refunds from the Refund model (created during bill generation)
+  // Also fetch users with refundable credit (old system) — combine both counts
   const { data: refundCreditUsers = [] } = useQuery({
     queryKey: ["payments", "refund-users"],
     queryFn: async () => {
@@ -313,7 +312,21 @@ export function PaymentsView() {
     enabled: isAdmin,
     placeholderData: (prev) => prev,
   });
-  const refundPendingCount = refundCreditUsers.length;
+
+  // Fetch actual Refund records (PENDING + PARTIALLY_PAID) from the new refund system
+  const { data: pendingRefunds = [] } = useQuery({
+    queryKey: ["refunds", "pending"],
+    queryFn: async () => {
+      const r = await api.get<{ success: boolean; data: Array<{ id: string; amount: number; remainingAmount: number; status: string }> }>("/refunds?status=PENDING");
+      return r.data;
+    },
+    enabled: isAdmin,
+    placeholderData: (prev) => prev,
+  });
+
+  // Refund pending = users with credit (old) + pending refund records (new)
+  const refundPendingCount = refundCreditUsers.length + pendingRefunds.length;
+  const refundPendingAmount = pendingRefunds.reduce((s, r) => s + r.remainingAmount, 0);
 
   const submitMutation = useMutation({
     mutationFn: (payload: {
@@ -622,7 +635,7 @@ export function PaymentsView() {
 
       {/* KPIs */}
       <StaggerItem>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <KpiCard
             label="Total Deposit"
             value={kpis.totalApproved}
@@ -641,6 +654,7 @@ export function PaymentsView() {
             value={refundPendingCount}
             icon={<RotateCcw className="h-5 w-5" />}
             color="primary"
+            sub={refundPendingCount > 0 ? `₹${Math.round(refundPendingAmount).toLocaleString("en-IN")}` : "—"}
             onClick={isAdmin ? fetchRefundUsers : undefined}
           />
         </div>
@@ -1116,6 +1130,7 @@ function KpiCard({
   icon,
   color,
   prefix,
+  sub,
   onClick,
 }: {
   label: string;
@@ -1123,6 +1138,7 @@ function KpiCard({
   icon: React.ReactNode;
   color: "primary" | "success" | "warning" | "danger" | "info";
   prefix?: string;
+  sub?: string;
   onClick?: () => void;
 }) {
   const colorVar =
@@ -1153,6 +1169,7 @@ function KpiCard({
       <div className="text-2xl font-bold tracking-tight tabular-nums">
         <AnimatedCounter value={value} prefix={prefix || ""} />
       </div>
+      {sub && <p className="text-[10px] text-muted-foreground mt-0.5">{sub}</p>}
     </>
   );
   if (onClick) {

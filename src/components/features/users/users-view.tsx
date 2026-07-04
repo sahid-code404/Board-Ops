@@ -29,8 +29,12 @@ import {
   EyeOff,
   Clock,
   AlertTriangle,
+  BadgeCheck,
+  MessageSquareWarning,
+  Building2,
 } from "lucide-react";
 import { api } from "@/lib/api-client";
+import { Resident360Dialog } from "@/components/features/users/resident-360-dialog";
 import { GlassCard } from "@/components/glass/glass-card";
 import { GlassButton } from "@/components/glass/glass-button";
 import { GlassInput, GlassTextarea } from "@/components/glass/glass-input";
@@ -66,6 +70,7 @@ import { useAuthStore, type Role } from "@/stores/use-auth-store";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatDeletionCountdown } from "@/lib/user-cleanup";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type UserStatus = "PENDING" | "APPROVED" | "ACTIVE" | "INACTIVE" | "SUSPENDED" | "ARCHIVED";
 
@@ -84,6 +89,14 @@ type ManagedUser = {
   lastLoginAt?: string | null;
   deletedAt?: string | null;
   deletionReason?: string | null;
+  // PRD Module 03 — registration review metadata
+  emailVerified?: boolean;
+  institutionName?: string | null;
+  institutionUserId?: string | null;
+  changesRequested?: string | null; // JSON string
+  changesRequestReason?: string | null;
+  changesRequestedAt?: string | null;
+  rejectionReason?: string | null;
 };
 
 type Action =
@@ -96,7 +109,10 @@ type Action =
   | "ASSIGN_ROLE"
   | "EDIT_USER"
   | "DELETE_USER"
-  | "RESTORE_DELETED";
+  | "RESTORE_DELETED"
+  // PRD Module 03 — DEC-015 review workflow
+  | "REQUEST_CHANGES"
+  | "REJECT";
 
 const STATUS_META: Record<UserStatus, { label: string; className: string }> = {
   PENDING: { label: "Pending", className: "bg-warning/15 text-warning" },
@@ -121,7 +137,15 @@ const STATUS_FILTERS: { key: UserStatus | "ALL" | "DELETED"; label: string; shor
   { key: "DELETED", label: "Deletion Queue", short: "Deletion Queue" },
 ];
 
-const ACTIONS_NEED_REASON: Action[] = ["SUSPEND", "DEACTIVATE", "ARCHIVE"];
+const ACTIONS_NEED_REASON: Action[] = ["SUSPEND", "DEACTIVATE", "ARCHIVE", "REJECT"];
+const REQUEST_CHANGES_FIELDS = [
+  { key: "name", label: "Full Name" },
+  { key: "institutionUserId", label: "Institution User ID" },
+  { key: "phone", label: "Mobile Number" },
+  { key: "email", label: "Email" },
+  { key: "room", label: "Room Number" },
+  { key: "gender", label: "Gender" },
+] as const;
 
 async function unwrap<T>(promise: Promise<unknown>): Promise<T> {
   const res = await promise;
@@ -188,6 +212,14 @@ export function UsersView() {
   const [deleteTarget, setDeleteTarget] = useState<ManagedUser | null>(null);
   const [deleteReason, setDeleteReason] = useState("");
 
+  // PRD Module 03 — Request Changes / Reject dialog state
+  const [requestChangesTarget, setRequestChangesTarget] = useState<ManagedUser | null>(null);
+  const [requestChangesFields, setRequestChangesFields] = useState<string[]>([]);
+  const [requestChangesReason, setRequestChangesReason] = useState("");
+  const [rejectTarget, setRejectTarget] = useState<ManagedUser | null>(null);
+  const [view360Target, setView360Target] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+
   const { data: users = [], isLoading, isFetching } = useQuery({
     queryKey: ["users", { search }],
     queryFn: () =>
@@ -238,6 +270,8 @@ export function UsersView() {
         EDIT_USER: "updated",
         DELETE_USER: "moved to deletion queue",
         RESTORE_DELETED: "restored",
+        REQUEST_CHANGES: "requested changes for",
+        REJECT: "rejected",
       };
       toast.success(`User ${labels[vars.action]}`);
     },
@@ -287,6 +321,47 @@ export function UsersView() {
     },
     onError: (e: Error) => {
       toast.error(e.message || "Failed to restore user");
+    },
+  });
+
+  // PRD Module 03 — Request Changes mutation (PATCH /api/users/[id]/request-changes)
+  const requestChangesMutation = useMutation({
+    mutationFn: async ({ id, fields, reason }: { id: string; fields: string[]; reason: string }) => {
+      const res = await api.patch<{ success: boolean; data: { id: string; status: string; changesRequested: string[] } }>(
+        `/users/${id}/request-changes`,
+        { fields, reason }
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.success("Changes requested — user notified");
+      setRequestChangesTarget(null);
+      setRequestChangesFields([]);
+      setRequestChangesReason("");
+      qc.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (e: Error) => {
+      toast.error(e.message || "Failed to request changes");
+    },
+  });
+
+  // PRD Module 03 — Reject mutation (PATCH /api/users/[id]/reject)
+  const rejectMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const res = await api.patch<{ success: boolean; data: { id: string; status: string } }>(
+        `/users/${id}/reject`,
+        { reason }
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.success("Registration rejected");
+      setRejectTarget(null);
+      setRejectReason("");
+      qc.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (e: Error) => {
+      toast.error(e.message || "Failed to reject user");
     },
   });
 
@@ -341,6 +416,14 @@ export function UsersView() {
       setAssignRole(user);
       return;
     }
+    // PRD Module 03 — Request Changes uses its own dialog with a
+    // field multi-select + reason textarea.
+    if (action === "REQUEST_CHANGES") {
+      setRequestChangesFields([]);
+      setRequestChangesReason("");
+      setRequestChangesTarget(user);
+      return;
+    }
     if (ACTIONS_NEED_REASON.includes(action)) {
       setReason("");
       setConfirm({ user, action });
@@ -377,10 +460,36 @@ export function UsersView() {
       toast.error("A reason is required for this action");
       return;
     }
+    // PRD Module 03 — REJECT is routed to the new /api/users/[id]/reject
+    // endpoint (sets status=ARCHIVED with rejectionReason) instead of the
+    // generic PATCH /api/users/[id] action enum.
+    if (confirm.action === "REJECT") {
+      rejectMutation.mutate({ id: confirm.user.id, reason });
+      setConfirm(null);
+      setReason("");
+      return;
+    }
     actionMutation.mutate({ id: confirm.user.id, action: confirm.action, reason });
     setConfirm(null);
     setReason("");
-  }, [confirm, reason, actionMutation]);
+  }, [confirm, reason, actionMutation, rejectMutation]);
+
+  const submitRequestChanges = useCallback(() => {
+    if (!requestChangesTarget) return;
+    if (requestChangesFields.length === 0) {
+      toast.error("Select at least one field to correct");
+      return;
+    }
+    if (requestChangesReason.trim().length < 3) {
+      toast.error("A reason is required (min 3 characters)");
+      return;
+    }
+    requestChangesMutation.mutate({
+      id: requestChangesTarget.id,
+      fields: requestChangesFields,
+      reason: requestChangesReason.trim(),
+    });
+  }, [requestChangesTarget, requestChangesFields, requestChangesReason, requestChangesMutation]);
 
   const submitAssignRole = useCallback(() => {
     if (!assignRole) return;
@@ -522,7 +631,8 @@ export function UsersView() {
                   <UserRow
                     user={u}
                     onAction={(action) => handleAction(u, action)}
-                    canEditRole={role === "ADMIN" && u.role !== "ADMIN"}
+                    canEditRole={role === "ADMIN"}
+                    onView360={setView360Target}
                   />
                 </motion.div>
               ))}
@@ -558,10 +668,10 @@ export function UsersView() {
               Cancel
             </GlassButton>
             <GlassButton
-              variant={confirm?.action === "SUSPEND" || confirm?.action === "ARCHIVE" ? "danger" : "primary"}
+              variant={confirm?.action === "SUSPEND" || confirm?.action === "ARCHIVE" || confirm?.action === "REJECT" ? "danger" : "primary"}
               size="md"
               onClick={submitConfirm}
-              loading={actionMutation.isPending}
+              loading={actionMutation.isPending || rejectMutation.isPending}
             >
               Confirm
             </GlassButton>
@@ -752,6 +862,85 @@ export function UsersView() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* PRD Module 03 — Request Changes dialog (multi-select fields + reason) */}
+      <Dialog open={!!requestChangesTarget} onOpenChange={(v) => !v && setRequestChangesTarget(null)}>
+        <DialogContent className="glass-strong border-border/60 rounded-3xl max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg flex items-center gap-2">
+              <MessageSquareWarning className="h-5 w-5 text-warning" />
+              Request Changes — {requestChangesTarget?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Select the fields the resident needs to correct and provide a
+              reason. The resident will be notified and can update the
+              selected fields, then resubmit for review.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground ml-1">
+              Fields needing correction
+            </p>
+            <div className="grid grid-cols-1 gap-1.5">
+              {REQUEST_CHANGES_FIELDS.map((f) => {
+                const checked = requestChangesFields.includes(f.key);
+                return (
+                  <label
+                    key={f.key}
+                    className={cn(
+                      "flex items-center gap-2.5 glass-soft rounded-2xl px-3 py-2.5 cursor-pointer hover:bg-secondary/40 transition-colors",
+                      checked && "border-2 border-primary/40 bg-primary/5"
+                    )}
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(v) => {
+                        if (v === true) {
+                          setRequestChangesFields([...requestChangesFields, f.key]);
+                        } else {
+                          setRequestChangesFields(requestChangesFields.filter((k) => k !== f.key));
+                        }
+                      }}
+                    />
+                    <span className="text-sm text-foreground/90 select-none">{f.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <GlassTextarea
+            label="Reason (required)"
+            rows={3}
+            placeholder="Explain what needs to be corrected and why…"
+            value={requestChangesReason}
+            onChange={(e) => setRequestChangesReason(e.target.value)}
+          />
+
+          <DialogFooter className="gap-2">
+            <GlassButton variant="ghost" size="md" onClick={() => setRequestChangesTarget(null)}>
+              Cancel
+            </GlassButton>
+            <GlassButton
+              variant="primary"
+              size="md"
+              onClick={submitRequestChanges}
+              loading={requestChangesMutation.isPending}
+            >
+              <MessageSquareWarning className="h-4 w-4" />
+              Request Changes
+            </GlassButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Resident 360° View Dialog */}
+      <Resident360Dialog
+        userId={view360Target}
+        open={!!view360Target}
+        onClose={() => setView360Target(null)}
+      />
     </StaggerGroup>
   );
 }
@@ -767,6 +956,7 @@ function actionResultStatus(action: Action): string {
     case "DEACTIVATE":
       return "Inactive";
     case "ARCHIVE":
+    case "REJECT":
       return "Archived";
     default:
       return "";
@@ -807,10 +997,12 @@ const UserRow = memo(function UserRow({
   user,
   onAction,
   canEditRole,
+  onView360,
 }: {
   user: ManagedUser;
   onAction: (a: Action) => void;
   canEditRole: boolean;
+  onView360?: (userId: string) => void;
 }) {
   const sMeta = STATUS_META[user.status];
   const rMeta = ROLE_META[user.role];
@@ -826,7 +1018,8 @@ const UserRow = memo(function UserRow({
     switch (user.status) {
       case "PENDING":
         actions.push({ action: "APPROVE", label: "Approve", icon: CheckCircle2 });
-        actions.push({ action: "DEACTIVATE", label: "Reject", icon: Ban, variant: "destructive" });
+        actions.push({ action: "REQUEST_CHANGES", label: "Request Changes", icon: MessageSquareWarning });
+        actions.push({ action: "REJECT", label: "Reject", icon: Ban, variant: "destructive" });
         break;
       case "ACTIVE":
         actions.push({ action: "SUSPEND", label: "Suspend", icon: Ban, variant: "destructive" });
@@ -884,6 +1077,34 @@ const UserRow = memo(function UserRow({
                     <Badge variant="outline" className={cn("text-[10px]", sMeta.className)}>
                       {sMeta.label}
                     </Badge>
+                    {/* PRD Module 03 — Email verified + Changes Requested indicators */}
+                    {user.status === "PENDING" && user.emailVerified && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] bg-success/15 text-success border-success/30"
+                        title="Email verified"
+                      >
+                        <BadgeCheck className="h-2.5 w-2.5" /> Verified
+                      </Badge>
+                    )}
+                    {user.status === "PENDING" && !user.emailVerified && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] bg-muted text-muted-foreground border-border"
+                        title="Email not verified yet"
+                      >
+                        <Clock className="h-2.5 w-2.5" /> Unverified
+                      </Badge>
+                    )}
+                    {user.status === "PENDING" && user.changesRequested && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] bg-warning/15 text-warning border-warning/30"
+                        title={user.changesRequestReason || "Changes requested"}
+                      >
+                        <MessageSquareWarning className="h-2.5 w-2.5" /> Changes Requested
+                      </Badge>
+                    )}
                   </>
                 )}
               </div>
@@ -896,9 +1117,19 @@ const UserRow = memo(function UserRow({
                     <Phone className="h-3 w-3" /> {user.phone}
                   </span>
                 )}
+                {user.institutionUserId && (
+                  <span className="inline-flex items-center gap-1">
+                    <BadgeCheck className="h-3 w-3" /> {user.institutionUserId}
+                  </span>
+                )}
                 {user.room && (
                   <span className="inline-flex items-center gap-1">
                     <DoorOpen className="h-3 w-3" /> {user.room}
+                  </span>
+                )}
+                {user.institutionName && (
+                  <span className="inline-flex items-center gap-1">
+                    <Building2 className="h-3 w-3" /> {user.institutionName}
                   </span>
                 )}
               </div>
@@ -914,7 +1145,33 @@ const UserRow = memo(function UserRow({
                   <span>Reason: {user.deletionReason}</span>
                 </div>
               )}
+              {user.status === "PENDING" && user.changesRequested && user.changesRequestReason && (
+                <div className="mt-1.5 text-[11px] text-warning/90 flex items-start gap-1 rounded-lg bg-warning/5 border border-warning/20 p-2">
+                  <MessageSquareWarning className="h-3 w-3 shrink-0 mt-0.5" />
+                  <span className="leading-snug">
+                    <span className="font-medium">Changes requested:</span>{" "}
+                    {user.changesRequestReason}
+                  </span>
+                </div>
+              )}
+              {user.status === "PENDING" && user.emailVerified === false && (
+                <div className="mt-1.5 text-[11px] text-muted-foreground flex items-start gap-1">
+                  <Clock className="h-3 w-3 shrink-0 mt-0.5" />
+                  <span>Awaiting email verification</span>
+                </div>
+              )}
             </div>
+            {onView360 && (
+              <GlassButton
+                variant="ghost"
+                size="icon"
+                className="shrink-0"
+                aria-label="View 360"
+                onClick={() => onView360(user.id)}
+              >
+                <Eye className="h-4 w-4" />
+              </GlassButton>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <GlassButton variant="ghost" size="icon" className="shrink-0" aria-label="User actions">

@@ -8,17 +8,17 @@ export type ViewKey =
   | "meals"
   | "user-meals"
   | "kitchen"
-  | "variables"
   | "billing"
   | "payments"
   | "expenses"
   | "funds"
-  | "notifications"
+  | "formula-engine"
   | "users"
+  | "reports"
+  | "notifications"
   | "settings"
-  | "personalization"
-  | "profile"
-  | "audit";
+  | "system"
+  | "profile";
 
 type AppState = {
   view: ViewKey;

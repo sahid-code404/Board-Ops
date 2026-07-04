@@ -3,16 +3,12 @@ import { requireAuth, getClientIp, getUserAgent } from "@/lib/session";
 import { ok, err, handleApiError } from "@/lib/api-response";
 import { logAudit } from "@/lib/audit";
 import { verifyPassword, hashPassword } from "@/lib/auth";
+import { validatePassword } from "@/lib/password-policy";
 import { z } from "zod";
 
 const schema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
-  newPassword: z
-    .string()
-    .min(8, "Password must be at least 8 characters")
-    .regex(/[A-Z]/, "Must contain an uppercase letter")
-    .regex(/[a-z]/, "Must contain a lowercase letter")
-    .regex(/[0-9]/, "Must contain a number"),
+  newPassword: z.string().min(1, "New password is required"),
 });
 
 export async function POST(req: Request) {
@@ -30,6 +26,12 @@ export async function POST(req: Request) {
 
     if (currentPassword === newPassword) {
       return err("New password must be different from the current password", 422);
+    }
+
+    // Validate new password against policy
+    const passwordValidation = validatePassword(newPassword);
+    if (!passwordValidation.valid) {
+      return err(passwordValidation.errors.join("; "), 422);
     }
 
     const newHash = hashPassword(newPassword);

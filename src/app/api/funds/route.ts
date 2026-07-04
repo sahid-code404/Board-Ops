@@ -22,6 +22,7 @@ export async function GET(req: Request) {
         status: "APPROVED",
         createdAt: { gte: monthStart, lte: monthEnd },
         deletedAt: null,
+        user: { role: "USER" }, // Exclude admin users
       },
       select: { amount: true },
     });
@@ -43,6 +44,7 @@ export async function GET(req: Request) {
         status: "REFUNDED",
         createdAt: { gte: monthStart, lte: monthEnd },
         deletedAt: null,
+        user: { role: "USER" }, // Exclude admin users
       },
       select: { amount: true },
     });
