@@ -546,9 +546,9 @@ export function UsersView() {
       {/* KPIs */}
       <StaggerItem>
         <div className="grid grid-cols-3 gap-3">
-          <KpiCard label="Total Users" value={kpis.total} icon={UsersIcon} color="primary" />
-          <KpiCard label="Active" value={kpis.active} icon={UserCheck} color="success" />
-          <KpiCard label="Pending Approval" value={kpis.pending} icon={UserPlus} color="warning" />
+          <KpiCard label="Total Users" value={kpis.total} icon={UsersIcon} color="primary" sub="All members" />
+          <KpiCard label="Active" value={kpis.active} icon={UserCheck} color="success" sub="Approved" />
+          <KpiCard label="Pending Approval" value={kpis.pending} icon={UserPlus} color="warning" sub={kpis.pending > 0 ? "Awaiting" : "All clear"} />
         </div>
       </StaggerItem>
 
@@ -968,26 +968,45 @@ function KpiCard({
   value,
   icon: Icon,
   color,
+  sub,
 }: {
   label: string;
   value: number;
   icon: typeof UsersIcon;
   color: "primary" | "success" | "warning" | "danger";
+  sub?: string;
 }) {
-  const colorClass = {
-    primary: "bg-primary/15 text-primary",
-    success: "bg-success/15 text-success",
-    warning: "bg-warning/15 text-warning",
-    danger: "bg-destructive/15 text-destructive",
-  }[color];
+  const colorVar =
+    color === "primary"
+      ? "var(--primary)"
+      : color === "success"
+        ? "var(--success)"
+        : color === "warning"
+          ? "var(--warning)"
+          : "var(--destructive)";
   return (
-    <GlassCard className="p-4" glow={color}>
-      <div className={cn("grid place-items-center h-10 w-10 rounded-2xl mb-3", colorClass)}>
-        <Icon className="h-5 w-5" />
-      </div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <div className="text-2xl font-bold tracking-tight">
-        <AnimatedCounter value={value} />
+    <GlassCard className="p-4 relative overflow-hidden" glow={color} whileHover={{ y: -2 }}>
+      <div
+        className="absolute -top-8 -right-8 h-24 w-24 rounded-full blur-3xl opacity-30"
+        style={{ background: colorVar }}
+      />
+      <div className="relative">
+        <div className="flex items-start justify-between mb-3">
+          <div
+            className="grid place-items-center h-9 w-9 rounded-2xl"
+            style={{
+              background: `color-mix(in oklch, ${colorVar} 18%, transparent)`,
+              color: colorVar,
+            }}
+          >
+            <Icon className="h-4 w-4" />
+          </div>
+        </div>
+        <p className="text-[11px] text-muted-foreground">{label}</p>
+        <div className="text-2xl font-bold tracking-tight tabular-nums">
+          <AnimatedCounter value={value} />
+        </div>
+        {sub && <p className="text-[10px] text-muted-foreground mt-1">{sub}</p>}
       </div>
     </GlassCard>
   );
