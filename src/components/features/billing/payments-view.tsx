@@ -635,26 +635,28 @@ export function PaymentsView() {
 
       {/* KPIs */}
       <StaggerItem>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className={cn("gap-3", isAdmin ? "grid grid-cols-3" : "grid grid-cols-2")}>
           <KpiCard
             label="Total Deposit"
             value={kpis.totalApproved}
-            icon={<CheckCircle2 className="h-5 w-5" />}
+            icon={<CheckCircle2 className="h-4 w-4" />}
             color="success"
             prefix="₹"
+            sub="Approved"
           />
           <KpiCard
             label="Pending Approvals"
             value={kpis.pending}
-            icon={<Clock className="h-5 w-5" />}
+            icon={<Clock className="h-4 w-4" />}
             color="warning"
+            sub={kpis.pending > 0 ? "Awaiting review" : "All clear"}
           />
           <KpiCard
             label="Refund Pending"
             value={refundPendingCount}
-            icon={<RotateCcw className="h-5 w-5" />}
+            icon={<RotateCcw className="h-4 w-4" />}
             color="primary"
-            sub={refundPendingCount > 0 ? `₹${Math.round(refundPendingAmount).toLocaleString("en-IN")}` : "—"}
+            sub={refundPendingCount > 0 ? `₹${Math.round(refundPendingAmount).toLocaleString("en-IN")}` : "None pending"}
             onClick={isAdmin ? fetchRefundUsers : undefined}
           />
         </div>
@@ -1154,35 +1156,41 @@ function KpiCard({
   const glow = color === "danger" ? "danger" : color === "warning" ? "warning" : color === "success" ? "success" : "primary";
   const content = (
     <>
-      <div className="flex items-start justify-between mb-3">
-        <div
-          className="grid place-items-center h-10 w-10 rounded-2xl"
-          style={{
-            background: `color-mix(in oklch, ${colorVar} 15%, transparent)`,
-            color: colorVar,
-          }}
-        >
-          {icon}
+      <div
+        className="absolute -top-8 -right-8 h-24 w-24 rounded-full blur-3xl opacity-30"
+        style={{ background: colorVar }}
+      />
+      <div className="relative">
+        <div className="flex items-start justify-between mb-3">
+          <div
+            className="grid place-items-center h-9 w-9 rounded-2xl"
+            style={{
+              background: `color-mix(in oklch, ${colorVar} 18%, transparent)`,
+              color: colorVar,
+            }}
+          >
+            {icon}
+          </div>
         </div>
+        <p className="text-[11px] text-muted-foreground">{label}</p>
+        <div className="text-2xl font-bold tracking-tight tabular-nums">
+          <AnimatedCounter value={value} prefix={prefix || ""} />
+        </div>
+        {sub && <p className="text-[10px] text-muted-foreground mt-1">{sub}</p>}
       </div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <div className="text-2xl font-bold tracking-tight tabular-nums">
-        <AnimatedCounter value={value} prefix={prefix || ""} />
-      </div>
-      {sub && <p className="text-[10px] text-muted-foreground mt-0.5">{sub}</p>}
     </>
   );
   if (onClick) {
     return (
       <button type="button" onClick={onClick} className="text-left w-full">
-        <GlassCard className="p-4 transition-all hover:ring-1 hover:ring-primary/30" glow={glow} whileHover={{ y: -2 }}>
+        <GlassCard className="p-4 relative overflow-hidden transition-all hover:ring-1 hover:ring-primary/30" glow={glow} whileHover={{ y: -2 }}>
           {content}
         </GlassCard>
       </button>
     );
   }
   return (
-    <GlassCard className="p-4" glow={glow}>
+    <GlassCard className="p-4 relative overflow-hidden" glow={glow} whileHover={{ y: -2 }}>
       {content}
     </GlassCard>
   );
