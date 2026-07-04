@@ -1182,11 +1182,11 @@ function KpiCard({
   );
   if (onClick) {
     return (
-      <button type="button" onClick={onClick} className="text-left w-full">
+      <div type="button" onClick={onClick} className="text-left w-full cursor-pointer" role="button" tabIndex={0}>
         <GlassCard className="p-4 relative overflow-hidden transition-all hover:ring-1 hover:ring-primary/30" glow={glow} whileHover={{ y: -2 }}>
           {content}
         </GlassCard>
-      </button>
+      </div>
     );
   }
   return (
