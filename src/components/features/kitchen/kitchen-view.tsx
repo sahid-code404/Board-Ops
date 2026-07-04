@@ -555,7 +555,7 @@ function KpiCard({
   label: string;
   value: number;
   color: "primary" | "success" | "warning";
-  sub: string;
+  sub?: string;
 }) {
   const colorVar =
     color === "primary"
@@ -589,9 +589,9 @@ function KpiCard({
         <div className="text-2xl font-bold tracking-tight tabular-nums">
           <AnimatedCounter value={value} />
         </div>
-        <p className="text-[10px] text-muted-foreground mt-1">
-          {sub}
-        </p>
+        {sub && (
+          <p className="text-[10px] text-muted-foreground mt-1">{sub}</p>
+        )}
       </div>
     </GlassCard>
   );
