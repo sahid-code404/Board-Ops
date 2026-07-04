@@ -635,7 +635,7 @@ export function PaymentsView() {
 
       {/* KPIs */}
       <StaggerItem>
-        <div className={cn("gap-3", isAdmin ? "grid grid-cols-3" : "grid grid-cols-2")}>
+        <div className={cn("gap-3", isAdmin ? "grid grid-cols-1 sm:grid-cols-3" : "grid grid-cols-1 sm:grid-cols-2")}>
           <KpiCard
             label="Total Deposit"
             value={kpis.totalApproved}
