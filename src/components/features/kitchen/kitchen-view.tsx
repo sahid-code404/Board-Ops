@@ -273,21 +273,21 @@ export function KitchenView() {
       <StaggerItem>
         <div className="grid grid-cols-3 gap-3">
           <KpiCard
-            icon={Utensils}
+            icon={<Utensils className="h-4 w-4" />}
             label="Total Meals"
             value={monthTotals.meals}
             color="success"
             sub="This Month"
           />
           <KpiCard
-            icon={UserPlus}
+            icon={<UserPlus className="h-4 w-4" />}
             label="Guests"
             value={totals.guests}
             color="primary"
             sub="Today"
           />
           <KpiCard
-            icon={Users}
+            icon={<Users className="h-4 w-4" />}
             label="Meals OFF"
             value={totals.off}
             color="warning"
@@ -545,16 +545,16 @@ export function KitchenView() {
 // ─────────────────────────────────────────────────────────────
 
 function KpiCard({
-  icon: Icon,
+  icon,
   label,
   value,
   color,
   sub,
 }: {
-  icon: typeof Utensils;
+  icon: React.ReactNode;
   label: string;
   value: number;
-  color: "primary" | "success" | "warning";
+  color: "primary" | "success" | "warning" | "danger" | "info";
   sub?: string;
 }) {
   const colorVar =
@@ -562,11 +562,15 @@ function KpiCard({
       ? "var(--primary)"
       : color === "success"
         ? "var(--success)"
-        : "var(--warning)";
+        : color === "warning"
+          ? "var(--warning)"
+          : color === "danger"
+            ? "var(--destructive)"
+            : "var(--info)";
   return (
     <GlassCard
       className="p-4 relative overflow-hidden"
-      glow={color}
+      glow={color === "danger" ? "danger" : color === "warning" ? "warning" : color === "success" ? "success" : "primary"}
       whileHover={{ y: -2 }}
     >
       <div
@@ -582,7 +586,7 @@ function KpiCard({
               color: colorVar,
             }}
           >
-            <Icon className="h-4 w-4" />
+            {icon}
           </div>
         </div>
         <p className="text-[11px] text-muted-foreground">{label}</p>
