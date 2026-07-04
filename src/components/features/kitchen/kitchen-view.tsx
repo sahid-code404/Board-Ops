@@ -579,12 +579,10 @@ function KpiCard({
             className="grid place-items-center h-9 w-9 rounded-2xl"
             style={{
               background: `color-mix(in oklch, ${colorVar} 18%, transparent)`,
+              color: colorVar,
             }}
           >
-            <Icon
-              className="h-4 w-4"
-              style={{ color: colorVar }}
-            />
+            <Icon className="h-4 w-4" />
           </div>
         </div>
         <p className="text-[11px] text-muted-foreground">{label}</p>
