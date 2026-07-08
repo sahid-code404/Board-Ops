@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { requireAuth } from "@/lib/session";
 import { ok, err, handleApiError } from "@/lib/api-response";
-import { isLocked } from "@/lib/meal-engine";
+import { isLocked, isPreRegistration } from "@/lib/meal-engine";
 import { logAudit } from "@/lib/audit";
 import { createNotification } from "@/lib/notify";
 import { evaluateRestrictions } from "@/lib/restriction-engine";
@@ -30,6 +30,15 @@ export async function PATCH(req: Request) {
     });
     if (!entry) return err("Meal entry not found", 404);
     if (entry.userId !== user.id) return err("This meal entry does not belong to you", 403);
+
+    // PRD: meals before the user's registration date are not editable by the
+    // resident — only an admin can override them via /api/meals/override.
+    if (isPreRegistration(entry.serviceDate, user.createdAt)) {
+      return err(
+        "This meal is before your registration date and cannot be edited. Contact an administrator if a change is needed.",
+        422
+      );
+    }
 
     // PRD: check financial restrictions — residents can't turn meals ON when restricted
     if (status === "ON") {
@@ -110,6 +119,11 @@ export async function POST(req: Request) {
       }
       if (entry.locked || isLocked(entry.editableUntil)) {
         results.push({ id, success: false, error: "Locked" });
+        continue;
+      }
+      // Pre-registration meals cannot be toggled by the user
+      if (isPreRegistration(entry.serviceDate, user.createdAt)) {
+        results.push({ id, success: false, error: "Before registration" });
         continue;
       }
       await db.mealEntry.update({

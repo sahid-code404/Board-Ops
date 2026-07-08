@@ -1,13 +1,19 @@
 import { db } from "@/lib/db";
 import { requireAuth } from "@/lib/session";
 import { ok, handleApiError } from "@/lib/api-response";
-import { computeEditableUntil, isLocked } from "@/lib/meal-engine";
+import { computeEditableUntil, isLocked, isPreRegistration, getRegistrationDate } from "@/lib/meal-engine";
 import type { MealConfiguration } from "@prisma/client";
 
 /**
  * GET /api/meals/entries?year=&month=&date=
  * Returns meal entries for the current user for the given month (or specific date).
  * Auto-generates missing entries based on active meal configs (Service Date Engine).
+ *
+ * Pre-registration handling:
+ *  - Does NOT auto-create entries for dates before the user's registration date.
+ *  - Self-heals OLD auto-created pre-reg entries (updatedBy=null) to OFF + locked.
+ *  - Admin-created pre-reg entries (updatedBy set) are preserved.
+ *  - Pre-reg entries with no active override (overridden=false) are hidden from the response.
  */
 export async function GET(req: Request) {
   try {
@@ -46,12 +52,37 @@ export async function GET(req: Request) {
     const map = new Map<string, typeof entries[number]>();
     entries.forEach((e) => map.set(`${e.mealId}_${e.serviceDate.toDateString()}`, e));
 
-    // Sync lock status + ensure entries exist
+    const registrationDate = getRegistrationDate(user.createdAt);
+
+    // ── Self-healing: normalize OLD auto-created pre-reg entries ──
+    // These have updatedBy=null (created by the buggy auto-create loop before
+    // the fix). Set BOTH status AND originalState to "OFF" so the dynamic
+    // override calculation (overridden = status !== originalState) returns
+    // false — no override badge. Admin-created entries (updatedBy set) are
+    // preserved.
+    for (const entry of entries) {
+      if (isPreRegistration(entry.serviceDate, user.createdAt) && !entry.updatedBy) {
+        if (entry.status === "ON" || entry.status === "LOCKED" || !entry.locked || entry.originalState !== "OFF") {
+          const updated = await db.mealEntry.update({
+            where: { id: entry.id },
+            data: { status: "OFF", originalState: "OFF", locked: true },
+          });
+          map.set(`${entry.mealId}_${entry.serviceDate.toDateString()}`, updated);
+        }
+      }
+    }
+
+    // ── Sync lock status + ensure entries exist (only for dates ON/AFTER registration) ──
     for (const meal of meals) {
       const days = specificDate ? 1 : end.getDate();
       for (let day = 1; day <= days; day++) {
         const d = specificDate ? new Date(start) : new Date(year, month, day);
         d.setHours(0, 0, 0, 0);
+
+        // Skip auto-creating entries for dates before the user registered.
+        // Admin overrides can still create these explicitly via /api/meals/override.
+        if (isPreRegistration(d, user.createdAt)) continue;
+
         const key = `${meal.id}_${d.toDateString()}`;
         let entry = map.get(key);
         if (!entry) {
@@ -97,7 +128,10 @@ export async function GET(req: Request) {
       }
     }
 
-    // Shape the response grouped by date
+    // ── Shape the response grouped by date ──
+    // Override is calculated DYNAMICALLY: overridden = (effectiveStatus !== originalState)
+    // where effectiveStatus treats LOCKED as ON. No overrideFlag stored in DB.
+    // Pre-reg entries with no active override (overridden=false) are hidden.
     const byDate: Record<string, Array<{
       id: string;
       mealId: string;
@@ -107,9 +141,11 @@ export async function GET(req: Request) {
       mealColor: string;
       serviceDate: string;
       status: string;
+      originalState: string;
+      overridden: boolean;
       editableUntil: string;
       locked: boolean;
-      overrideFlag: boolean;
+      preRegistration: boolean;
       startTime: string;
       endTime: string;
       mealType: string;
@@ -123,6 +159,15 @@ export async function GET(req: Request) {
         const key = `${meal.id}_${d.toDateString()}`;
         const entry = map.get(key);
         if (!entry) continue;
+        // Dynamic override calculation: Current State vs Original State
+        const effectiveStatus = entry.status === "LOCKED" ? "ON" : entry.status;
+        const overridden = effectiveStatus !== entry.originalState;
+        // Pre-registration entries are only shown to the user if they have an
+        // active admin override (overridden=true). If the admin set the meal
+        // back to its default state (overridden=false), the entry is hidden —
+        // the user wasn't enrolled, so there's nothing meaningful to show.
+        const isPreReg = isPreRegistration(d, user.createdAt);
+        if (isPreReg && !overridden) continue;
         const dateKey = d.toISOString().slice(0, 10);
         if (!byDate[dateKey]) byDate[dateKey] = [];
         byDate[dateKey].push({
@@ -134,9 +179,11 @@ export async function GET(req: Request) {
           mealColor: meal.color,
           serviceDate: entry.serviceDate.toISOString(),
           status: entry.status,
+          originalState: entry.originalState,
+          overridden,
           editableUntil: entry.editableUntil.toISOString(),
           locked: entry.locked,
-          overrideFlag: entry.overrideFlag,
+          preRegistration: isPreReg,
           startTime: meal.startTime,
           endTime: meal.endTime,
           mealType: meal.mealType,
@@ -144,7 +191,7 @@ export async function GET(req: Request) {
       }
     }
 
-    return ok({ meals, byDate });
+    return ok({ meals, byDate, registrationDate: registrationDate.toISOString() });
   } catch (e) {
     return handleApiError(e);
   }

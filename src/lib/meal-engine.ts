@@ -31,6 +31,36 @@ export function isLocked(editableUntil: Date, now = new Date()): boolean {
   return now.getTime() > editableUntil.getTime();
 }
 
+/**
+ * Returns the registration date of a user, normalized to the START of that day
+ * (00:00:00.000). Meal entries whose `serviceDate` falls BEFORE this date are
+ * considered "pre-registration" — the user was not yet a resident.
+ *
+ * Uses date-only comparison (ignores time-of-day) so a user who registers at
+ * 3 PM on June 15 is still eligible for meals on June 15 itself.
+ */
+export function getRegistrationDate(userCreatedAt: Date): Date {
+  const d = new Date(userCreatedAt);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/**
+ * Returns TRUE if `serviceDate` is BEFORE the user's registration date.
+ * Pre-registration meals:
+ *   - are NOT auto-created (so they don't count in totals)
+ *   - are NOT editable by the user (locked)
+ *   - CAN be overridden by an admin (admin override creates them explicitly)
+ *
+ * Date-only comparison — time-of-day is ignored on both sides.
+ */
+export function isPreRegistration(serviceDate: Date, userCreatedAt: Date): boolean {
+  const reg = getRegistrationDate(userCreatedAt);
+  const svc = new Date(serviceDate);
+  svc.setHours(0, 0, 0, 0);
+  return svc.getTime() < reg.getTime();
+}
+
 export function formatDate(d: Date): string {
   return d.toLocaleString("en-US", {
     day: "2-digit",
