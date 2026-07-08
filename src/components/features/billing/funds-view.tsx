@@ -38,6 +38,7 @@ type UserFund = {
   billTotal: number;
   deposit: number;
   needToPay: number;
+  deficit: number;
   hasBills: boolean;
 };
 
@@ -117,10 +118,10 @@ export function FundsView() {
     DUE: classified.filter((u) => u.bucket === "DUE").length,
   }), [classified]);
 
-  // Total deficit = sum of all users' due/overused amounts (for the 3rd KPI).
+  // Total deficit = sum of all users' deficit (total expenses − total deposit).
   // Default ₹0 when no deficit.
   const totalDeficit = useMemo(
-    () => classified.reduce((sum, u) => sum + (u.needToPay > 0 ? u.needToPay : 0), 0),
+    () => classified.reduce((sum, u) => sum + (u.deficit || 0), 0),
     [classified]
   );
 
@@ -346,10 +347,10 @@ export function FundsView() {
                             <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Deficit</span>
                             {u.noBills ? (
                               <span className="text-base font-bold text-muted-foreground tabular-nums">{formatINR(0)}</span>
-                            ) : u.isPaid ? (
-                              <span className="text-base font-bold text-success tabular-nums">{formatINR(0)}</span>
+                            ) : (u.deficit || 0) > 0 ? (
+                              <span className="text-base font-bold text-warning tabular-nums">{formatINR(u.deficit)}</span>
                             ) : (
-                              <span className="text-base font-bold text-warning tabular-nums">{formatINR(u.needToPay)}</span>
+                              <span className="text-base font-bold text-success tabular-nums">{formatINR(0)}</span>
                             )}
                           </div>
                         </div>

@@ -92,12 +92,17 @@ export async function GET(req: Request) {
       const billDue = userBills.reduce((s, b) => s + b.dueAmount, 0);
 
       // Deposit = sum of the user's approved, non-deleted payments this month.
-      // (Equivalent to what the Payments page shows as "Total Deposit".)
       const deposit = userPayments
         .filter((p) => p.userId === u.id)
         .reduce((s, p) => s + p.amount, 0);
 
       const needToPay = Math.max(0, billDue);
+      const hasBills = userBills.length > 0;
+
+      // Deficit = total expenses (bill) − total deposit.
+      // If positive: user overused (owes money). If negative: user overpaid (credit).
+      // Default 0 when no bills (no expenses calculated yet).
+      const deficit = hasBills ? Math.max(0, billTotal - deposit) : 0;
 
       return {
         userId: u.id,
@@ -108,7 +113,8 @@ export async function GET(req: Request) {
         billTotal,
         deposit,
         needToPay,
-        hasBills: userBills.length > 0,
+        deficit,
+        hasBills,
       };
     });
 
