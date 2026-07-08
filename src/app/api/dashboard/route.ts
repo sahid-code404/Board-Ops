@@ -4,6 +4,32 @@ import { ok, handleApiError } from "@/lib/api-response";
 import { computeEditableUntil, isLocked } from "@/lib/meal-engine";
 import { toLocalDateKey } from "@/lib/utils";
 
+// ── Counting helpers (same logic as kitchen route) ──
+// Only count meals that are CONFIRMED:
+//   - Locked (past cutoff — the user can no longer change it), OR
+//   - Admin-overridden (the admin explicitly set the Current State)
+// Unlocked meals that the user can still toggle are NOT counted.
+
+/** Dynamic override check: Current State !== Original State */
+function isOverridden(e: { status: string; originalState: string }): boolean {
+  const effective = e.status === "LOCKED" ? "ON" : e.status;
+  return effective !== e.originalState;
+}
+
+/** Counts toward "on": status is ON/LOCKED AND (locked OR overridden) */
+function countsAsOn(e: { status: string; originalState: string; locked: boolean; editableUntil: Date }): boolean {
+  if (e.status !== "ON" && e.status !== "LOCKED") return false;
+  const entryLocked = isLocked(e.editableUntil) || e.locked || e.status === "LOCKED";
+  return entryLocked || isOverridden(e);
+}
+
+/** Counts toward "off": status is OFF AND locked AND NOT overridden */
+function countsAsOff(e: { status: string; originalState: string; locked: boolean; editableUntil: Date }): boolean {
+  if (e.status !== "OFF") return false;
+  const entryLocked = isLocked(e.editableUntil) || e.locked;
+  return entryLocked && !isOverridden(e);
+}
+
 export async function GET() {
   try {
     const user = await requireAuth();
@@ -40,13 +66,14 @@ export async function GET() {
     // Total active users = residents + admins (both count as users of the system)
     const totalUsers = await db.user.count({ where: { status: "ACTIVE", deletedAt: null } });
     const pendingUsers = await db.user.count({ where: { status: "PENDING", deletedAt: null } });
-    // Meal counts — exclude admin users (admins don't count as residents for meals)
-    const todayOnCount = await db.mealEntry.count({
-      where: { serviceDate: today, status: "ON", user: { role: "USER" } },
+    // Meal counts — only count CONFIRMED meals (locked or admin-overridden).
+    // Exclude admin users (admins don't count as residents for meals).
+    const todayEntries = await db.mealEntry.findMany({
+      where: { serviceDate: today, user: { role: "USER" } },
+      select: { status: true, originalState: true, locked: true, editableUntil: true },
     });
-    const todayOffCount = await db.mealEntry.count({
-      where: { serviceDate: today, status: "OFF", user: { role: "USER" } },
-    });
+    const todayOnCount = todayEntries.filter(countsAsOn).length;
+    const todayOffCount = todayEntries.filter(countsAsOff).length;
 
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
@@ -64,10 +91,16 @@ export async function GET() {
     });
 
     // PRD: Calculate current meal charge = (total expenses - guest revenue) / total resident meals
-    // Exclude admin users' meals — only resident meals count
-    const totalResidentMeals = await db.mealEntry.count({
-      where: { serviceDate: { gte: startOfMonth, lte: endOfMonth }, status: { in: ["ON", "LOCKED"] }, user: { role: "USER" } },
+    // Only count CONFIRMED meals (locked or admin-overridden) — same as kitchen counting.
+    // Fetch all entries for the month and filter in code (override is dynamic).
+    const monthMealEntries = await db.mealEntry.findMany({
+      where: {
+        serviceDate: { gte: startOfMonth, lte: endOfMonth },
+        user: { role: "USER" },
+      },
+      select: { status: true, originalState: true, locked: true, editableUntil: true },
     });
+    const totalResidentMeals = monthMealEntries.filter(countsAsOn).length;
     const guestMeals = await db.guestMeal.findMany({
       where: { serviceDate: { gte: startOfMonth, lte: endOfMonth } },
       select: { guestCount: true },
@@ -81,17 +114,19 @@ export async function GET() {
       ? Math.max(0, (totalExpensesAmount - guestRevenue) / totalResidentMeals)
       : 0;
 
-    // ── 7-day meal trend ──
+    // ── 7-day meal trend ── (only count confirmed/locked meals)
     const trend: { date: string; on: number; off: number }[] = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
-      const on = await db.mealEntry.count({ where: { serviceDate: d, status: "ON", user: { role: "USER" } } });
-      const off = await db.mealEntry.count({ where: { serviceDate: d, status: "OFF", user: { role: "USER" } } });
+      const dayEntries = await db.mealEntry.findMany({
+        where: { serviceDate: d, user: { role: "USER" } },
+        select: { status: true, originalState: true, locked: true, editableUntil: true },
+      });
       trend.push({
         date: toLocalDateKey(d),
-        on,
-        off,
+        on: dayEntries.filter(countsAsOn).length,
+        off: dayEntries.filter(countsAsOff).length,
       });
     }
 
