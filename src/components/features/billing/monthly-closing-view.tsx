@@ -356,9 +356,9 @@ export function MonthlyClosingView() {
                         </p>
                         <p className="text-[10px] text-muted-foreground">
                           {c.closedAt
-                            ? `Closed ${format(new Date(c.closedAt), "d MMM yyyy, HH:mm")}`
+                            ? `Closed ${format(new Date(c.closedAt), "d MMM yyyy, h:mm a")}`
                             : c.startedAt
-                            ? `Started ${format(new Date(c.startedAt), "d MMM yyyy, HH:mm")}`
+                            ? `Started ${format(new Date(c.startedAt), "d MMM yyyy, h:mm a")}`
                             : `Created ${format(new Date(c.createdAt), "d MMM yyyy")}`}
                         </p>
                       </div>

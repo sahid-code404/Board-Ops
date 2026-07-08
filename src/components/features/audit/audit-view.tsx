@@ -404,7 +404,7 @@ function AuditEntry({
               <span className="text-xs text-muted-foreground italic">System</span>
             )}
             <span className="text-[10px] text-muted-foreground">
-              · {format(new Date(log.createdAt), "d MMM yyyy, HH:mm:ss")}
+              · {format(new Date(log.createdAt), "d MMM yyyy, h:mm:ss a")}
             </span>
             {log.reason && (
               <span className="text-[10px] text-muted-foreground italic truncate">

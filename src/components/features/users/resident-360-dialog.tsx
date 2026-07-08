@@ -442,7 +442,7 @@ function LedgerTab({ ledger }: { ledger: LedgerEntry[] }) {
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium truncate">{e.description}</p>
             <p className="text-[10px] text-muted-foreground">
-              {format(new Date(e.createdAt), "d MMM yyyy, HH:mm")} · {e.type}
+              {format(new Date(e.createdAt), "d MMM yyyy, h:mm a")} · {e.type}
             </p>
           </div>
           <div className="text-right shrink-0">

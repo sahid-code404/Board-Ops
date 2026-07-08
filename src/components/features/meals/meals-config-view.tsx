@@ -196,10 +196,10 @@ const mealSchema = z.object({
   cutoffStrategy: z.enum(["PREVIOUS_DAY", "SAME_DAY", "CUSTOM_OFFSET"]),
   cutoffTime: z
     .string()
-    .regex(/^\d{2}:\d{2}$/, "Use HH:mm format (e.g. 22:00)"),
+    .regex(/^\d{2}:\d{2}$/, "Enter a valid time"),
   cutoffOffsetMinutes: z.coerce.number().int().min(0).max(1440),
-  startTime: z.string().regex(/^\d{2}:\d{2}$/, "Use HH:mm format"),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/, "Use HH:mm format"),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/, "Enter a valid time"),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/, "Enter a valid time"),
   notes: z.string().optional(),
 });
 
@@ -457,18 +457,28 @@ function MealForm({
 
       {/* Times */}
       <div className="grid grid-cols-2 gap-3">
-        <GlassInput
-          label="Service start (HH:mm)"
-          placeholder="08:00"
-          {...register("startTime")}
-          error={errors.startTime?.message}
-        />
-        <GlassInput
-          label="Service end (HH:mm)"
-          placeholder="10:00"
-          {...register("endTime")}
-          error={errors.endTime?.message}
-        />
+        <div className="space-y-1.5">
+          <Label className="ml-1 block text-xs font-medium text-muted-foreground">Service start</Label>
+          <input
+            type="time"
+            {...register("startTime")}
+            className="w-full h-10 rounded-2xl glass px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          />
+          {errors.startTime?.message && (
+            <p className="text-[11px] text-destructive ml-1">{errors.startTime.message}</p>
+          )}
+        </div>
+        <div className="space-y-1.5">
+          <Label className="ml-1 block text-xs font-medium text-muted-foreground">Service end</Label>
+          <input
+            type="time"
+            {...register("endTime")}
+            className="w-full h-10 rounded-2xl glass px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          />
+          {errors.endTime?.message && (
+            <p className="text-[11px] text-destructive ml-1">{errors.endTime.message}</p>
+          )}
+        </div>
       </div>
 
       {/* Cutoff */}
@@ -504,12 +514,17 @@ function MealForm({
               )}
             />
           </div>
-          <GlassInput
-            label="Cutoff time (HH:mm)"
-            placeholder="22:00"
-            {...register("cutoffTime")}
-            error={errors.cutoffTime?.message}
-          />
+          <div className="space-y-1.5">
+            <Label className="ml-1 block text-xs font-medium text-muted-foreground">Cutoff time</Label>
+            <input
+              type="time"
+              {...register("cutoffTime")}
+              className="w-full h-10 rounded-2xl glass px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            />
+            {errors.cutoffTime?.message && (
+              <p className="text-[11px] text-destructive ml-1">{errors.cutoffTime.message}</p>
+            )}
+          </div>
         </div>
 
         {watchedStrategy === "CUSTOM_OFFSET" && (

@@ -222,9 +222,9 @@ export function TasksView() {
                           )}
                           {t.errorMessage && <p className="text-[10px] text-destructive truncate">{t.errorMessage}</p>}
                           <div className="flex items-center gap-2 mt-1 text-[10px] text-muted-foreground">
-                            <span>Created {format(new Date(t.createdAt), "d MMM, HH:mm:ss")}</span>
-                            {t.startedAt && <span>· Started {format(new Date(t.startedAt), "HH:mm:ss")}</span>}
-                            {t.finishedAt && <span>· Finished {format(new Date(t.finishedAt), "HH:mm:ss")}</span>}
+                            <span>Created {format(new Date(t.createdAt), "d MMM, h:mm:ss a")}</span>
+                            {t.startedAt && <span>· Started {format(new Date(t.startedAt), "h:mm:ss a")}</span>}
+                            {t.finishedAt && <span>· Finished {format(new Date(t.finishedAt), "h:mm:ss a")}</span>}
                             {t.user && <span>· by {t.user.name}</span>}
                           </div>
                         </div>

@@ -262,7 +262,7 @@ export function AnnouncementsView() {
                           </div>
                           <p className="text-sm text-muted-foreground whitespace-pre-wrap">{a.body}</p>
                           <div className="flex items-center gap-3 mt-2 text-[10px] text-muted-foreground">
-                            {a.publishedAt && <span>Published {format(parseISO(a.publishedAt), "d MMM yyyy, HH:mm")}</span>}
+                            {a.publishedAt && <span>Published {format(parseISO(a.publishedAt), "d MMM yyyy, h:mm a")}</span>}
                             {a.expiresAt && <span>· Expires {format(parseISO(a.expiresAt), "d MMM yyyy")}</span>}
                             {a.user && <span>· by {a.user.name}</span>}
                           </div>
