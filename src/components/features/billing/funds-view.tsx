@@ -59,11 +59,11 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-type FundFilter = "ALL" | "DUE";
+type FundFilter = "ALL" | "DEFICIT";
 
 const FILTER_LABELS: Record<FundFilter, string> = {
   ALL: "All",
-  DUE: "Due",
+  DEFICIT: "Deficit",
 };
 
 function formatINR(n: number) {
@@ -103,19 +103,18 @@ export function FundsView() {
     );
   }, [users, search]);
 
-  // Status classification — a user is "DUE" if they have bills and an unpaid amount
+  // Status classification — a user is "DEFICIT" if their deficit > 0
+  // (their share of expenses exceeds their deposit)
   const classified = useMemo(() => searchedUsers.map((u) => {
-    const isPaid = u.hasBills && u.needToPay === 0;
-    const hasDue = u.needToPay > 0;
-    const noBills = !u.hasBills;
-    const bucket: FundFilter = hasDue ? "DUE" : "ALL";
-    return { ...u, isPaid, hasDue, noBills, bucket };
+    const hasDeficit = (u.deficit || 0) > 0;
+    const bucket: FundFilter = hasDeficit ? "DEFICIT" : "ALL";
+    return { ...u, hasDeficit, bucket };
   }), [searchedUsers]);
 
   // Sort bar counts (based on searched set, not the active filter)
   const counts = useMemo(() => ({
     ALL: classified.length,
-    DUE: classified.filter((u) => u.bucket === "DUE").length,
+    DEFICIT: classified.filter((u) => u.bucket === "DEFICIT").length,
   }), [classified]);
 
   // Total deficit = sum of all users' deficit (total expenses − total deposit).
@@ -255,10 +254,10 @@ export function FundsView() {
         />
       </StaggerItem>
 
-      {/* Sort bar — All / Due (horizontal, scrollable) */}
+      {/* Sort bar — All / Deficit (horizontal, scrollable) */}
       <StaggerItem>
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-1">
-          {(["ALL", "DUE"] as const).map((s) => {
+          {(["ALL", "DEFICIT"] as const).map((s) => {
             const active = filter === s;
             const count = counts[s];
             return (
@@ -278,7 +277,7 @@ export function FundsView() {
                     "text-[9px] rounded-full px-1.5 py-0.5 leading-none font-bold min-w-[16px] text-center",
                     active
                       ? "bg-primary-foreground/20 text-primary-foreground"
-                      : s === "DUE"
+                      : s === "DEFICIT"
                         ? "bg-warning text-white"
                         : "bg-muted-foreground/30 text-white"
                   )}
@@ -298,8 +297,8 @@ export function FundsView() {
             <p className="text-sm text-muted-foreground">
               {search
                 ? "No users match your search."
-                : filter === "DUE"
-                  ? "No users with due amounts for this month."
+                : filter === "DEFICIT"
+                  ? "No users with deficit for this month."
                   : "No user data for this month."}
             </p>
           </GlassCard>
@@ -319,20 +318,16 @@ export function FundsView() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        {/* Name + status badges */}
+                        {/* Name + status badge */}
                         <div className="flex items-center gap-2 flex-wrap">
                           <h3 className="font-medium text-sm truncate">{u.name}</h3>
-                          {u.noBills ? (
-                            <Badge variant="outline" className="text-[10px] bg-muted text-muted-foreground border-border">
-                              No Bills
-                            </Badge>
-                          ) : u.isPaid ? (
-                            <Badge variant="outline" className="text-[10px] bg-success/15 text-success border-success/30">
-                              <Check className="h-2.5 w-2.5" /> Settled
+                          {(u.deficit || 0) > 0 ? (
+                            <Badge variant="outline" className="text-[10px] bg-warning/15 text-warning border-warning/30">
+                              <AlertCircle className="h-2.5 w-2.5" /> Deficit
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="text-[10px] bg-warning/15 text-warning border-warning/30">
-                              <AlertCircle className="h-2.5 w-2.5" /> Due
+                            <Badge variant="outline" className="text-[10px] bg-success/15 text-success border-success/30">
+                              <Check className="h-2.5 w-2.5" /> Paid
                             </Badge>
                           )}
                         </div>
@@ -345,9 +340,7 @@ export function FundsView() {
                           </div>
                           <div className="flex items-baseline gap-1">
                             <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Deficit</span>
-                            {u.noBills ? (
-                              <span className="text-base font-bold text-muted-foreground tabular-nums">{formatINR(0)}</span>
-                            ) : (u.deficit || 0) > 0 ? (
+                            {(u.deficit || 0) > 0 ? (
                               <span className="text-base font-bold text-warning tabular-nums">{formatINR(u.deficit)}</span>
                             ) : (
                               <span className="text-base font-bold text-success tabular-nums">{formatINR(0)}</span>
