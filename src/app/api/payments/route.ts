@@ -28,11 +28,12 @@ export async function GET(req: Request) {
 
     // Optional date filter (YYYY-MM-DD). Filters payments where createdAt falls
     // within that calendar day. When omitted, all payments are returned (back-compat).
+    // Parse as local time (not UTC) to avoid timezone shifts.
     const date = url.searchParams.get("date");
     if (date) {
-      const d = new Date(date);
-      const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
-      const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+      const [y, m, d] = date.split("-").map(Number);
+      const start = new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0);
+      const end = new Date(y, (m || 1) - 1, d || 1, 23, 59, 59, 999);
       where.createdAt = { gte: start, lte: end };
     }
 

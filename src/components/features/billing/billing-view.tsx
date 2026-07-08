@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 
 import { api } from "@/lib/api-client";
-import { cn } from "@/lib/utils";
+import { cn, toLocalDateKey } from "@/lib/utils";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { useAppStore } from "@/stores/use-app-store";
 import { formatDeletionCountdown } from "@/lib/user-cleanup";
@@ -235,7 +235,7 @@ export function BillingView() {
   // Default due date = 10th of next month (matches the backend default)
   const defaultDueDate = (() => {
     const d = new Date(genYear, genMonth + 1, 10);
-    return d.toISOString().slice(0, 10);
+    return toLocalDateKey(d);
   })();
   const [genDueDate, setGenDueDate] = useState<string>(defaultDueDate);
 

@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 
 import { api } from "@/lib/api-client";
-import { cn } from "@/lib/utils";
+import { cn, toLocalDateKey } from "@/lib/utils";
 import { formatDeletionCountdown } from "@/lib/user-cleanup";
 import { useAuthStore } from "@/stores/use-auth-store";
 
@@ -1055,7 +1055,7 @@ function ExpenseFormBody({
   loading: boolean;
   onCancel: () => void;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toLocalDateKey(new Date());
   const isEdit = !!expense;
 
   // Derive initial category (predefined or CUSTOM) from the expense.
@@ -1093,7 +1093,7 @@ function ExpenseFormBody({
   const [customUnit, setCustomUnit] = useState(initialCustomUnit);
   const [date, setDate] = useState(
     expense
-      ? new Date(expense.expenseDate).toISOString().slice(0, 10)
+      ? toLocalDateKey(new Date(expense.expenseDate))
       : today
   );
   const [description, setDescription] = useState(expense?.description ?? "");

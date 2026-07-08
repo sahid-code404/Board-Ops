@@ -6,10 +6,24 @@ import { createNotification } from "@/lib/notify";
 import { computeEditableUntil, isPreRegistration, isLocked } from "@/lib/meal-engine";
 import { z } from "zod";
 
+/**
+ * Parse a "YYYY-MM-DD" date string as LOCAL time (not UTC).
+ *
+ * `new Date("2026-07-04")` parses as UTC midnight, which shifts the date in
+ * timezones east of UTC (e.g. IST: July 4 00:00 UTC = July 4 05:30 IST —
+ * technically still July 4, but `setHours()` on a UTC date produces wrong
+ * results). This helper parses the string into a local-midnight Date so all
+ * subsequent `setHours()`/`getHours()` calls use the browser/server timezone.
+ */
+function parseLocalDate(s: string): Date {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
 const overrideSchema = z.object({
   mealId: z.string(),
   userId: z.string(),
-  serviceDate: z.string().transform((s) => new Date(s)),
+  serviceDate: z.string().transform((s) => parseLocalDate(s)),
   action: z.enum(["TURN_ON", "TURN_OFF", "LOCK", "UNLOCK"]),
   reason: z.string().min(3, "Reason is required"),
 });

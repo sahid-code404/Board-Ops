@@ -42,7 +42,13 @@ export async function GET(req: Request) {
 
     const url = new URL(req.url);
     const date = url.searchParams.get("date");
-    const target = date ? new Date(date) : new Date();
+    // Parse "YYYY-MM-DD" as local time (not UTC) to avoid timezone shifts.
+    const target = date
+      ? (() => {
+          const [y, m, d] = date.split("-").map(Number);
+          return new Date(y, (m || 1) - 1, d || 1);
+        })()
+      : new Date();
     target.setHours(0, 0, 0, 0);
 
     const isPastDate = target < new Date(new Date().setHours(0, 0, 0, 0));

@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { requireAuth } from "@/lib/session";
 import { ok, handleApiError } from "@/lib/api-response";
 import { computeEditableUntil, isLocked } from "@/lib/meal-engine";
+import { toLocalDateKey } from "@/lib/utils";
 
 export async function GET() {
   try {
@@ -88,7 +89,7 @@ export async function GET() {
       const on = await db.mealEntry.count({ where: { serviceDate: d, status: "ON", user: { role: "USER" } } });
       const off = await db.mealEntry.count({ where: { serviceDate: d, status: "OFF", user: { role: "USER" } } });
       trend.push({
-        date: d.toISOString().slice(0, 10),
+        date: toLocalDateKey(d),
         on,
         off,
       });

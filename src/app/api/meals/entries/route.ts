@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { requireAuth } from "@/lib/session";
 import { ok, handleApiError } from "@/lib/api-response";
 import { computeEditableUntil, isLocked, isPreRegistration, getRegistrationDate } from "@/lib/meal-engine";
+import { toLocalDateKey } from "@/lib/utils";
 import type { MealConfiguration } from "@prisma/client";
 
 /**
@@ -28,8 +29,13 @@ export async function GET(req: Request) {
       orderBy: { displayOrder: "asc" },
     });
 
+    // Parse "YYYY-MM-DD" as local time (not UTC) to avoid timezone shifts.
+    // `new Date("2026-07-04")` parses as UTC midnight; in IST that's July 3 18:30.
     const start = specificDate
-      ? new Date(specificDate)
+      ? (() => {
+          const [y, m, d] = specificDate.split("-").map(Number);
+          return new Date(y, (m || 1) - 1, d || 1);
+        })()
       : new Date(year, month, 1);
     const end = specificDate
       ? new Date(start)
@@ -168,7 +174,7 @@ export async function GET(req: Request) {
         // the user wasn't enrolled, so there's nothing meaningful to show.
         const isPreReg = isPreRegistration(d, user.createdAt);
         if (isPreReg && !overridden) continue;
-        const dateKey = d.toISOString().slice(0, 10);
+        const dateKey = toLocalDateKey(d);
         if (!byDate[dateKey]) byDate[dateKey] = [];
         byDate[dateKey].push({
           id: entry.id,
