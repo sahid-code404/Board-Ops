@@ -53,12 +53,57 @@ export function getRegistrationDate(userCreatedAt: Date): Date {
  *   - CAN be overridden by an admin (admin override creates them explicitly)
  *
  * Date-only comparison — time-of-day is ignored on both sides.
+ * Use `isMealBeforeEnrollment` for the precise check that also considers the
+ * meal's cutoff time on the registration day itself.
  */
 export function isPreRegistration(serviceDate: Date, userCreatedAt: Date): boolean {
   const reg = getRegistrationDate(userCreatedAt);
   const svc = new Date(serviceDate);
   svc.setHours(0, 0, 0, 0);
   return svc.getTime() < reg.getTime();
+}
+
+/**
+ * PRECISE before-enrollment check — considers the meal's cutoff time.
+ *
+ * Logic:
+ *  1. If serviceDate is BEFORE the registration date → before enrollment (true)
+ *  2. If serviceDate is AFTER the registration date → not before enrollment (false)
+ *  3. If serviceDate is THE SAME as the registration date:
+ *     - Compute the meal's cutoff datetime (e.g. morning meal cutoff = 7 AM)
+ *     - If the user registered AFTER the cutoff → before enrollment (true)
+ *       (the user missed the cutoff — the meal is already locked)
+ *     - If the user registered BEFORE the cutoff → not before enrollment (false)
+ *       (the user can still toggle this meal)
+ *
+ * Example:
+ *   Morning meal cutoff = 7 AM on July 8
+ *   User registers at 8 AM on July 8
+ *   → userCreatedAt (8 AM) > cutoff (7 AM) → before enrollment = true
+ *   (the user missed the morning meal cutoff)
+ *
+ *   Dinner cutoff = 4 PM on July 8
+ *   User registers at 8 AM on July 8
+ *   → userCreatedAt (8 AM) < cutoff (4 PM) → before enrollment = false
+ *   (the user can still toggle dinner)
+ */
+export function isMealBeforeEnrollment(
+  serviceDate: Date,
+  userCreatedAt: Date,
+  meal: Pick<MealConfiguration, "cutoffStrategy" | "cutoffTime" | "cutoffOffsetMinutes">
+): boolean {
+  const reg = getRegistrationDate(userCreatedAt);
+  const svc = new Date(serviceDate);
+  svc.setHours(0, 0, 0, 0);
+
+  // Date is strictly before registration date → before enrollment
+  if (svc.getTime() < reg.getTime()) return true;
+  // Date is strictly after registration date → not before enrollment
+  if (svc.getTime() > reg.getTime()) return false;
+
+  // Same day as registration — check if the meal's cutoff has passed
+  const cutoff = computeEditableUntil(meal, serviceDate);
+  return userCreatedAt.getTime() > cutoff.getTime();
 }
 
 export function formatDate(d: Date): string {

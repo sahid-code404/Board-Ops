@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { requireAuth } from "@/lib/session";
 import { ok, handleApiError } from "@/lib/api-response";
-import { computeEditableUntil, isLocked, isPreRegistration, getRegistrationDate } from "@/lib/meal-engine";
+import { computeEditableUntil, isLocked, isPreRegistration, isMealBeforeEnrollment, getRegistrationDate } from "@/lib/meal-engine";
 import { toLocalDateKey } from "@/lib/utils";
 import type { MealConfiguration } from "@prisma/client";
 
@@ -60,14 +60,25 @@ export async function GET(req: Request) {
 
     const registrationDate = getRegistrationDate(user.createdAt);
 
+    // Build a meal lookup map for precise before-enrollment checks
+    const mealMap = new Map(meals.map((m) => [m.id, m]));
+
     // ── Self-healing: normalize OLD auto-created pre-reg entries ──
     // These have updatedBy=null (created by the buggy auto-create loop before
     // the fix). Set BOTH status AND originalState to "OFF" so the dynamic
     // override calculation (overridden = status !== originalState) returns
     // false — no override badge. Admin-created entries (updatedBy set) are
     // preserved.
+    //
+    // Uses the PRECISE check: on the registration day itself, if the meal's
+    // cutoff has already passed when the user registered, the meal is also
+    // treated as "before enrollment" (the user missed the cutoff).
     for (const entry of entries) {
-      if (isPreRegistration(entry.serviceDate, user.createdAt) && !entry.updatedBy) {
+      const mealConfig = mealMap.get(entry.mealId);
+      const isBeforeEnrollment = mealConfig
+        ? isMealBeforeEnrollment(entry.serviceDate, user.createdAt, mealConfig)
+        : isPreRegistration(entry.serviceDate, user.createdAt);
+      if (isBeforeEnrollment && !entry.updatedBy) {
         if (entry.status === "ON" || entry.status === "LOCKED" || !entry.locked || entry.originalState !== "OFF") {
           const updated = await db.mealEntry.update({
             where: { id: entry.id },
@@ -85,9 +96,11 @@ export async function GET(req: Request) {
         const d = specificDate ? new Date(start) : new Date(year, month, day);
         d.setHours(0, 0, 0, 0);
 
-        // Skip auto-creating entries for dates before the user registered.
+        // Skip auto-creating entries for meals before enrollment.
+        // Uses the PRECISE check: on the registration day, if the meal's cutoff
+        // has already passed, don't create an entry (the user missed it).
         // Admin overrides can still create these explicitly via /api/meals/override.
-        if (isPreRegistration(d, user.createdAt)) continue;
+        if (isMealBeforeEnrollment(d, user.createdAt, meal)) continue;
 
         const key = `${meal.id}_${d.toDateString()}`;
         let entry = map.get(key);
@@ -168,11 +181,12 @@ export async function GET(req: Request) {
         // Dynamic override calculation: Current State vs Original State
         const effectiveStatus = entry.status === "LOCKED" ? "ON" : entry.status;
         const overridden = effectiveStatus !== entry.originalState;
-        // Pre-registration entries are only shown to the user if they have an
+        // Before-enrollment entries are only shown to the user if they have an
         // active admin override (overridden=true). If the admin set the meal
         // back to its default state (overridden=false), the entry is hidden —
         // the user wasn't enrolled, so there's nothing meaningful to show.
-        const isPreReg = isPreRegistration(d, user.createdAt);
+        // Uses the PRECISE check (considers meal cutoff on registration day).
+        const isPreReg = isMealBeforeEnrollment(d, user.createdAt, meal);
         if (isPreReg && !overridden) continue;
         const dateKey = toLocalDateKey(d);
         if (!byDate[dateKey]) byDate[dateKey] = [];

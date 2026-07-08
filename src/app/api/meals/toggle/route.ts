@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { requireAuth } from "@/lib/session";
 import { ok, err, handleApiError } from "@/lib/api-response";
-import { isLocked, isPreRegistration } from "@/lib/meal-engine";
+import { isLocked, isPreRegistration, isMealBeforeEnrollment } from "@/lib/meal-engine";
 import { logAudit } from "@/lib/audit";
 import { createNotification } from "@/lib/notify";
 import { evaluateRestrictions } from "@/lib/restriction-engine";
@@ -31,11 +31,13 @@ export async function PATCH(req: Request) {
     if (!entry) return err("Meal entry not found", 404);
     if (entry.userId !== user.id) return err("This meal entry does not belong to you", 403);
 
-    // PRD: meals before the user's registration date are not editable by the
-    // resident — only an admin can override them via /api/meals/override.
-    if (isPreRegistration(entry.serviceDate, user.createdAt)) {
+    // PRD: meals before enrollment are not editable by the resident — only an
+    // admin can override them via /api/meals/override.
+    // Uses the PRECISE check: on the registration day, if the meal's cutoff
+    // has already passed, the meal is also "before enrollment".
+    if (isMealBeforeEnrollment(entry.serviceDate, user.createdAt, entry.meal)) {
       return err(
-        "This meal is before your registration date and cannot be edited. Contact an administrator if a change is needed.",
+        "This meal is before your enrollment or its cutoff has passed. Contact an administrator if a change is needed.",
         422
       );
     }
@@ -112,7 +114,7 @@ export async function POST(req: Request) {
 
     const results: { id: string; success: boolean; error?: string }[] = [];
     for (const id of entryIds) {
-      const entry = await db.mealEntry.findUnique({ where: { id } });
+      const entry = await db.mealEntry.findUnique({ where: { id }, include: { meal: true } });
       if (!entry || entry.userId !== user.id) {
         results.push({ id, success: false, error: "Not found" });
         continue;
@@ -121,9 +123,9 @@ export async function POST(req: Request) {
         results.push({ id, success: false, error: "Locked" });
         continue;
       }
-      // Pre-registration meals cannot be toggled by the user
-      if (isPreRegistration(entry.serviceDate, user.createdAt)) {
-        results.push({ id, success: false, error: "Before registration" });
+      // Before-enrollment meals cannot be toggled by the user (precise check)
+      if (isMealBeforeEnrollment(entry.serviceDate, user.createdAt, entry.meal)) {
+        results.push({ id, success: false, error: "Before enrollment" });
         continue;
       }
       await db.mealEntry.update({

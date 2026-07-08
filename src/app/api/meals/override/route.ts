@@ -3,7 +3,7 @@ import { requireRole } from "@/lib/session";
 import { ok, err, handleApiError } from "@/lib/api-response";
 import { logAudit } from "@/lib/audit";
 import { createNotification } from "@/lib/notify";
-import { computeEditableUntil, isPreRegistration, isLocked } from "@/lib/meal-engine";
+import { computeEditableUntil, isPreRegistration, isMealBeforeEnrollment, isLocked } from "@/lib/meal-engine";
 import { z } from "zod";
 
 /**
@@ -60,7 +60,7 @@ export async function POST(req: Request) {
       select: { createdAt: true },
     });
     const isPreReg = targetUser
-      ? isPreRegistration(data.serviceDate, targetUser.createdAt)
+      ? isMealBeforeEnrollment(data.serviceDate, targetUser.createdAt, meal)
       : false;
 
     const entry = await db.mealEntry.findFirst({
