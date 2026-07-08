@@ -117,9 +117,10 @@ export function FundsView() {
     DUE: classified.filter((u) => u.bucket === "DUE").length,
   }), [classified]);
 
-  // Total deficit users = users with due > 0 (for the 3rd KPI)
-  const totalDeficitUsers = useMemo(
-    () => classified.filter((u) => u.hasDue).length,
+  // Total deficit = sum of all users' due/overused amounts (for the 3rd KPI).
+  // Default ₹0 when no deficit.
+  const totalDeficit = useMemo(
+    () => classified.reduce((sum, u) => sum + (u.needToPay > 0 ? u.needToPay : 0), 0),
     [classified]
   );
 
@@ -234,11 +235,11 @@ export function FundsView() {
             <div className="grid place-items-center h-10 w-10 rounded-2xl bg-warning/15 text-warning mb-3">
               <TrendingDown className="h-5 w-5" />
             </div>
-            <p className="text-xs text-muted-foreground">Deficit Users</p>
+            <p className="text-xs text-muted-foreground">Total Deficit</p>
             <div className="text-2xl font-bold tracking-tight tabular-nums">
-              <AnimatedCounter value={totalDeficitUsers} />
+              <AnimatedCounter value={totalDeficit} prefix="₹" />
             </div>
-            <p className="text-[11px] text-muted-foreground mt-1">Users with due balance</p>
+            <p className="text-[11px] text-muted-foreground mt-1">Overused amount</p>
           </GlassCard>
         </div>
       </StaggerItem>
@@ -335,16 +336,16 @@ export function FundsView() {
                           )}
                         </div>
 
-                        {/* Transaction strip — Deposit / Due only */}
+                        {/* Transaction strip — Deposit / Deficit only */}
                         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 mt-2">
                           <div className="flex items-baseline gap-1">
                             <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Deposit</span>
                             <span className="text-base font-bold text-success tabular-nums">{formatINR(u.deposit)}</span>
                           </div>
                           <div className="flex items-baseline gap-1">
-                            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Due</span>
+                            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Deficit</span>
                             {u.noBills ? (
-                              <span className="text-base font-bold text-muted-foreground tabular-nums">—</span>
+                              <span className="text-base font-bold text-muted-foreground tabular-nums">{formatINR(0)}</span>
                             ) : u.isPaid ? (
                               <span className="text-base font-bold text-success tabular-nums">{formatINR(0)}</span>
                             ) : (
