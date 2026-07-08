@@ -506,6 +506,7 @@ export function UserMealsView() {
                         toggleMutation.mutate({ entryId, status })
                       }
                       onPreRegToggle={showPreRegToast}
+                      registrationDate={registrationDate}
                       loading={toggleMutation.isPending}
                     />
                   </motion.div>
@@ -544,9 +545,14 @@ export function UserMealsView() {
                   const ds = toDateString(date);
                   const entries = dayMap.get(ds) ?? [];
                   const isToday = ds === toDateString(now);
+                  // Check if this date is before the user's registration date
+                  const cellDate = new Date(date);
+                  cellDate.setHours(0, 0, 0, 0);
+                  const isPreReg = registrationDate ? cellDate < registrationDate : false;
                   const onCount = entries.filter((e) => e.status === "ON" || e.status === "LOCKED").length;
                   const offCount = entries.filter((e) => e.status === "OFF").length;
                   const hasLocked = entries.some((e) => e.locked || e.status === "LOCKED");
+                  const hasOverride = entries.some((e) => e.overridden);
                   const isPast = date < now && !isToday;
 
                   return (
@@ -557,19 +563,28 @@ export function UserMealsView() {
                         setViewMode("day");
                       }}
                       className={cn(
-                        "aspect-square rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all text-[10px]",
-                        isToday
-                          ? "bg-primary/15 ring-1 ring-primary/40"
-                          : entries.length > 0
-                            ? "glass-soft hover:ring-1 hover:ring-primary/30"
-                            : "opacity-40",
-                        isPast && "opacity-60"
+                        "aspect-square rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all text-[10px] relative",
+                        isPreReg
+                          ? "bg-muted/30 ring-1 ring-dashed ring-border/50 hover:bg-muted/50"
+                          : isToday
+                            ? "bg-primary/15 ring-1 ring-primary/40"
+                            : entries.length > 0
+                              ? "glass-soft hover:ring-1 hover:ring-primary/30"
+                              : "opacity-40",
+                        !isPreReg && isPast && "opacity-60"
                       )}
+                      title={isPreReg ? "Before your enrollment — not editable" : undefined}
                     >
-                      <span className={cn("font-bold", isToday ? "text-primary" : "text-foreground")}>
+                      <span className={cn("font-bold", isToday && !isPreReg ? "text-primary" : "text-foreground")}>
                         {format(date, "d")}
                       </span>
-                      {entries.length > 0 && (
+                      {isPreReg ? (
+                        hasOverride ? (
+                          <span className="h-1.5 w-1.5 rounded-full bg-primary/50" title="Admin override" />
+                        ) : (
+                          <span className="text-[8px] text-muted-foreground/70 font-medium leading-none">pre</span>
+                        )
+                      ) : entries.length > 0 ? (
                         <div className="flex items-center gap-0.5">
                           {onCount > 0 && (
                             <span className="h-1.5 w-1.5 rounded-full bg-success" />
@@ -581,14 +596,14 @@ export function UserMealsView() {
                             <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
                           )}
                         </div>
-                      )}
+                      ) : null}
                     </button>
                   );
                 });
               })()}
             </div>
             {/* Legend */}
-            <div className="flex items-center justify-center gap-4 mt-3 pt-3 border-t border-border/40">
+            <div className="flex items-center justify-center gap-4 mt-3 pt-3 border-t border-border/40 flex-wrap">
               <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
                 <span className="h-1.5 w-1.5 rounded-full bg-success" /> ON
               </span>
@@ -597,6 +612,9 @@ export function UserMealsView() {
               </span>
               <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
                 <span className="h-1.5 w-1.5 rounded-full bg-destructive" /> Locked
+              </span>
+              <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                <UserPlus className="h-2.5 w-2.5" /> Before Enrollment
               </span>
             </div>
           </GlassCard>
@@ -647,12 +665,13 @@ export function UserMealsView() {
 // ─────────────────────────────────────────────────────────────
 
 const DayRow = memo(function DayRow({
-  dateStr, date, entries, isExpanded, onToggleExpand, onToggleMeal, onPreRegToggle, loading,
+  dateStr, date, entries, isExpanded, onToggleExpand, onToggleMeal, onPreRegToggle, registrationDate, loading,
 }: {
   dateStr: string; date: Date; entries: MealEntry[];
   isExpanded: boolean; onToggleExpand: () => void;
   onToggleMeal: (entryId: string, status: "ON" | "OFF") => void;
   onPreRegToggle: () => void;
+  registrationDate: Date | null;
   loading: boolean;
 }) {
   const isToday = toDateString(new Date()) === dateStr;
@@ -660,6 +679,10 @@ const DayRow = memo(function DayRow({
   const offCount = entries.filter((e) => e.status === "OFF").length;
   const lockedCount = entries.filter((e) => e.locked || e.status === "LOCKED").length;
   const overriddenCount = entries.filter((e) => e.overridden).length;
+  // Check if this date is before the user's registration date
+  const cellDate = new Date(date);
+  cellDate.setHours(0, 0, 0, 0);
+  const isPreReg = registrationDate ? cellDate < registrationDate : false;
 
   return (
     <GlassCard className="overflow-hidden" hover={false}>
@@ -680,6 +703,11 @@ const DayRow = memo(function DayRow({
             {isToday ? "Today" : format(date, "EEEE, d MMMM")}
           </p>
           <div className="flex items-center gap-2 mt-0.5">
+            {isPreReg && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] bg-muted/60 text-muted-foreground px-1.5 py-0.5 rounded-full font-medium">
+                <UserPlus className="h-2.5 w-2.5" /> Before Enrollment
+              </span>
+            )}
             {onCount > 0 && (
               <span className="inline-flex items-center gap-0.5 text-[10px] bg-success/15 text-success px-1.5 py-0.5 rounded-full font-medium">
                 <Check className="h-2.5 w-2.5" /> {onCount} ON
