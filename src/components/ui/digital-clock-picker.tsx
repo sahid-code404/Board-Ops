@@ -8,7 +8,6 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/popover";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 // ─────────────────────────────────────────────────────────────
 // Format helpers
@@ -50,7 +49,7 @@ function formatDisplay(value: string): string {
 // ─────────────────────────────────────────────────────────────
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 1); // 1..12
-const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5); // 0,5,...,55
+const MINUTES = Array.from({ length: 60 }, (_, i) => i); // 0..59
 
 // ─────────────────────────────────────────────────────────────
 // Component
@@ -80,7 +79,6 @@ export function DigitalClockPicker({
   ariaLabel,
 }: DigitalClockPickerProps) {
   const [open, setOpen] = React.useState(false);
-  const [tab, setTab] = React.useState<"hour" | "minute">("hour");
 
   const { hour24, minute } = parse24(value);
   const { hour12, period } = to12(hour24);
@@ -133,9 +131,6 @@ export function DigitalClockPicker({
                 {formatDisplay(value)}
               </span>
             </span>
-            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
-              24h
-            </span>
           </button>
         </PopoverTrigger>
 
@@ -143,16 +138,14 @@ export function DigitalClockPicker({
           align="start"
           sideOffset={6}
           className={cn(
-            "w-[280px] max-w-[calc(100vw-2rem)] p-0",
+            "w-[220px] max-w-[calc(100vw-2rem)] p-0",
             "rounded-3xl border-glass-border glass-strong"
           )}
         >
-          <ClockFace
+          <AlarmClockFace
             hour12={hour12}
             minute={minute}
             period={period}
-            tab={tab}
-            onTabChange={setTab}
             onHour={(h) => commit({ hour12: h })}
             onMinute={(m) => commit({ minute: m })}
             onPeriod={(p) => commit({ period: p })}
@@ -167,50 +160,41 @@ export function DigitalClockPicker({
 }
 
 // ─────────────────────────────────────────────────────────────
-// Clock face (digital grid)
+// Alarm-clock style face — compact scrollable wheel pickers
 // ─────────────────────────────────────────────────────────────
 
-interface ClockFaceProps {
+interface AlarmClockFaceProps {
   hour12: number;
   minute: number;
   period: "AM" | "PM";
-  tab: "hour" | "minute";
-  onTabChange: (t: "hour" | "minute") => void;
   onHour: (h: number) => void;
   onMinute: (m: number) => void;
   onPeriod: (p: "AM" | "PM") => void;
   onDone: () => void;
 }
 
-function ClockFace({
+function AlarmClockFace({
   hour12,
   minute,
   period,
-  tab,
-  onTabChange,
   onHour,
   onMinute,
   onPeriod,
   onDone,
-}: ClockFaceProps) {
-  // Round display minute to nearest 5 to keep UI consistent with grid steps.
-  const displayMinute = Math.round(minute / 5) * 5 % 60;
-
+}: AlarmClockFaceProps) {
   return (
     <div className="flex flex-col">
-      {/* Header — live time readout */}
-      <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-3">
-        <div className="flex items-baseline gap-1">
-          <span className="text-2xl font-semibold tabular-nums tracking-tight">
+      {/* Header — time readout + Done */}
+      <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-2">
+        <div className="flex items-baseline gap-0.5">
+          <span className="text-xl font-bold tabular-nums tracking-tight">
             {hour12}
           </span>
-          <span className="text-2xl font-semibold tabular-nums text-muted-foreground">
-            :
+          <span className="text-xl font-bold tabular-nums text-muted-foreground">:</span>
+          <span className="text-xl font-bold tabular-nums tracking-tight">
+            {String(minute).padStart(2, "0")}
           </span>
-          <span className="text-2xl font-semibold tabular-nums tracking-tight">
-            {String(displayMinute).padStart(2, "0")}
-          </span>
-          <span className="ml-1 text-sm font-medium text-muted-foreground">
+          <span className="ml-1 text-xs font-semibold text-muted-foreground">
             {period}
           </span>
         </div>
@@ -218,19 +202,39 @@ function ClockFace({
           type="button"
           onClick={onDone}
           className={cn(
-            "inline-flex h-8 items-center gap-1 rounded-full px-3 text-xs font-semibold",
+            "inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[11px] font-semibold",
             "bg-primary text-primary-foreground shadow-sm transition-transform",
             "hover:scale-[1.03] active:scale-95"
           )}
         >
-          <Check className="size-3.5" />
+          <Check className="size-3" />
           Done
         </button>
       </div>
 
+      {/* Wheels — Hour | Minute side by side */}
+      <div className="flex gap-1 px-3 pb-2">
+        <Wheel
+          items={HOURS}
+          selected={hour12}
+          onSelect={onHour}
+          ariaLabel="Hour"
+        />
+        <div className="flex items-center justify-center text-lg font-bold text-muted-foreground/40">
+          :
+        </div>
+        <Wheel
+          items={MINUTES}
+          selected={minute}
+          onSelect={onMinute}
+          formatItem={(m) => String(m).padStart(2, "0")}
+          ariaLabel="Minute"
+        />
+      </div>
+
       {/* AM / PM toggle */}
-      <div className="px-4 pb-3">
-        <div className="glass-soft inline-flex rounded-full p-1">
+      <div className="px-3 pb-3">
+        <div className="glass-soft inline-flex w-full rounded-full p-0.5">
           {(["AM", "PM"] as const).map((p) => {
             const active = period === p;
             return (
@@ -240,7 +244,7 @@ function ClockFace({
                 onClick={() => onPeriod(p)}
                 aria-pressed={active}
                 className={cn(
-                  "h-7 flex-1 rounded-full px-4 text-xs font-semibold transition-all",
+                  "h-6 flex-1 rounded-full text-[11px] font-semibold transition-all",
                   active
                     ? "bg-primary text-primary-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
@@ -252,106 +256,82 @@ function ClockFace({
           })}
         </div>
       </div>
-
-      {/* Hour / Minute tabs */}
-      <div className="px-4 pb-2">
-        <Tabs
-          value={tab}
-          onValueChange={(v) => onTabChange(v as "hour" | "minute")}
-        >
-          <TabsList className="glass-soft h-9 w-full rounded-xl">
-            <TabsTrigger value="hour" className="rounded-lg">
-              Hour
-            </TabsTrigger>
-            <TabsTrigger value="minute" className="rounded-lg">
-              Minute
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="hour" className="mt-3">
-            <Grid>
-              {HOURS.map((h) => {
-                const active = h === hour12;
-                return (
-                  <GridButton
-                    key={h}
-                    active={active}
-                    onClick={() => onHour(h)}
-                    ariaLabel={`${h} o'clock`}
-                  >
-                    {h}
-                  </GridButton>
-                );
-              })}
-            </Grid>
-          </TabsContent>
-
-          <TabsContent value="minute" className="mt-3">
-            <Grid>
-              {MINUTES.map((m) => {
-                const active = m === displayMinute;
-                return (
-                  <GridButton
-                    key={m}
-                    active={active}
-                    onClick={() => onMinute(m)}
-                    ariaLabel={`${String(m).padStart(2, "0")} minutes`}
-                  >
-                    {String(m).padStart(2, "0")}
-                  </GridButton>
-                );
-              })}
-            </Grid>
-          </TabsContent>
-        </Tabs>
-      </div>
-
-      <div className="px-4 pb-4 pt-1 text-center text-[10px] text-muted-foreground/70">
-        5-minute steps · returns 24-hour format
-      </div>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────
-// Grid primitives
+// Wheel — scrollable list with snap, like an alarm clock
 // ─────────────────────────────────────────────────────────────
 
-function Grid({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-4 gap-2">
-      {children}
-    </div>
-  );
-}
-
-function GridButton({
-  active,
-  onClick,
-  children,
-  ariaLabel,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
+interface WheelProps {
+  items: number[];
+  selected: number;
+  onSelect: (v: number) => void;
+  formatItem?: (v: number) => string;
   ariaLabel?: string;
-}) {
+}
+
+function Wheel({ items, selected, onSelect, formatItem, ariaLabel }: WheelProps) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const itemHeight = 32; // px per item
+
+  // Scroll to the selected item when the popover opens or value changes
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const idx = items.indexOf(selected);
+    if (idx >= 0) {
+      el.scrollTo({ top: idx * itemHeight, behavior: "auto" });
+    }
+  }, [selected, items]);
+
+  // Padding items so the first/last can center
+  const pad = 2;
+
   return (
-    <button
-      type="button"
-      aria-pressed={active}
+    <div
+      ref={ref}
+      role="listbox"
       aria-label={ariaLabel}
-      onClick={onClick}
       className={cn(
-        "h-10 rounded-2xl text-sm font-semibold tabular-nums transition-all duration-150",
-        "glass-soft hover:scale-[1.04] active:scale-95",
-        active
-          ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
-          : "text-foreground hover:text-primary"
+        "flex-1 overflow-y-auto no-scrollbar rounded-xl",
+        "snap-y snap-mandatory",
+        "h-[112px] py-[40px] scroll-smooth"
       )}
+      style={{ scrollPaddingTop: "40px" }}
     >
-      {children}
-    </button>
+      {/* Top padding */}
+      {Array.from({ length: pad }).map((_, i) => (
+        <div key={`pad-top-${i}`} style={{ height: itemHeight }} />
+      ))}
+      {items.map((v) => {
+        const active = v === selected;
+        return (
+          <button
+            key={v}
+            type="button"
+            role="option"
+            aria-selected={active}
+            onClick={() => onSelect(v)}
+            className={cn(
+              "w-full snap-center flex items-center justify-center transition-all duration-150",
+              "text-sm font-semibold tabular-nums rounded-lg",
+              active
+                ? "text-primary text-lg scale-110"
+                : "text-muted-foreground/50 hover:text-foreground"
+            )}
+            style={{ height: itemHeight }}
+          >
+            {formatItem ? formatItem(v) : v}
+          </button>
+        );
+      })}
+      {/* Bottom padding */}
+      {Array.from({ length: pad }).map((_, i) => (
+        <div key={`pad-bot-${i}`} style={{ height: itemHeight }} />
+      ))}
+    </div>
   );
 }
 
