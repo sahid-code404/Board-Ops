@@ -623,12 +623,47 @@ export function UserMealsView() {
 
       {viewMode === "day" && (
         <StaggerItem>
+          {/* Before Enrollment banner — shown when the selected day is before
+              the user's registration date */}
+          {isDayBeforeRegistration && (
+            <div className="flex items-start gap-3 p-3.5 rounded-2xl glass-soft ring-1 ring-border/40 mb-3">
+              <div className="grid place-items-center h-9 w-9 rounded-xl bg-muted/60 text-muted-foreground shrink-0">
+                <UserPlus className="h-4 w-4" />
+              </div>
+              <div className="flex-1 min-w-0 pt-0.5">
+                <p className="text-sm font-semibold text-foreground">
+                  Before Enrollment
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                  {format(selectedDay, "d MMMM yyyy")} is before your registration date
+                  {registrationDate ? ` (${format(registrationDate, "d MMM yyyy")})` : ""}.
+                  Meals are not available for this date. Only an administrator can override them.
+                </p>
+              </div>
+            </div>
+          )}
           {dayEntries.length === 0 ? (
             <GlassCard className="p-10 text-center" hover={false}>
-              <Utensils className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-              <p className="text-sm text-muted-foreground">
-                No meals configured for {format(selectedDay, "d MMMM yyyy")}.
-              </p>
+              {isDayBeforeRegistration ? (
+                <>
+                  <UserPlus className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm font-medium text-foreground">
+                    Not enrolled on this date
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {format(selectedDay, "d MMMM yyyy")} is before your registration date
+                    {registrationDate ? ` (${format(registrationDate, "d MMM yyyy")})` : ""}.
+                    Meals are not available for this date.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Utensils className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    No meals configured for {format(selectedDay, "d MMMM yyyy")}.
+                  </p>
+                </>
+              )}
             </GlassCard>
           ) : (
             <div className="space-y-3">
