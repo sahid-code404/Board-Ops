@@ -13,59 +13,44 @@ import {
 // Format helpers
 // ─────────────────────────────────────────────────────────────
 
-/** Parse a "HH:mm" (24-hour) string into { hour24, minute }. */
 function parse24(value: string): { hour24: number; minute: number } {
   const safe = value && /^\d{1,2}:\d{2}$/.test(value) ? value : "08:00";
   const [h, m] = safe.split(":").map(Number);
-  return {
-    hour24: ((h % 24) + 24) % 24,
-    minute: ((m % 60) + 60) % 60,
-  };
+  return { hour24: ((h % 24) + 24) % 24, minute: ((m % 60) + 60) % 60 };
 }
 
-/** Convert 24-hour → 12-hour display parts. */
 function to12(hour24: number): { hour12: number; period: "AM" | "PM" } {
   const period: "AM" | "PM" = hour24 >= 12 ? "PM" : "AM";
   const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
   return { hour12, period };
 }
 
-/** Convert 12-hour → 24-hour. */
 function to24(hour12: number, period: "AM" | "PM"): number {
   let h = hour12 % 12;
   if (period === "PM") h += 12;
   return h;
 }
 
-/** Format "HH:mm" → "h:mm AM/PM" for display. */
 function formatDisplay(value: string): string {
   const { hour24, minute } = parse24(value);
   const { hour12, period } = to12(hour24);
   return `${hour12}:${String(minute).padStart(2, "0")} ${period}`;
 }
 
-// ─────────────────────────────────────────────────────────────
-// Constants
-// ─────────────────────────────────────────────────────────────
-
-const HOURS = Array.from({ length: 12 }, (_, i) => i + 1); // 1..12
-const MINUTES = Array.from({ length: 60 }, (_, i) => i); // 0..59
+const HOURS = Array.from({ length: 12 }, (_, i) => i + 1);
+const MINUTES = Array.from({ length: 60 }, (_, i) => i);
 
 // ─────────────────────────────────────────────────────────────
 // Component
 // ─────────────────────────────────────────────────────────────
 
 export interface DigitalClockPickerProps {
-  /** "HH:mm" in 24-hour format. */
   value: string;
-  /** Receives "HH:mm" (24-hour). */
   onChange: (v: string) => void;
   label?: string;
   error?: string;
   className?: string;
-  /** Optional id for label association. */
   id?: string;
-  /** Accessible label for the trigger button. */
   ariaLabel?: string;
 }
 
@@ -79,15 +64,10 @@ export function DigitalClockPicker({
   ariaLabel,
 }: DigitalClockPickerProps) {
   const [open, setOpen] = React.useState(false);
-
   const { hour24, minute } = parse24(value);
   const { hour12, period } = to12(hour24);
 
-  const commit = (next: {
-    hour12?: number;
-    minute?: number;
-    period?: "AM" | "PM";
-  }) => {
+  const commit = (next: { hour12?: number; minute?: number; period?: "AM" | "PM" }) => {
     const h12 = next.hour12 ?? hour12;
     const m = next.minute ?? minute;
     const p = next.period ?? period;
@@ -96,16 +76,11 @@ export function DigitalClockPicker({
   };
 
   const triggerId = React.useId();
-  const labelId = label ? `${triggerId}-label` : undefined;
 
   return (
     <div className={cn("space-y-1.5", className)}>
       {label && (
-        <label
-          id={labelId}
-          htmlFor={id ?? triggerId}
-          className="ml-1 block text-xs font-medium text-muted-foreground"
-        >
+        <label htmlFor={id ?? triggerId} className="ml-1 block text-xs font-medium text-muted-foreground">
           {label}
         </label>
       )}
@@ -127,9 +102,7 @@ export function DigitalClockPicker({
           >
             <span className="flex items-center gap-2">
               <Clock className="size-4 text-muted-foreground transition-colors group-hover:text-primary" />
-              <span className="font-medium tabular-nums">
-                {formatDisplay(value)}
-              </span>
+              <span className="font-medium tabular-nums">{formatDisplay(value)}</span>
             </span>
           </button>
         </PopoverTrigger>
@@ -137,10 +110,7 @@ export function DigitalClockPicker({
         <PopoverContent
           align="start"
           sideOffset={6}
-          className={cn(
-            "w-[220px] max-w-[calc(100vw-2rem)] p-0",
-            "rounded-3xl border-glass-border glass-strong"
-          )}
+          className="w-[240px] max-w-[calc(100vw-2rem)] p-0 rounded-3xl border-glass-border glass-strong"
         >
           <AlarmClockFace
             hour12={hour12}
@@ -160,10 +130,12 @@ export function DigitalClockPicker({
 }
 
 // ─────────────────────────────────────────────────────────────
-// Alarm-clock style face — compact scrollable wheel pickers
+// Alarm-clock face
 // ─────────────────────────────────────────────────────────────
 
-interface AlarmClockFaceProps {
+function AlarmClockFace({
+  hour12, minute, period, onHour, onMinute, onPeriod, onDone,
+}: {
   hour12: number;
   minute: number;
   period: "AM" | "PM";
@@ -171,57 +143,32 @@ interface AlarmClockFaceProps {
   onMinute: (m: number) => void;
   onPeriod: (p: "AM" | "PM") => void;
   onDone: () => void;
-}
-
-function AlarmClockFace({
-  hour12,
-  minute,
-  period,
-  onHour,
-  onMinute,
-  onPeriod,
-  onDone,
-}: AlarmClockFaceProps) {
+}) {
   return (
     <div className="flex flex-col">
-      {/* Header — time readout + Done */}
-      <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-2">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2 px-4 pt-3 pb-2">
         <div className="flex items-baseline gap-0.5">
-          <span className="text-xl font-bold tabular-nums tracking-tight">
-            {hour12}
-          </span>
-          <span className="text-xl font-bold tabular-nums text-muted-foreground">:</span>
-          <span className="text-xl font-bold tabular-nums tracking-tight">
-            {String(minute).padStart(2, "0")}
-          </span>
-          <span className="ml-1 text-xs font-semibold text-muted-foreground">
-            {period}
-          </span>
+          <span className="text-2xl font-bold tabular-nums">{hour12}</span>
+          <span className="text-2xl font-bold text-muted-foreground">:</span>
+          <span className="text-2xl font-bold tabular-nums">{String(minute).padStart(2, "0")}</span>
+          <span className="ml-1.5 text-sm font-semibold text-muted-foreground">{period}</span>
         </div>
         <button
           type="button"
           onClick={onDone}
-          className={cn(
-            "inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[11px] font-semibold",
-            "bg-primary text-primary-foreground shadow-sm transition-transform",
-            "hover:scale-[1.03] active:scale-95"
-          )}
+          className="inline-flex h-8 items-center gap-1 rounded-full px-3 text-xs font-semibold bg-primary text-primary-foreground shadow-sm hover:scale-[1.03] active:scale-95 transition-transform"
         >
-          <Check className="size-3" />
+          <Check className="size-3.5" />
           Done
         </button>
       </div>
 
-      {/* Wheels — Hour | Minute side by side */}
-      <div className="flex gap-1 px-3 pb-2">
-        <Wheel
-          items={HOURS}
-          selected={hour12}
-          onSelect={onHour}
-          ariaLabel="Hour"
-        />
-        <div className="flex items-center justify-center text-lg font-bold text-muted-foreground/40">
-          :
+      {/* Wheels */}
+      <div className="flex gap-2 px-3 pb-1">
+        <Wheel items={HOURS} selected={hour12} onSelect={onHour} ariaLabel="Hour" />
+        <div className="flex items-center justify-center pb-2">
+          <span className="text-2xl font-bold text-muted-foreground/30">:</span>
         </div>
         <Wheel
           items={MINUTES}
@@ -232,9 +179,14 @@ function AlarmClockFace({
         />
       </div>
 
-      {/* AM / PM toggle */}
-      <div className="px-3 pb-3">
-        <div className="glass-soft inline-flex w-full rounded-full p-0.5">
+      {/* Selection highlight bars */}
+      <div className="px-3 pb-2">
+        <div className="relative h-12 rounded-xl bg-primary/8 border border-primary/15 pointer-events-none -mt-14 z-0" />
+      </div>
+
+      {/* AM / PM */}
+      <div className="px-3 pb-3 -mt-1">
+        <div className="glass-soft inline-flex w-full rounded-full p-1">
           {(["AM", "PM"] as const).map((p) => {
             const active = period === p;
             return (
@@ -244,10 +196,8 @@ function AlarmClockFace({
                 onClick={() => onPeriod(p)}
                 aria-pressed={active}
                 className={cn(
-                  "h-6 flex-1 rounded-full text-[11px] font-semibold transition-all",
-                  active
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
+                  "h-8 flex-1 rounded-full text-xs font-bold transition-all",
+                  active ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 )}
               >
                 {p}
@@ -261,76 +211,106 @@ function AlarmClockFace({
 }
 
 // ─────────────────────────────────────────────────────────────
-// Wheel — scrollable list with snap, like an alarm clock
+// Wheel — scrollable list with CSS scroll-snap
 // ─────────────────────────────────────────────────────────────
 
-interface WheelProps {
+const ITEM_HEIGHT = 48; // px — bigger for easier touch targets
+
+function Wheel({
+  items,
+  selected,
+  onSelect,
+  formatItem,
+  ariaLabel,
+}: {
   items: number[];
   selected: number;
   onSelect: (v: number) => void;
   formatItem?: (v: number) => string;
   ariaLabel?: string;
-}
-
-function Wheel({ items, selected, onSelect, formatItem, ariaLabel }: WheelProps) {
+}) {
   const ref = React.useRef<HTMLDivElement>(null);
-  const itemHeight = 32; // px per item
 
-  // Scroll to the selected item when the popover opens or value changes
-  React.useEffect(() => {
+  // Scroll to selected when component mounts or selected changes
+  React.useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const idx = items.indexOf(selected);
     if (idx >= 0) {
-      el.scrollTo({ top: idx * itemHeight, behavior: "auto" });
+      // Direct set — no smooth scroll for initial positioning
+      el.scrollTop = idx * ITEM_HEIGHT;
     }
   }, [selected, items]);
 
-  // Padding items so the first/last can center
-  const pad = 2;
+  // Handle scroll end → snap to nearest + fire onSelect
+  const scrollTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleScroll = React.useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (scrollTimer.current) clearTimeout(scrollTimer.current);
+    scrollTimer.current = setTimeout(() => {
+      const idx = Math.round(el.scrollTop / ITEM_HEIGHT);
+      const clamped = Math.max(0, Math.min(items.length - 1, idx));
+      const target = clamped * ITEM_HEIGHT;
+      if (el.scrollTop !== target) {
+        el.scrollTo({ top: target, behavior: "smooth" });
+      }
+      if (items[clamped] !== selected) {
+        onSelect(items[clamped]);
+      }
+    }, 80);
+  }, [items, selected, onSelect]);
+
+  React.useEffect(() => {
+    return () => {
+      if (scrollTimer.current) clearTimeout(scrollTimer.current);
+    };
+  }, []);
 
   return (
     <div
       ref={ref}
+      onScroll={handleScroll}
       role="listbox"
       aria-label={ariaLabel}
-      className={cn(
-        "flex-1 overflow-y-auto no-scrollbar rounded-xl",
-        "snap-y snap-mandatory",
-        "h-[112px] py-[40px] scroll-smooth"
-      )}
-      style={{ scrollPaddingTop: "40px" }}
+      className="flex-1 overflow-y-auto rounded-xl snap-y snap-mandatory"
+      style={{
+        height: ITEM_HEIGHT * 3, // show 3 items
+        scrollPaddingTop: ITEM_HEIGHT,
+        WebkitOverflowScrolling: "touch",
+        scrollbarWidth: "none",
+        msOverflowStyle: "none",
+      }}
     >
-      {/* Top padding */}
-      {Array.from({ length: pad }).map((_, i) => (
-        <div key={`pad-top-${i}`} style={{ height: itemHeight }} />
-      ))}
-      {items.map((v) => {
-        const active = v === selected;
-        return (
-          <button
-            key={v}
-            type="button"
-            role="option"
-            aria-selected={active}
-            onClick={() => onSelect(v)}
-            className={cn(
-              "w-full snap-center flex items-center justify-center transition-all duration-150",
-              "text-sm font-semibold tabular-nums rounded-lg",
-              active
-                ? "text-primary text-lg scale-110"
-                : "text-muted-foreground/50 hover:text-foreground"
-            )}
-            style={{ height: itemHeight }}
-          >
-            {formatItem ? formatItem(v) : v}
-          </button>
-        );
-      })}
-      {/* Bottom padding */}
-      {Array.from({ length: pad }).map((_, i) => (
-        <div key={`pad-bot-${i}`} style={{ height: itemHeight }} />
-      ))}
+      <style>{`{::-webkit-scrollbar{display:none}}`}</style>
+      <div ref={(el) => { if (el) el.style.setProperty('scrollbar-width', 'none'); }}>
+        <div style={{ height: ITEM_HEIGHT }} /> {/* top pad */}
+        {items.map((v) => {
+          const active = v === selected;
+          return (
+            <button
+              key={v}
+              type="button"
+              role="option"
+              aria-selected={active}
+              onClick={() => {
+                onSelect(v);
+                ref.current?.scrollTo({ top: items.indexOf(v) * ITEM_HEIGHT, behavior: "smooth" });
+              }}
+              className={cn(
+                "w-full snap-center flex items-center justify-center transition-all duration-150 rounded-lg",
+                active
+                  ? "text-primary text-2xl font-bold scale-110"
+                  : "text-muted-foreground/40 text-xl font-semibold hover:text-foreground"
+              )}
+              style={{ height: ITEM_HEIGHT }}
+            >
+              {formatItem ? formatItem(v) : v}
+            </button>
+          );
+        })}
+        <div style={{ height: ITEM_HEIGHT }} /> {/* bottom pad */}
+      </div>
     </div>
   );
 }
