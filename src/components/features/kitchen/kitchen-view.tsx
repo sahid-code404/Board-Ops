@@ -21,7 +21,6 @@ import {
   Search,
   ChevronDown,
   ShieldCheck,
-  Ban,
 } from "lucide-react";
 import { GlassCard } from "@/components/glass/glass-card";
 import { GlassButton } from "@/components/glass/glass-button";
@@ -77,6 +76,7 @@ type UserMealStatus = {
   offCount: number;
   monthConsumed: number;
   meals: UserMealItem[];
+  notEnrolled?: boolean;
 };
 
 type KitchenResponse = {
@@ -173,9 +173,6 @@ export function KitchenView() {
   const [mealSearch, setMealSearch] = useState("");
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [overrideLoading, setOverrideLoading] = useState<string | null>(null);
-  // Tracks which unlocked (read-only) meal toggle the admin just tried to click,
-  // so we can show a red "Not clickable" indicator. Keyed by `${userId}_${mealId}`.
-  const [notClickableHint, setNotClickableHint] = useState<string | null>(null);
 
   const overrideMutation = useMutation({
     mutationFn: async (params: {
@@ -375,6 +372,13 @@ export function KitchenView() {
                                 <p className="text-[11px] text-muted-foreground">Room {u.room}</p>
                               )}
                             </div>
+                            {/* Before Enrollment badge — shown when the selected date
+                                is before this user's registration date */}
+                            {u.notEnrolled && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] bg-muted/60 text-muted-foreground px-1.5 py-0.5 rounded-full font-medium shrink-0">
+                                <UserPlus className="h-2.5 w-2.5" /> Before Enrollment
+                              </span>
+                            )}
                             {/* Expand chevron */}
                             <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
                               <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -392,6 +396,21 @@ export function KitchenView() {
                                 className="overflow-hidden"
                               >
                                 <div className="px-3 pb-3 space-y-2">
+                                  {/* Before Enrollment banner — shown when the selected date
+                                      is before this user's registration date */}
+                                  {u.notEnrolled && (
+                                    <div className="flex items-center gap-2 p-2.5 rounded-2xl bg-muted/40 ring-1 ring-border/40">
+                                      <div className="grid place-items-center h-8 w-8 rounded-xl bg-muted/60 text-muted-foreground shrink-0">
+                                        <UserPlus className="h-4 w-4" />
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className="text-[11px] font-medium text-foreground/80 leading-tight">Before Enrollment</p>
+                                        <p className="text-[10px] text-muted-foreground leading-tight">
+                                          This date is before the user registered. Meals default to OFF.
+                                        </p>
+                                      </div>
+                                    </div>
+                                  )}
                                   {/* Monthly tally — total meals consumed this month */}
                                   <div className="flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-primary/10 ring-1 ring-primary/20">
                                     <div className="flex items-center gap-2 min-w-0">
@@ -419,7 +438,7 @@ export function KitchenView() {
                                     // override them. Admin override is only available on LOCKED meals.
                                     const isReadOnly = !isLocked;
                                     const hintKey = `${u.userId}_${m.mealId}`;
-                                    const showNotClickable = notClickableHint === hintKey;
+                                    const isLoading = overrideLoading === hintKey && !isReadOnly;
                                     return (
                                       <div
                                         key={m.mealId}
@@ -435,7 +454,6 @@ export function KitchenView() {
                                         {/* Meal name + status labels */}
                                         <div className="flex-1 min-w-0">
                                           <p className="text-sm font-medium truncate">{m.mealName}</p>
-                                          {/* Status labels — Locked / Overridden / Read-only / Not clickable */}
                                           <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                                             {isLocked && (
                                               <span className="text-[10px] text-destructive flex items-center gap-0.5">
@@ -447,23 +465,16 @@ export function KitchenView() {
                                                 <ShieldCheck className="h-2.5 w-2.5" /> Overridden
                                               </span>
                                             )}
-                                            {isReadOnly && !showNotClickable && (
+                                            {isReadOnly && (
                                               <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
                                                 Read-only — user can edit
                                               </span>
                                             )}
-                                            {showNotClickable && (
-                                              <span className="inline-flex items-center gap-0.5 text-[10px] text-destructive font-semibold animate-in fade-in zoom-in duration-150">
-                                                <Ban className="h-2.5 w-2.5" /> Not clickable
-                                              </span>
-                                            )}
                                           </div>
                                         </div>
-                                        {/* Toggle — shows current ON/OFF state.
+                                        {/* Toggle
                                             - LOCKED meals: admin can override (clickable).
-                                            - UNLOCKED meals: read-only. Clicking shows a red "Not clickable"
-                                              indicator (red ring on the toggle + red Ban badge) instead of
-                                              toggling. The user still controls unlocked meals themselves. */}
+                                            - UNLOCKED meals: read-only. Clicking shows a toast with the reason. */}
                                         <div className="relative shrink-0">
                                           <button
                                             type="button"
@@ -474,15 +485,11 @@ export function KitchenView() {
                                             }
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              // Read-only guard: intercept the click and surface a red
-                                              // "Not clickable" indicator instead of toggling.
                                               if (isReadOnly) {
-                                                setNotClickableHint(hintKey);
-                                                window.setTimeout(() => {
-                                                  setNotClickableHint((cur) =>
-                                                    cur === hintKey ? null : cur
-                                                  );
-                                                }, 1500);
+                                                toast.error(
+                                                  `${m.mealName} is not locked yet. The user can still change it before the cutoff — admin override is only available after the meal is locked.`,
+                                                  { duration: 4000 }
+                                                );
                                                 return;
                                               }
                                               const action = isOn ? "TURN_OFF" : "TURN_ON";
@@ -498,9 +505,7 @@ export function KitchenView() {
                                               isOn ? "bg-success shadow-sm shadow-success/30" : "bg-muted",
                                               isReadOnly &&
                                                 "opacity-70 cursor-not-allowed ring-2 ring-destructive/50 ring-offset-1 ring-offset-background",
-                                              !isReadOnly &&
-                                                overrideLoading === hintKey &&
-                                                "opacity-50 cursor-wait"
+                                              isLoading && "opacity-50 cursor-wait"
                                             )}
                                           >
                                             <span
@@ -510,13 +515,6 @@ export function KitchenView() {
                                               )}
                                             />
                                           </button>
-                                          {/* Red "Not clickable" badge on the toggle corner —
-                                              appears when the admin attempts to click a read-only toggle. */}
-                                          {showNotClickable && (
-                                            <span className="absolute -top-1.5 -right-1.5 grid place-items-center h-4 w-4 rounded-full bg-destructive text-destructive-foreground shadow-sm animate-in fade-in zoom-in duration-150 pointer-events-none">
-                                              <Ban className="h-2.5 w-2.5" />
-                                            </span>
-                                          )}
                                         </div>
                                       </div>
                                     );
