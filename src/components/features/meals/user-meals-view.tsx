@@ -18,6 +18,8 @@ import {
   CalendarDays,
   List,
   Sun,
+  UserPlus,
+  ShieldCheck,
 } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
@@ -54,9 +56,11 @@ type FlatEntry = {
   mealColor: string;
   serviceDate: string;
   status: string;
+  originalState: string;
+  overridden: boolean;
   editableUntil: string;
   locked: boolean;
-  overrideFlag: boolean;
+  preRegistration: boolean;
   startTime: string;
   endTime: string;
   mealType: string;
@@ -65,9 +69,12 @@ type FlatEntry = {
 type MealEntry = {
   id: string;
   status: string;
+  originalState: string;
+  overridden: boolean;
   locked: boolean;
   editableUntil: string;
   serviceDate: string;
+  preRegistration: boolean;
   meal: {
     id: string;
     name: string;
@@ -83,6 +90,7 @@ type MealEntry = {
 type EntriesResponse = {
   meals: MealConfig[];
   byDate: Record<string, FlatEntry[]>;
+  registrationDate?: string;
 };
 
 type ApiResponse<T> = { success: boolean; data: T };
@@ -181,6 +189,9 @@ export function UserMealsView() {
         return {
           id: f.id, status: f.status, locked: f.locked,
           editableUntil: f.editableUntil, serviceDate: f.serviceDate,
+          originalState: f.originalState,
+          overridden: f.overridden,
+          preRegistration: f.preRegistration,
           meal: {
             id: f.mealId, name: f.mealName, displayName: f.mealDisplayName,
             icon: f.mealIcon, color: f.mealColor,
@@ -211,6 +222,9 @@ export function UserMealsView() {
       return {
         id: f.id, status: f.status, locked: f.locked,
         editableUntil: f.editableUntil, serviceDate: f.serviceDate,
+        originalState: f.originalState,
+        overridden: f.overridden,
+        preRegistration: f.preRegistration,
         meal: {
           id: f.mealId, name: f.mealName, displayName: f.mealDisplayName,
           icon: f.mealIcon, color: f.mealColor,
@@ -241,6 +255,30 @@ export function UserMealsView() {
     const locked = dayEntries.filter((e) => e.locked || e.status === "LOCKED").length;
     return { on, off, locked };
   }, [dayEntries]);
+
+  // Registration date — used for the pre-reg toast message
+  const registrationDate = useMemo(() => {
+    const raw = monthData?.registrationDate ?? dayData?.registrationDate;
+    return raw ? new Date(raw) : null;
+  }, [monthData, dayData]);
+
+  // Whether the selected day (day view) is before registration
+  const isDayBeforeRegistration = useMemo(() => {
+    if (!registrationDate) return false;
+    const sel = new Date(selectedDay);
+    sel.setHours(0, 0, 0, 0);
+    return sel < registrationDate;
+  }, [registrationDate, selectedDay]);
+
+  // Short toast shown when a user tries to toggle a pre-registration meal
+  const showPreRegToast = useCallback(() => {
+    const dateLabel = registrationDate
+      ? format(registrationDate, "d MMM yyyy")
+      : "your enrollment";
+    toast.error(
+      `You enrolled on ${dateLabel} — meals before this date can only be changed by an admin.`
+    );
+  }, [registrationDate]);
 
   const handleToggleDay = useCallback((dateStr: string) => {
     setExpandedDay((prev) => (prev === dateStr ? null : dateStr));
@@ -468,6 +506,7 @@ export function UserMealsView() {
                       onToggleMeal={(entryId, status) =>
                         toggleMutation.mutate({ entryId, status })
                       }
+                      onPreRegToggle={showPreRegToast}
                       loading={toggleMutation.isPending}
                     />
                   </motion.div>
@@ -591,6 +630,7 @@ export function UserMealsView() {
                       onToggle={(newStatus) =>
                         toggleMutation.mutate({ entryId: entry.id, status: newStatus })
                       }
+                      onPreRegToggle={showPreRegToast}
                       loading={toggleMutation.isPending}
                     />
                   </motion.div>
@@ -609,16 +649,19 @@ export function UserMealsView() {
 // ─────────────────────────────────────────────────────────────
 
 const DayRow = memo(function DayRow({
-  dateStr, date, entries, isExpanded, onToggleExpand, onToggleMeal, loading,
+  dateStr, date, entries, isExpanded, onToggleExpand, onToggleMeal, onPreRegToggle, loading,
 }: {
   dateStr: string; date: Date; entries: MealEntry[];
   isExpanded: boolean; onToggleExpand: () => void;
-  onToggleMeal: (entryId: string, status: "ON" | "OFF") => void; loading: boolean;
+  onToggleMeal: (entryId: string, status: "ON" | "OFF") => void;
+  onPreRegToggle: () => void;
+  loading: boolean;
 }) {
   const isToday = toDateString(new Date()) === dateStr;
   const onCount = entries.filter((e) => e.status === "ON" || e.status === "LOCKED").length;
   const offCount = entries.filter((e) => e.status === "OFF").length;
   const lockedCount = entries.filter((e) => e.locked || e.status === "LOCKED").length;
+  const overriddenCount = entries.filter((e) => e.overridden).length;
 
   return (
     <GlassCard className="overflow-hidden" hover={false}>
@@ -654,6 +697,11 @@ const DayRow = memo(function DayRow({
                 <Lock className="h-2.5 w-2.5" /> {lockedCount}
               </span>
             )}
+            {overriddenCount > 0 && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-full font-medium">
+                <ShieldCheck className="h-2.5 w-2.5" /> {overriddenCount} Admin
+              </span>
+            )}
           </div>
         </div>
         <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
@@ -675,6 +723,7 @@ const DayRow = memo(function DayRow({
                   key={entry.id}
                   entry={entry}
                   onToggle={(newStatus) => onToggleMeal(entry.id, newStatus)}
+                  onPreRegToggle={onPreRegToggle}
                   loading={loading}
                 />
               ))}
@@ -691,12 +740,26 @@ const DayRow = memo(function DayRow({
 // ─────────────────────────────────────────────────────────────
 
 const MealCard = memo(function MealCard({
-  entry, onToggle, loading,
+  entry, onToggle, onPreRegToggle, loading,
 }: {
-  entry: MealEntry; onToggle: (status: "ON" | "OFF") => void; loading: boolean;
+  entry: MealEntry;
+  onToggle: (status: "ON" | "OFF") => void;
+  onPreRegToggle: () => void;
+  loading: boolean;
 }) {
   const isOn = entry.status === "ON" || entry.status === "LOCKED";
   const isLocked = entry.locked || entry.status === "LOCKED";
+  const isPreReg = entry.preRegistration;
+  const isOverridden = entry.overridden;
+  const disabled = (isLocked && !isPreReg) || (isPreReg && isOverridden) || loading;
+
+  const handleClick = () => {
+    if (isPreReg && !isOverridden) {
+      onPreRegToggle();
+      return;
+    }
+    if (!disabled) onToggle(isOn ? "OFF" : "ON");
+  };
 
   return (
     <div className="flex items-center gap-3 p-2.5 rounded-2xl glass-soft">
@@ -705,17 +768,22 @@ const MealCard = memo(function MealCard({
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{entry.meal.displayName}</p>
-        <div className="flex items-center gap-2 mt-0.5">
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           <span className="text-[11px] text-muted-foreground">{to12h(entry.meal.startTime)} – {to12h(entry.meal.endTime)}</span>
-          {isLocked && <Lock className="h-2.5 w-2.5 text-destructive" />}
+          {isLocked && !isPreReg && <Lock className="h-2.5 w-2.5 text-destructive" />}
+          {isOverridden && (
+            <span className="inline-flex items-center gap-0.5 text-[9px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-full font-medium">
+              <ShieldCheck className="h-2.5 w-2.5" /> Admin
+            </span>
+          )}
         </div>
       </div>
       <button
-        onClick={() => !isLocked && onToggle(isOn ? "OFF" : "ON")}
-        disabled={isLocked || loading}
-        className={cn("relative inline-flex h-7 w-12 items-center rounded-full transition-all shrink-0", isOn ? "bg-success shadow-sm shadow-success/30" : "bg-muted", (isLocked || loading) && "opacity-50 cursor-not-allowed")}
+        onClick={handleClick}
+        disabled={disabled}
+        className={cn("relative inline-flex h-7 w-12 items-center rounded-full transition-[margin,transform] duration-200 ease-out shrink-0", isOn ? "bg-success shadow-sm shadow-success/30" : "bg-muted", disabled && "opacity-50 cursor-not-allowed")}
       >
-        <motion.span layout transition={{ type: "spring", stiffness: 500, damping: 30 }} className={cn("inline-block h-5 w-5 rounded-full bg-white shadow-sm", isOn ? "ml-auto mr-1" : "ml-1")} />
+        <span className={cn("inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-[margin,transform] duration-200 ease-out", isOn ? "ml-auto mr-1" : "ml-1")} />
       </button>
     </div>
   );
@@ -726,12 +794,26 @@ const MealCard = memo(function MealCard({
 // ─────────────────────────────────────────────────────────────
 
 const DayMealCard = memo(function DayMealCard({
-  entry, onToggle, loading,
+  entry, onToggle, onPreRegToggle, loading,
 }: {
-  entry: MealEntry; onToggle: (status: "ON" | "OFF") => void; loading: boolean;
+  entry: MealEntry;
+  onToggle: (status: "ON" | "OFF") => void;
+  onPreRegToggle: () => void;
+  loading: boolean;
 }) {
   const isOn = entry.status === "ON" || entry.status === "LOCKED";
   const isLocked = entry.locked || entry.status === "LOCKED";
+  const isPreReg = entry.preRegistration;
+  const isOverridden = entry.overridden;
+  const disabled = (isLocked && !isPreReg) || (isPreReg && isOverridden) || loading;
+
+  const handleClick = () => {
+    if (isPreReg && !isOverridden) {
+      onPreRegToggle();
+      return;
+    }
+    if (!disabled) onToggle(isOn ? "OFF" : "ON");
+  };
 
   return (
     <GlassCard className="p-4" hover={false}>
@@ -741,24 +823,29 @@ const DayMealCard = memo(function DayMealCard({
         </div>
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold truncate">{entry.meal.displayName}</h3>
-          <div className="flex items-center gap-2 mt-0.5">
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             <span className="text-xs text-muted-foreground">{to12h(entry.meal.startTime)} – {to12h(entry.meal.endTime)}</span>
-            {isLocked && <span className="inline-flex items-center gap-0.5 text-[10px] text-destructive"><Lock className="h-2.5 w-2.5" /> Locked</span>}
+            {isLocked && !isPreReg && <span className="inline-flex items-center gap-0.5 text-[10px] text-destructive"><Lock className="h-2.5 w-2.5" /> Locked</span>}
+            {isOverridden && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-full font-medium">
+                <ShieldCheck className="h-2.5 w-2.5" /> Overridden by admin
+              </span>
+            )}
           </div>
         </div>
         <button
-          onClick={() => !isLocked && onToggle(isOn ? "OFF" : "ON")}
-          disabled={isLocked || loading}
-          className={cn("relative inline-flex h-8 w-14 items-center rounded-full transition-all shrink-0", isOn ? "bg-success shadow-md shadow-success/30" : "bg-muted", (isLocked || loading) && "opacity-50 cursor-not-allowed")}
+          onClick={handleClick}
+          disabled={disabled}
+          className={cn("relative inline-flex h-8 w-14 items-center rounded-full transition-[margin,transform] duration-200 ease-out shrink-0", isOn ? "bg-success shadow-md shadow-success/30" : "bg-muted", disabled && "opacity-50 cursor-not-allowed")}
         >
-          <motion.span layout transition={{ type: "spring", stiffness: 500, damping: 30 }} className={cn("inline-block h-6 w-6 rounded-full bg-white shadow-md", isOn ? "ml-auto mr-1" : "ml-1")} />
+          <span className={cn("inline-block h-6 w-6 rounded-full bg-white shadow-md transition-[margin,transform] duration-200 ease-out", isOn ? "ml-auto mr-1" : "ml-1")} />
         </button>
       </div>
       <div className="flex items-center justify-between mt-3">
         <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-medium", isOn ? "bg-success/15 text-success" : "bg-muted text-muted-foreground")}>
-          {isLocked ? "🔒 Locked" : isOn ? "ON" : "OFF"}
+          {isLocked && !isPreReg ? "🔒 Locked" : isOn ? "ON" : "OFF"}
         </span>
-        {!isLocked && entry.meal.cutoffTime && (
+        {!isLocked && !isPreReg && entry.meal.cutoffTime && (
           <span className="text-[10px] text-muted-foreground">Cutoff: {to12h(entry.meal.cutoffTime)}</span>
         )}
       </div>

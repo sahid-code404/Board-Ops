@@ -62,8 +62,9 @@ type UserMealItem = {
   mealIcon: string;
   mealColor: string;
   status: string;
+  originalState: string;
   locked: boolean;
-  overrideFlag: boolean;
+  overridden: boolean;
 };
 
 type UserMealStatus = {
@@ -412,7 +413,7 @@ export function KitchenView() {
                                   {u.meals.map((m) => {
                                     const isOn = m.status === "ON" || m.status === "LOCKED";
                                     const isLocked = m.locked || m.status === "LOCKED";
-                                    const isOverridden = m.overrideFlag;
+                                    const isOverridden = m.overridden;
                                     // Unlocked meals are READ-ONLY for the admin: the user can still
                                     // toggle these themselves before the cutoff, so the admin must not
                                     // override them. Admin override is only available on LOCKED meals.

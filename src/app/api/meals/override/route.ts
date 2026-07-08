@@ -3,7 +3,7 @@ import { requireRole } from "@/lib/session";
 import { ok, err, handleApiError } from "@/lib/api-response";
 import { logAudit } from "@/lib/audit";
 import { createNotification } from "@/lib/notify";
-import { computeEditableUntil } from "@/lib/meal-engine";
+import { computeEditableUntil, isPreRegistration, isLocked } from "@/lib/meal-engine";
 import { z } from "zod";
 
 const overrideSchema = z.object({
@@ -14,6 +14,20 @@ const overrideSchema = z.object({
   reason: z.string().min(3, "Reason is required"),
 });
 
+/**
+ * POST /api/meals/override
+ *
+ * Admin override — modifies ONLY the Current State (status) of a meal entry.
+ * The Original State (originalState) is NEVER modified by admins; it always
+ * reflects the user's own final selection.
+ *
+ * Override status is calculated dynamically (status !== originalState) — it is
+ * NEVER stored in the database.
+ *
+ * Admins can ONLY override LOCKED meals (past cutoff). Unlocked meals can
+ * still be changed by the user themselves.
+ * Exception: if no entry exists yet (e.g. pre-reg date), admin can create one.
+ */
 export async function POST(req: Request) {
   try {
     const admin = await requireRole("ADMIN");
@@ -23,26 +37,63 @@ export async function POST(req: Request) {
     const meal = await db.mealConfiguration.findUnique({ where: { id: data.mealId } });
     if (!meal) return err("Meal not found", 404);
 
+    // Fetch the target user to determine if this is a pre-registration override.
+    // Pre-reg meals ALWAYS default to OFF, regardless of the meal config's
+    // defaultState. The user wasn't enrolled yet, so their "original selection"
+    // is OFF (not enrolled = no meal).
+    const targetUser = await db.user.findUnique({
+      where: { id: data.userId },
+      select: { createdAt: true },
+    });
+    const isPreReg = targetUser
+      ? isPreRegistration(data.serviceDate, targetUser.createdAt)
+      : false;
+
     const entry = await db.mealEntry.findFirst({
       where: { userId: data.userId, mealId: data.mealId, serviceDate: data.serviceDate },
     });
 
+    // PERMISSION: Admins can ONLY override LOCKED meals (past cutoff).
+    // Unlocked meals can still be changed by the user themselves before the
+    // cutoff — the admin must wait until the meal is locked.
+    // Exception: if no entry exists yet (e.g. pre-reg date), admin can create one.
+    if (entry) {
+      const mealLocked = entry.locked || entry.status === "LOCKED" || isLocked(entry.editableUntil);
+      if (!mealLocked) {
+        return err(
+          "This meal is not locked yet. The user can still change it before the cutoff. Admin override is only available after the meal is locked.",
+          422
+        );
+      }
+    }
+
+    // Determine the new Current State based on the action
+    const newStatus =
+      data.action === "TURN_ON"
+        ? "ON"
+        : data.action === "TURN_OFF"
+          ? "OFF"
+          : data.action === "LOCK"
+            ? "LOCKED"
+            : data.action === "UNLOCK"
+              ? entry?.status === "LOCKED" ? "ON" : (entry?.status || "ON")
+              : "ON";
+
     if (!entry) {
+      // No existing entry — create one. The Original State is:
+      //   - "OFF" for pre-registration dates (user wasn't enrolled — no meal)
+      //   - meal.defaultState for normal dates (the user never made a selection)
       const editableUntil = computeEditableUntil(meal, data.serviceDate);
-      const newStatus = data.action === "TURN_OFF" ? "OFF" : "ON";
-      const originalState = meal.defaultState === "ON" ? "ON" : "OFF";
-      // Override is TRUE only if current differs from original
-      const overrideFlag = newStatus !== originalState;
+      const originalState = isPreReg ? "OFF" : (meal.defaultState === "ON" ? "ON" : "OFF");
       const newEntry = await db.mealEntry.create({
         data: {
           userId: data.userId,
           mealId: data.mealId,
           serviceDate: data.serviceDate,
           status: newStatus,
-          originalState,
+          originalState, // preserve original state (never modified by admin)
           editableUntil,
-          locked: false,
-          overrideFlag,
+          locked: data.action === "LOCK",
           updatedBy: admin.id,
         },
       });
@@ -69,37 +120,21 @@ export async function POST(req: Request) {
         action: "MEAL_OVERRIDE",
         entity: "MealEntry",
         entityId: newEntry.id,
-        newValue: data,
+        newValue: { ...data, originalState, newStatus },
       });
       return ok(newEntry);
     }
 
+    // Existing entry — update ONLY the Current State. Original State is preserved.
     const oldStatus = entry.status;
-    // Determine the new status based on the action
-    const newStatus =
-      data.action === "TURN_ON"
-        ? "ON"
-        : data.action === "TURN_OFF"
-          ? "OFF"
-          : data.action === "LOCK"
-            ? "LOCKED"
-            : entry.status === "LOCKED"
-              ? "ON"
-              : entry.status;
-
-    // Override is computed dynamically: compare new status with the original state.
-    // If they match, the meal is back to its original system value — no override.
-    // If they differ, the meal has been overridden from its original state.
     const originalState = entry.originalState || (meal.defaultState === "ON" ? "ON" : "OFF");
-    const overrideFlag = newStatus !== originalState;
 
     const updated = await db.mealEntry.update({
       where: { id: entry.id },
       data: {
         status: newStatus,
-        originalState, // preserve the original state (never change it)
-        overrideFlag,
-        locked: data.action === "LOCK" ? true : false,
+        originalState, // NEVER change — admin only modifies Current State
+        locked: data.action === "LOCK" ? true : data.action === "UNLOCK" ? false : entry.locked,
         updatedBy: admin.id,
       },
     });
@@ -138,7 +173,7 @@ export async function POST(req: Request) {
       action: "MEAL_OVERRIDE",
       entity: "MealEntry",
       entityId: entry.id,
-      oldValue: { status: oldStatus },
+      oldValue: { status: oldStatus, originalState },
       newValue: { status: updated.status, action: data.action, reason: data.reason },
     });
     return ok(updated);

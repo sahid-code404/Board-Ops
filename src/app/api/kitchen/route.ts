@@ -1,7 +1,38 @@
 import { db } from "@/lib/db";
 import { requireAuth, requireRole } from "@/lib/session";
 import { ok, handleApiError } from "@/lib/api-response";
-import { isLocked } from "@/lib/meal-engine";
+import { isLocked, isPreRegistration } from "@/lib/meal-engine";
+
+// ── Counting helpers ──
+// The admin kitchen only counts meals that are CONFIRMED:
+//   - Locked (past cutoff — the user can no longer change it), OR
+//   - Admin-overridden (the admin explicitly set the Current State)
+// Unlocked meals that the user can still toggle are NOT counted.
+// Admin-overridden OFF meals are NOT counted toward "off" either.
+
+/** Dynamic override check: Current State !== Original State */
+function isOverridden(e: { status: string; originalState: string }): boolean {
+  const effective = e.status === "LOCKED" ? "ON" : e.status;
+  return effective !== e.originalState;
+}
+
+/** Is this entry effectively locked (user can no longer change it)? */
+function isEntryLocked(e: { locked: boolean; status: string; editableUntil: Date }, isPastDate: boolean): boolean {
+  if (isPastDate) return true;
+  return e.locked || e.status === "LOCKED" || isLocked(e.editableUntil);
+}
+
+/** Counts toward "on": status is ON/LOCKED AND (locked OR overridden) */
+function countsAsOn(e: { status: string; originalState: string; locked: boolean; editableUntil: Date }, isPastDate: boolean): boolean {
+  if (e.status !== "ON" && e.status !== "LOCKED") return false;
+  return isEntryLocked(e, isPastDate) || isOverridden(e);
+}
+
+/** Counts toward "off": status is OFF AND locked AND NOT overridden */
+function countsAsOff(e: { status: string; originalState: string; locked: boolean; editableUntil: Date }, isPastDate: boolean): boolean {
+  if (e.status !== "OFF") return false;
+  return isEntryLocked(e, isPastDate) && !isOverridden(e);
+}
 
 /** GET /api/kitchen — meal counts for a specific day + month-to-date totals */
 export async function GET(req: Request) {
@@ -13,6 +44,8 @@ export async function GET(req: Request) {
     const date = url.searchParams.get("date");
     const target = date ? new Date(date) : new Date();
     target.setHours(0, 0, 0, 0);
+
+    const isPastDate = target < new Date(new Date().setHours(0, 0, 0, 0));
 
     const meals = await db.mealConfiguration.findMany({
       where: { status: "ACTIVE" },
@@ -29,16 +62,18 @@ export async function GET(req: Request) {
     const entries = await db.mealEntry.findMany({
       where: { serviceDate: target },
     });
-    // Filter out admin entries
+    // Filter out admin entries.
     const residentEntries = entries.filter((e) => !adminIdSet.has(e.userId));
 
     const guestMeals = await db.guestMeal.findMany({
       where: { serviceDate: target },
     });
 
+    // Daily counts — only count confirmed meals (locked or admin-overridden)
     const counts = meals.map((m) => {
-      const on = residentEntries.filter((e) => e.mealId === m.id && (e.status === "ON" || e.status === "LOCKED")).length;
-      const off = residentEntries.filter((e) => e.mealId === m.id && e.status === "OFF").length;
+      const mealEntries = residentEntries.filter((e) => e.mealId === m.id);
+      const on = mealEntries.filter((e) => countsAsOn(e, isPastDate)).length;
+      const off = mealEntries.filter((e) => countsAsOff(e, isPastDate)).length;
       const guests = guestMeals
         .filter((g) => g.mealId === m.id)
         .reduce((sum, g) => sum + g.guestCount, 0);
@@ -57,16 +92,29 @@ export async function GET(req: Request) {
       };
     });
 
-    // Month-to-date totals — all meal entries + guest meals in the same month
-    // as the selected date
+    // Month-to-date totals
     const monthStart = new Date(target.getFullYear(), target.getMonth(), 1);
     const monthEnd = new Date(target.getFullYear(), target.getMonth() + 1, 0, 23, 59, 59, 999);
 
-    const monthEntries = await db.mealEntry.findMany({
+    // Fetch ALL entries for the month (we need locked + originalState to compute
+    // override status; can't filter in the query since override is dynamic)
+    const monthEntriesRaw = await db.mealEntry.findMany({
       where: {
         serviceDate: { gte: monthStart, lte: monthEnd },
-        status: { in: ["ON", "LOCKED"] },
       },
+    });
+
+    // For month entries, each entry's "locked" status depends on its own
+    // editableUntil vs. now (not the selected date). Use isLocked() directly.
+    const monthOnEntries = monthEntriesRaw.filter((e) => {
+      if (e.status !== "ON" && e.status !== "LOCKED") return false;
+      const entryLocked = isLocked(e.editableUntil) || e.locked || e.status === "LOCKED";
+      return entryLocked || isOverridden(e);
+    });
+    const monthOffEntries = monthEntriesRaw.filter((e) => {
+      if (e.status !== "OFF") return false;
+      const entryLocked = isLocked(e.editableUntil) || e.locked;
+      return entryLocked && !isOverridden(e);
     });
 
     const monthGuestMeals = await db.guestMeal.findMany({
@@ -74,14 +122,9 @@ export async function GET(req: Request) {
     });
 
     const monthTotals = {
-      meals: monthEntries.length + monthGuestMeals.reduce((s, g) => s + g.guestCount, 0),
+      meals: monthOnEntries.length + monthGuestMeals.reduce((s, g) => s + g.guestCount, 0),
       guests: monthGuestMeals.reduce((s, g) => s + g.guestCount, 0),
-      off: await db.mealEntry.count({
-        where: {
-          serviceDate: { gte: monthStart, lte: monthEnd },
-          status: "OFF",
-        },
-      }),
+      off: monthOffEntries.length,
     };
 
     // Count active residents (for percentage calculation — excludes guests)
@@ -92,16 +135,15 @@ export async function GET(req: Request) {
     // Per-user meal status for the selected date — admin can see who's ON/OFF
     const activeResidents = await db.user.findMany({
       where: { status: "ACTIVE", role: "USER" },
-      select: { id: true, name: true, email: true, room: true, avatarUrl: true },
+      select: { id: true, name: true, email: true, room: true, avatarUrl: true, createdAt: true },
       orderBy: { name: "asc" },
     });
 
     const userMealStatus = activeResidents.map((u) => {
-      const userEntries = entries.filter((e) => e.userId === u.id);
-      // Total meals consumed this month (ON + LOCKED entries) — used in the
-      // expanded user card so admin sees a running monthly tally per resident.
-      const monthConsumed = monthEntries.filter((e) => e.userId === u.id).length;
-      const isPastDate = target < new Date(new Date().setHours(0, 0, 0, 0));
+      const userEntries = residentEntries.filter((e) => e.userId === u.id);
+      // Monthly consumed = confirmed ON meals only (locked or admin-overridden)
+      const monthConsumed = monthOnEntries.filter((e) => e.userId === u.id).length;
+      const isPreRegDate = isPreRegistration(target, u.createdAt);
       const mealsOn = meals.map((m) => {
         const entry = userEntries.find((e) => e.mealId === m.id);
         const effectivelyLocked = isPastDate
@@ -109,27 +151,33 @@ export async function GET(req: Request) {
           : entry
             ? (entry.locked || entry.status === "LOCKED" || isLocked(entry.editableUntil))
             : false;
-        // Override logic: compare current status with original state.
-        // This detects admin overrides (admin changed the meal from its original system state).
-        // User toggles also change status, but the override API preserves originalState,
-        // so when a user toggles, originalState stays as the meal config default —
-        // the comparison correctly shows override only when the CURRENT status differs
-        // from what the system originally set.
-        const originalState = entry?.originalState || m.defaultState;
-        const currentStatus = entry?.status || m.defaultState;
-        const isOverridden = currentStatus !== originalState && currentStatus !== "LOCKED";
+        // When no entry exists for a pre-registration date, default to "OFF".
+        const currentStatus = entry?.status || (isPreRegDate ? "OFF" : m.defaultState);
+        // Pre-reg meals ALWAYS default to OFF, regardless of meal config.
+        const originalState = entry?.originalState || (isPreRegDate ? "OFF" : m.defaultState);
+        // Dynamic override calculation: Current State vs Original State.
+        const effectiveStatus = currentStatus === "LOCKED" ? "ON" : currentStatus;
+        const overridden = entry ? effectiveStatus !== originalState : false;
         return {
           mealId: m.id,
           mealName: m.displayName,
           mealIcon: m.icon,
           mealColor: m.color,
           status: currentStatus,
+          originalState,
           locked: effectivelyLocked,
-          overrideFlag: isOverridden,
+          overridden,
         };
       });
-      const onCount = mealsOn.filter((m) => m.status === "ON" || m.status === "LOCKED").length;
-      const offCount = mealsOn.filter((m) => m.status === "OFF").length;
+      // Per-user counts — same rule: only count confirmed meals
+      const onCount = mealsOn.filter((m) => {
+        if (m.status !== "ON" && m.status !== "LOCKED") return false;
+        return m.locked || m.overridden;
+      }).length;
+      const offCount = mealsOn.filter((m) => {
+        if (m.status !== "OFF") return false;
+        return m.locked && !m.overridden;
+      }).length;
       return {
         userId: u.id,
         name: u.name,
@@ -140,6 +188,7 @@ export async function GET(req: Request) {
         offCount,
         monthConsumed,
         meals: mealsOn,
+        notEnrolled: isPreRegDate,
       };
     });
 

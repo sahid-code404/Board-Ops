@@ -49,10 +49,11 @@ type MealEntry = {
   mealIcon: string;
   mealColor: string;
   serviceDate: string;
-  status: string; // ON | OFF | LOCKED | ADMIN_OVERRIDE | ...
+  status: string; // ON | OFF | LOCKED — Current State
+  originalState: string; // ON | OFF — Original State
+  overridden: boolean; // calculated dynamically: effectiveStatus !== originalState
   editableUntil: string;
   locked: boolean;
-  overrideFlag: boolean;
   startTime: string;
   endTime: string;
   mealType: string;
@@ -175,7 +176,7 @@ function StatusChip({ entry }: { entry: MealEntry }) {
       </span>
     );
   }
-  if (entry.overrideFlag) {
+  if (entry.overridden) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-warning/20 px-2 py-0.5 text-[10px] font-semibold text-warning">
         <Sparkles className="h-2.5 w-2.5" /> OVERRIDE

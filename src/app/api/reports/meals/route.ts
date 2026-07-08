@@ -21,7 +21,7 @@ export async function GET(req: Request) {
       db.mealConfiguration.findMany({ where: { status: "ACTIVE" } }),
       db.mealEntry.findMany({
         where: { serviceDate: { gte: start, lte: end }, user: { role: "USER" } },
-        select: { status: true, mealId: true, overrideFlag: true },
+        select: { status: true, mealId: true, originalState: true },
       }),
       db.guestMeal.findMany({
         where: { serviceDate: { gte: start, lte: end } },
@@ -44,7 +44,10 @@ export async function GET(req: Request) {
       const mealEntries = entries.filter((e) => e.mealId === m.id);
       const on = mealEntries.filter((e) => e.status === "ON" || e.status === "LOCKED").length;
       const off = mealEntries.filter((e) => e.status === "OFF").length;
-      const overridden = mealEntries.filter((e) => e.overrideFlag).length;
+      const overridden = mealEntries.filter((e) => {
+        const eff = e.status === "LOCKED" ? "ON" : e.status;
+        return eff !== e.originalState;
+      }).length;
       const guests = guestMeals
         .filter((g) => g.mealId === m.id)
         .reduce((s, g) => s + g.guestCount, 0);

@@ -2443,3 +2443,35 @@ Stage Summary:
 - Files created: src/lib/state-machine.ts, src/lib/event-catalog.ts, src/lib/idempotency.ts.
 - Files modified: src/components/layout/{nav-config,command-palette}.tsx (Shield import fix).
 - This completes the PRD's "Final Review" engineering improvements (#1 State Machine, #2 Event Catalog, #4 Idempotency).
+
+---
+Task ID: FIX-REVERTED-FEATURES
+Agent: main (orchestrator)
+Task: Fix errors from reverted code + restore all pre-registration and override features
+
+Work Log:
+- The previous db:push had reverted the schema (overrideFlag was back), and several code files had been reverted to old versions that referenced overrideFlag. Fixed all of them:
+
+Backend fixes:
+- `prisma/schema.prisma`: Removed overrideFlag column again, set defaults to "OFF". Pushed with --accept-data-loss. Regenerated Prisma Client.
+- `src/lib/meal-engine.ts`: Re-added `getRegistrationDate()` and `isPreRegistration()` functions (were missing).
+- `src/app/api/meals/entries/route.ts`: Rewrote with full pre-reg logic (self-healing, skip-creation, hide-non-overridden, registrationDate response, overridden/preRegistration fields).
+- `src/app/api/meals/toggle/route.ts`: Re-added pre-reg guard in both PATCH and POST handlers.
+- `src/app/api/meals/override/route.ts`: Rewrote with all features: pre-reg handling (originalState=OFF for pre-reg), lock check (admin can only override locked meals), no overrideFlag writes.
+- `src/app/api/kitchen/route.ts`: Rewrote with dynamic override calculation, pre-reg handling, confirmed-meals counting (only locked or overridden), notEnrolled flag.
+- `src/app/api/reports/meals/route.ts`: Fixed select to use originalState instead of overrideFlag, dynamic override count.
+
+Frontend fixes:
+- `src/components/features/meals/user-meals-view.tsx`: Updated types (FlatEntry + MealEntry) to use originalState/overridden/preRegistration instead of overrideFlag. Added ShieldCheck + UserPlus imports. Added registrationDate memo, isDayBeforeRegistration memo, showPreRegToast callback. Updated DayRow (added overriddenCount badge, onPreRegToggle prop). Updated MealCard (pre-reg toast, override badge, CSS transition toggle). Updated DayMealCard (same features). Updated all render calls to pass onPreRegToggle.
+- `src/components/features/kitchen/kitchen-view.tsx`: Updated UserMealItem type to use originalState/overridden instead of overrideFlag. Changed isOverridden to use m.overridden.
+- `src/components/features/calendar/calendar-view.tsx`: Updated MealEntry type to use originalState/overridden instead of overrideFlag. Changed StatusChip to use entry.overridden.
+
+Stage Summary:
+- All overrideFlag references eliminated (grep confirms 0 remaining).
+- All APIs tested and returning 200:
+  * Kitchen: 200 — returns overridden, notEnrolled, originalState fields
+  * Entries: 200 — returns registrationDate, overridden, preRegistration fields; pre-reg dates hidden
+  * Reports: 200 — dynamic override count working
+  * Override: 200 — creates/updates without overrideFlag, pre-reg handling, lock check
+- `bun run lint`: 0 errors.
+- Server running cleanly.
