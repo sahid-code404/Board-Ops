@@ -14,7 +14,6 @@ export type ViewKey =
   | "funds"
   | "formula-engine"
   | "users"
-  | "reports"
   | "notifications"
   | "settings"
   | "system"

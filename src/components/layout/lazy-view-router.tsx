@@ -44,9 +44,6 @@ const FormulaEngineView = lazy(() =>
 const UsersView = lazy(() =>
   import("@/components/features/users/users-view").then((m) => ({ default: m.UsersView }))
 );
-const ReportsView = lazy(() =>
-  import("@/components/features/reports/reports-view").then((m) => ({ default: m.ReportsView }))
-);
 const NotificationsHubView = lazy(() =>
   import("@/components/features/notifications/notifications-hub-view").then((m) => ({ default: m.NotificationsHubView }))
 );
@@ -116,9 +113,6 @@ const LazyFormulaEngine = memo(() => (
 const LazyUsers = memo(() => (
   <Suspense fallback={<ViewSkeleton />}><UsersView /></Suspense>
 ));
-const LazyReports = memo(() => (
-  <Suspense fallback={<ViewSkeleton />}><ReportsView /></Suspense>
-));
 const LazyNotifications = memo(() => (
   <Suspense fallback={<ViewSkeleton />}><NotificationsHubView /></Suspense>
 ));
@@ -155,7 +149,6 @@ export function LazyViewRouter({
       case "funds": return isAdmin ? <LazyFunds /> : null;
       case "formula-engine": return isAdmin ? <LazyFormulaEngine /> : null;
       case "users": return isAdmin ? <LazyUsers /> : null;
-      case "reports": return isAdmin ? <LazyReports /> : null;
       case "notifications": return <LazyNotifications />;
       case "settings": return isAdmin ? <LazySettings /> : null;
       case "system": return isAdmin ? <LazySystem /> : null;

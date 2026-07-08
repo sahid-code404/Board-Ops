@@ -49,7 +49,6 @@ const ITEMS: PaletteItem[] = [
   { view: "funds", label: "Funds Overview", icon: PiggyBank, keywords: ["fund", "balance", "deposit", "deficit"], roles: ["ADMIN"], group: "Finance" },
   { view: "formula-engine", label: "Formula Engine", icon: Sigma, keywords: ["formula", "variable", "expression", "calculation", "rate", "config", "billing formula"], roles: ["ADMIN"], group: "Admin" },
   { view: "users", label: "User Management", icon: Users, keywords: ["user", "member", "account", "resident", "approve"], roles: ["ADMIN"], group: "Admin" },
-  { view: "reports", label: "Reports & Analytics", icon: BarChart3, keywords: ["report", "analytics", "export", "csv", "financial", "statistics"], roles: ["ADMIN"], group: "Admin" },
   { view: "notifications", label: "Notifications & Announcements", icon: Bell, keywords: ["notification", "alert", "bell", "announcement", "broadcast", "notice", "pinned", "message"], roles: ["ADMIN", "USER"], group: "Admin" },
   { view: "settings", label: "Settings & Policies", icon: Settings, keywords: ["setting", "config", "policy", "policies", "rules", "behavior", "grace", "cutoff", "threshold", "theme", "color", "accent", "appearance", "holiday", "calendar", "festival"], roles: ["ADMIN"], group: "Admin" },
   { view: "system", label: "System (Audit & Tasks)", icon: ScrollText, keywords: ["audit", "log", "history", "trace", "changes", "timeline", "task", "background", "job", "queue", "async", "cleanup", "session"], roles: ["ADMIN"], group: "Admin" },

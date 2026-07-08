@@ -1999,4 +1999,4 @@
   1999→- Core engine (`src/lib/monthly-closing.ts`):
   2000→  * `getReadiness(month, year)` — 7-point checklist: (1) existing cycle status, (2) active residents count, (3) meal entries for period, (4) expenses for period + total, (5) active variables count, (6) meal charge formula validity (warns if invalid/missing — doesn't block), (7) pending payments (informational). Returns `canClose = true` only when no errors and cycle isn't already CLOSED.
 
-[showing lines 1-2000 of 2601; use offset=2001 with limit to continue reading]
+[showing lines 1-2000 of 2446; use offset=2001 with limit to continue reading]

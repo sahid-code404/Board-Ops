@@ -57,7 +57,7 @@ export default function Page() {
   const isAdmin = userRole === "ADMIN" || userRole === "SUPER_ADMIN";
 
   // Permission guard: residents can only access their allowed views
-  const adminOnlyViews = ["meals", "kitchen", "expenses", "funds", "formula-engine", "users", "reports", "settings", "system"];
+  const adminOnlyViews = ["meals", "kitchen", "expenses", "funds", "formula-engine", "users", "settings", "system"];
   const isForbidden = !isAdmin && adminOnlyViews.includes(view);
 
   if (isForbidden) {
