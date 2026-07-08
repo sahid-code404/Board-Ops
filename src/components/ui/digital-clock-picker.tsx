@@ -287,10 +287,33 @@ function ClockDial({
         >
           {/* Outer circle */}
           <circle cx={center} cy={center} r={radius + numberRadius + 4} fill="none" className="stroke-border/30" strokeWidth={1} />
-          {/* Inner circle (selection ring) */}
-          <circle cx={center} cy={center} r={radius + numberRadius + 4} fill="none" className="stroke-primary/10" strokeWidth={2} />
 
-          {/* Hour/minute numbers around the circle */}
+          {/* Pointer line — drawn FIRST (behind numbers) */}
+          {/* Stop short of the number circle so it doesn't overlap */}
+          {(() => {
+            const lineEndRadius = radius - numberRadius - 4;
+            const rad = (pointerAngle - 90) * (Math.PI / 180);
+            const lineEndX = center + lineEndRadius * Math.cos(rad);
+            const lineEndY = center + lineEndRadius * Math.sin(rad);
+            return (
+              <>
+                <line
+                  x1={center}
+                  y1={center}
+                  x2={lineEndX}
+                  y2={lineEndY}
+                  className="stroke-primary"
+                  strokeWidth={3}
+                  strokeLinecap="round"
+                />
+                {/* Center dot */}
+                <circle cx={center} cy={center} r={6} className="fill-primary" />
+                <circle cx={center} cy={center} r={2.5} className="fill-primary-foreground" />
+              </>
+            );
+          })()}
+
+          {/* Hour/minute numbers around the circle — drawn AFTER line (on top) */}
           {values.map((val) => {
             const angle = angleForValue(val);
             const pos = posForAngle(angle);
@@ -323,20 +346,6 @@ function ClockDial({
               </g>
             );
           })}
-
-          {/* Pointer line from center to selected value */}
-          <line
-            x1={center}
-            y1={center}
-            x2={pointerPos.x}
-            y2={pointerPos.y}
-            className="stroke-primary"
-            strokeWidth={2}
-            strokeLinecap="round"
-          />
-          {/* Center dot */}
-          <circle cx={center} cy={center} r={5} className="fill-primary" />
-          <circle cx={center} cy={center} r={2} className="fill-primary-foreground" />
         </svg>
       </div>
 
