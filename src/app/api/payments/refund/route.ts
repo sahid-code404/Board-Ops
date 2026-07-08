@@ -9,10 +9,34 @@ import { z } from "zod";
 
 /** GET /api/payments/refund — lists users with refundable credit.
  *  Credit = (approved payments) − (total billed) − (already refunded).
- *  Includes unlinked payments (direct deposits) and overpayments on bills. */
+ *  Includes unlinked payments (direct deposits) and overpayments on bills.
+ *
+ *  IMPORTANT: Only shows users AFTER bill generation for the current period.
+ *  If no bills exist for the current month, returns an empty list — refunds
+ *  are not available until bills have been generated (the user's overpayment
+ *  can't be confirmed until we know what they actually owe). */
 export async function GET() {
   try {
     await requireRole("ADMIN");
+
+    // Check if bills have been generated for the current period.
+    // If not, return an empty list — don't show refund-eligible users
+    // before bill generation.
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    const currentPeriodBills = await db.bill.count({
+      where: {
+        periodMonth: currentMonth,
+        periodYear: currentYear,
+        deletedAt: null,
+        status: { notIn: ["VOID", "DELETED"] },
+      },
+    });
+    if (currentPeriodBills === 0) {
+      // No bills generated for the current period yet — refunds not available.
+      return ok([]);
+    }
 
     const residents = await db.user.findMany({
       where: { status: "ACTIVE", role: "USER" },

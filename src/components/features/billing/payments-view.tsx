@@ -1034,8 +1034,9 @@ export function PaymentsView() {
               ))}
             </div>
           ) : refundUsers.length === 0 ? (
-            <div className="text-center py-8 text-sm text-muted-foreground">
-              No users have credit balance right now.
+            <div className="text-center py-8 text-sm text-muted-foreground space-y-1">
+              <p>No users with refundable credit right now.</p>
+              <p className="text-[11px]">Refunds are only available after bill generation for the current month.</p>
             </div>
           ) : (
             <div className="space-y-2">
