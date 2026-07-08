@@ -58,12 +58,11 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-type FundFilter = "ALL" | "DUE" | "PAID";
+type FundFilter = "ALL" | "DUE";
 
 const FILTER_LABELS: Record<FundFilter, string> = {
   ALL: "All",
   DUE: "Due",
-  PAID: "Paid",
 };
 
 function formatINR(n: number) {
@@ -103,12 +102,12 @@ export function FundsView() {
     );
   }, [users, search]);
 
-  // Status classification — matches billing page semantics
+  // Status classification — a user is "DUE" if they have bills and an unpaid amount
   const classified = useMemo(() => searchedUsers.map((u) => {
     const isPaid = u.hasBills && u.needToPay === 0;
     const hasDue = u.needToPay > 0;
     const noBills = !u.hasBills;
-    const bucket: FundFilter = noBills ? "PAID" : isPaid ? "PAID" : "DUE";
+    const bucket: FundFilter = hasDue ? "DUE" : "ALL";
     return { ...u, isPaid, hasDue, noBills, bucket };
   }), [searchedUsers]);
 
@@ -116,8 +115,13 @@ export function FundsView() {
   const counts = useMemo(() => ({
     ALL: classified.length,
     DUE: classified.filter((u) => u.bucket === "DUE").length,
-    PAID: classified.filter((u) => u.bucket === "PAID").length,
   }), [classified]);
+
+  // Total deficit users = users with due > 0 (for the 3rd KPI)
+  const totalDeficitUsers = useMemo(
+    () => classified.filter((u) => u.hasDue).length,
+    [classified]
+  );
 
   const filteredUsers = useMemo(() => {
     if (filter === "ALL") return classified;
@@ -226,13 +230,15 @@ export function FundsView() {
             <p className="text-[11px] text-muted-foreground mt-1">Deposit − Expenses</p>
           </GlassCard>
 
-          <GlassCard className="p-4" hover={false}>
-            <div className="grid place-items-center h-10 w-10 rounded-2xl bg-muted/40 text-muted-foreground mb-3">
+          <GlassCard className="p-4" glow="warning" hover={false}>
+            <div className="grid place-items-center h-10 w-10 rounded-2xl bg-warning/15 text-warning mb-3">
               <TrendingDown className="h-5 w-5" />
             </div>
-            <p className="text-xs text-muted-foreground">—</p>
-            <div className="text-2xl font-bold tracking-tight text-muted-foreground">—</div>
-            <p className="text-[11px] text-muted-foreground mt-1">Coming soon</p>
+            <p className="text-xs text-muted-foreground">Deficit Users</p>
+            <div className="text-2xl font-bold tracking-tight tabular-nums">
+              <AnimatedCounter value={totalDeficitUsers} />
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1">Users with due balance</p>
           </GlassCard>
         </div>
       </StaggerItem>
@@ -247,10 +253,10 @@ export function FundsView() {
         />
       </StaggerItem>
 
-      {/* Sort bar — All / Due / Paid (horizontal, scrollable) */}
+      {/* Sort bar — All / Due (horizontal, scrollable) */}
       <StaggerItem>
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-1">
-          {(["ALL", "DUE", "PAID"] as const).map((s) => {
+          {(["ALL", "DUE"] as const).map((s) => {
             const active = filter === s;
             const count = counts[s];
             return (
@@ -272,9 +278,7 @@ export function FundsView() {
                       ? "bg-primary-foreground/20 text-primary-foreground"
                       : s === "DUE"
                         ? "bg-warning text-white"
-                        : s === "PAID"
-                          ? "bg-success text-white"
-                          : "bg-muted-foreground/30 text-white"
+                        : "bg-muted-foreground/30 text-white"
                   )}
                 >
                   {count}
@@ -294,9 +298,7 @@ export function FundsView() {
                 ? "No users match your search."
                 : filter === "DUE"
                   ? "No users with due amounts for this month."
-                  : filter === "PAID"
-                    ? "No settled users for this month."
-                    : "No user data for this month."}
+                  : "No user data for this month."}
             </p>
           </GlassCard>
         ) : (
@@ -333,14 +335,8 @@ export function FundsView() {
                           )}
                         </div>
 
-                        {/* Transaction strip — Total / Deposit / Due (same size, like billing page) */}
+                        {/* Transaction strip — Deposit / Due only */}
                         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 mt-2">
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</span>
-                            <span className="text-base font-bold tabular-nums">
-                              {u.hasBills ? formatINR(u.billTotal) : "—"}
-                            </span>
-                          </div>
                           <div className="flex items-baseline gap-1">
                             <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Deposit</span>
                             <span className="text-base font-bold text-success tabular-nums">{formatINR(u.deposit)}</span>
