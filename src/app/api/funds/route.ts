@@ -86,6 +86,13 @@ export async function GET(req: Request) {
     });
 
     // Build per-user data
+    // Per-user deficit = (total expenses ÷ number of residents) − user's deposit.
+    // This is calculated instantly from actual expenses + payments — no bill
+    // generation needed. Each resident gets an equal share of the month's
+    // expenses. If they paid less than their share, they have a deficit.
+    const activeResidentCount = residents.length || 1;
+    const perUserExpense = totalExpenses / activeResidentCount;
+
     const userBreakdown = residents.map((u) => {
       const userBills = bills.filter((b) => b.userId === u.id);
       const billTotal = userBills.reduce((s, b) => s + b.totalAmount, 0);
@@ -99,10 +106,10 @@ export async function GET(req: Request) {
       const needToPay = Math.max(0, billDue);
       const hasBills = userBills.length > 0;
 
-      // Deficit = total expenses (bill) − total deposit.
-      // If positive: user overused (owes money). If negative: user overpaid (credit).
-      // Default 0 when no bills (no expenses calculated yet).
-      const deficit = hasBills ? Math.max(0, billTotal - deposit) : 0;
+      // Deficit = user's share of expenses − user's deposit.
+      // Instant calculation — doesn't depend on bill generation.
+      // Default 0 when no expenses or when deposit covers the share.
+      const deficit = Math.max(0, perUserExpense - deposit);
 
       return {
         userId: u.id,
