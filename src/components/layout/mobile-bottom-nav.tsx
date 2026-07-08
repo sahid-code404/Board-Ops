@@ -38,9 +38,11 @@ export function MobileBottomNav() {
               >
                 {active && (
                   <motion.div
-                    layoutId="mobile-nav-active"
                     className="absolute inset-0 rounded-2xl bg-primary/15"
-                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
                   />
                 )}
                 <motion.div

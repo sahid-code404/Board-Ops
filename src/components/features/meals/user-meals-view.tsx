@@ -491,7 +491,6 @@ export function UserMealsView() {
                   <motion.div
                     key={day.dateStr}
                     ref={day.dateStr === todayDateStr ? todayRef : undefined}
-                    layout
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.98 }}
@@ -619,7 +618,6 @@ export function UserMealsView() {
                 {dayEntries.map((entry) => (
                   <motion.div
                     key={entry.id}
-                    layout
                     initial={{ opacity: 0, y: 12, scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}

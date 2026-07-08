@@ -4,25 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuthStore, type CurrentUser } from "@/stores/use-auth-store";
 import { AuthScreen } from "@/components/features/auth/auth-screen";
 import { AppShell } from "@/components/layout/app-shell";
+import { LazyViewRouter } from "@/components/layout/lazy-view-router";
 import { AnimatedBackground } from "@/components/glass/animated-background";
 import { GlassButton } from "@/components/glass/glass-button";
 import { api } from "@/lib/api-client";
 import { ShieldX } from "lucide-react";
-import { DashboardView } from "@/components/features/dashboard/dashboard-view";
-import { MealsConfigView } from "@/components/features/meals/meals-config-view";
-import { UserMealsView } from "@/components/features/meals/user-meals-view";
-import { KitchenView } from "@/components/features/kitchen/kitchen-view";
-import { BillingHubView } from "@/components/features/billing/billing-hub-view";
-import { PaymentsView } from "@/components/features/billing/payments-view";
-import { ExpensesHubView } from "@/components/features/billing/expenses-hub-view";
-import { FundsView } from "@/components/features/billing/funds-view";
-import { FormulaEngineView } from "@/components/features/variables/formula-engine-view";
-import { UsersView } from "@/components/features/users/users-view";
-import { ReportsView } from "@/components/features/reports/reports-view";
-import { NotificationsHubView } from "@/components/features/notifications/notifications-hub-view";
-import { SettingsHubView } from "@/components/features/settings/settings-hub-view";
-import { SystemHubView } from "@/components/features/system/system-hub-view";
-import { ProfileView } from "@/components/features/auth/profile-view";
 import { useAppStore } from "@/stores/use-app-store";
 import { CommandPalette } from "@/components/layout/command-palette";
 import { ShimmerSkeleton } from "@/components/glass/shimmer-skeleton";
@@ -102,21 +88,7 @@ export default function Page() {
     <>
       <AnimatedBackground />
       <AppShell>
-        {view === "dashboard" && <DashboardView />}
-        {view === "meals" && isAdmin && <MealsConfigView />}
-        {view === "user-meals" && <UserMealsView />}
-        {view === "kitchen" && isAdmin && <KitchenView />}
-        {view === "billing" && <BillingHubView />}
-        {view === "payments" && <PaymentsView />}
-        {view === "expenses" && isAdmin && <ExpensesHubView />}
-        {view === "funds" && isAdmin && <FundsView />}
-        {view === "formula-engine" && isAdmin && <FormulaEngineView />}
-        {view === "users" && isAdmin && <UsersView />}
-        {view === "reports" && isAdmin && <ReportsView />}
-        {view === "notifications" && <NotificationsHubView />}
-        {view === "settings" && isAdmin && <SettingsHubView />}
-        {view === "system" && isAdmin && <SystemHubView />}
-        {view === "profile" && <ProfileView />}
+        <LazyViewRouter view={view} isAdmin={isAdmin} />
       </AppShell>
       <CommandPalette />
     </>

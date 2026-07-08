@@ -503,11 +503,9 @@ export function KitchenView() {
                                                 "opacity-50 cursor-wait"
                                             )}
                                           >
-                                            <motion.span
-                                              layout
-                                              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                                            <span
                                               className={cn(
-                                                "inline-block h-5 w-5 rounded-full bg-white shadow-sm",
+                                                "inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-[margin,transform] duration-200 ease-out",
                                                 isOn ? "ml-auto mr-1" : "ml-1"
                                               )}
                                             />

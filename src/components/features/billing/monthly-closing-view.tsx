@@ -274,7 +274,6 @@ export function MonthlyClosingView() {
               {readiness?.items.map((item) => (
                 <motion.div
                   key={item.key}
-                  layout
                   className={cn(
                     "flex items-start gap-3 p-3 rounded-2xl",
                     item.status === "ready" && "bg-success/5 ring-1 ring-success/20",
@@ -342,7 +341,6 @@ export function MonthlyClosingView() {
                 {cycles.map((c) => (
                   <motion.div
                     key={c.id}
-                    layout
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -8 }}

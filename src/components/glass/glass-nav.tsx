@@ -29,7 +29,6 @@ export function GlassNav<T extends string>({
       <AnimatePresence>
         {hovered && hovered !== value && (
           <motion.div
-            layoutId={`glass-nav-hover-${Math.random()}`}
             className="absolute top-1 bottom-1 rounded-full bg-secondary/50"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -58,9 +57,11 @@ export function GlassNav<T extends string>({
           >
             {active && (
               <motion.div
-                layoutId="glass-nav-active"
                 className="absolute inset-0 rounded-full bg-primary shadow-lg shadow-primary/40"
-                transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
               />
             )}
             <span className="relative z-10 flex items-center gap-1.5">

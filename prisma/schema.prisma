@@ -170,7 +170,7 @@ model MealConfiguration {
   mealType       String   @default("REGULAR") // REGULAR | SPECIAL | GUEST_ONLY | FESTIVAL | CUSTOM
   status         String   @default("ACTIVE") // ACTIVE | INACTIVE | ARCHIVED
   displayOrder   Int      @default(0)
-  defaultState   String   @default("ON") // ON | OFF
+  defaultState   String   @default("OFF") // ON | OFF
   defaultVisibility String @default("VISIBLE") // VISIBLE | HIDDEN
   cutoffStrategy String   @default("SAME_DAY") // PREVIOUS_DAY | SAME_DAY | CUSTOM_OFFSET
   cutoffOffsetMinutes Int @default(0)

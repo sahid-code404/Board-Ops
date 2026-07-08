@@ -29,7 +29,7 @@ export const GlassCard = React.forwardRef<HTMLDivElement, GlassCardProps>(
           strong ? "glass-strong" : "glass",
           "rounded-3xl",
           glowClass,
-          hover && "transition-transform duration-300 will-change-transform",
+          hover && "transition-transform duration-300",
           className
         )}
         {...props}

@@ -188,7 +188,7 @@ export function TasksView() {
                 try { payload = t.payload ? JSON.parse(t.payload) : null; } catch {}
                 try { result = t.result ? JSON.parse(t.result) : null; } catch {}
                 return (
-                  <motion.div key={t.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}>
+                  <motion.div key={t.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}>
                     <GlassCard className="p-4" hover>
                       <div className="flex items-start gap-3">
                         <div className={cn("grid place-items-center h-10 w-10 rounded-xl shrink-0", statusMeta.color)}>

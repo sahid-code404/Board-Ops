@@ -161,9 +161,11 @@ export function MobileSidebar() {
                           >
                             {active && (
                               <motion.div
-                                layoutId="mobile-sidebar-active"
                                 className="absolute inset-0 rounded-2xl bg-primary shadow-lg shadow-primary/30"
-                                transition={{ type: "spring", stiffness: 400, damping: 32 }}
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                transition={{ duration: 0.2 }}
                               />
                             )}
                             <Icon

@@ -237,7 +237,6 @@ function MealAgendaCard({
   const locked = entryIsLocked(entry);
   return (
     <motion.div
-      layout
       whileHover={{ y: -2 }}
       whileTap={{ scale: 0.99 }}
       className={cn(

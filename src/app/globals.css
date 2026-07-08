@@ -104,7 +104,7 @@
   --sidebar-ring: oklch(0.55 0.22 295 / 0.5);
 
   /* glass-specific tokens — more opaque for better readability */
-  --glass-bg: oklch(1 0.008 280 / 0.92);
+  --glass-bg: oklch(1 0.008 280 / 0.96);
   --glass-border: oklch(1 0 0 / 0.75);
   --glass-shadow: 0 8px 32px oklch(0.3 0.05 280 / 0.14), 0 1px 2px oklch(0.3 0.05 280 / 0.08);
   --glass-highlight: oklch(1 0 0 / 0.4);
@@ -165,7 +165,7 @@
   --sidebar-border: oklch(1 0 0 / 0.08);
   --sidebar-ring: oklch(0.72 0.22 295 / 0.5);
 
-  --glass-bg: oklch(0.19 0.025 280 / 0.9);
+  --glass-bg: oklch(0.19 0.025 280 / 0.94);
   --glass-border: oklch(1 0 0 / 0.16);
   --glass-shadow: 0 8px 32px oklch(0 0 0 / 0.55), 0 1px 2px oklch(0 0 0 / 0.3);
   --glass-highlight: oklch(1 0 0 / 0.06);
@@ -238,43 +238,27 @@
 }
 
 @layer utilities {
-  /* Liquid glass surfaces — stronger blur + higher opacity for readability */
+  /* Liquid glass surfaces — solid backgrounds (no backdrop-filter) for performance.
+     Solid bg + border + shadow reads just as cleanly without forcing the
+     browser to repaint a backdrop on every scroll frame. */
   .glass {
     background: var(--glass-bg);
-    backdrop-filter: var(--glass-blur, blur(32px) saturate(180%));
-    -webkit-backdrop-filter: var(--glass-blur, blur(32px) saturate(180%));
     border: 1px solid var(--glass-border);
     box-shadow: var(--glass-shadow);
     position: relative;
-  }
-  .glass::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: linear-gradient(
-      135deg,
-      var(--glass-highlight) 0%,
-      transparent 35%,
-      transparent 65%,
-      oklch(1 0 0 / 0.03) 100%
-    );
-    pointer-events: none;
-    opacity: 0.35;
+    contain: layout style;
   }
 
   .glass-strong {
     background: var(--glass-bg);
-    backdrop-filter: var(--glass-blur-strong, blur(48px) saturate(200%));
-    -webkit-backdrop-filter: var(--glass-blur-strong, blur(48px) saturate(200%));
+    backdrop-filter: var(--glass-blur-strong, blur(8px));
+    -webkit-backdrop-filter: var(--glass-blur-strong, blur(8px));
     border: 1px solid var(--glass-border);
     box-shadow: 0 20px 60px oklch(0.3 0.05 280 / 0.2), 0 2px 4px oklch(0.3 0.05 280 / 0.08);
   }
 
   .glass-soft {
     background: color-mix(in oklch, var(--glass-bg) 88%, transparent);
-    backdrop-filter: var(--glass-blur-soft, blur(20px) saturate(160%));
-    -webkit-backdrop-filter: var(--glass-blur-soft, blur(20px) saturate(160%));
     border: 1px solid var(--glass-border);
   }
 
@@ -296,21 +280,18 @@
   }
 
   /* Blur intensity — when [data-blur-intensity] is set on <html>,
-     overrides the default blur values. */
+     overrides the default blur values. Lighter presets for performance. */
   [data-blur-intensity="light"] {
-    --glass-blur: blur(16px) saturate(150%);
-    --glass-blur-strong: blur(24px) saturate(170%);
-    --glass-blur-soft: blur(10px) saturate(140%);
+    --glass-blur-strong: blur(4px);
+    --glass-blur-soft: none;
   }
   [data-blur-intensity="normal"] {
-    --glass-blur: blur(32px) saturate(180%);
-    --glass-blur-strong: blur(48px) saturate(200%);
-    --glass-blur-soft: blur(20px) saturate(160%);
+    --glass-blur-strong: blur(8px);
+    --glass-blur-soft: none;
   }
   [data-blur-intensity="heavy"] {
-    --glass-blur: blur(48px) saturate(200%);
-    --glass-blur-strong: blur(64px) saturate(220%);
-    --glass-blur-soft: blur(32px) saturate(180%);
+    --glass-blur-strong: blur(12px);
+    --glass-blur-soft: blur(6px);
   }
 
   /* Transparency level — adjusts glass-bg opacity. */
@@ -333,18 +314,18 @@
     --glass-bg: oklch(0.19 0.025 280 / 0.68);
   }
 
-  /* Glow effects */
+  /* Glow effects — tighter radius for cheaper composite */
   .glow-primary {
-    box-shadow: 0 0 40px oklch(0.55 0.22 295 / 0.35), 0 0 80px oklch(0.55 0.22 295 / 0.15);
+    box-shadow: 0 0 20px oklch(0.55 0.22 295 / 0.35);
   }
   .glow-success {
-    box-shadow: 0 0 40px oklch(0.65 0.18 155 / 0.35);
+    box-shadow: 0 0 20px oklch(0.65 0.18 155 / 0.35);
   }
   .glow-warning {
-    box-shadow: 0 0 40px oklch(0.78 0.17 75 / 0.35);
+    box-shadow: 0 0 20px oklch(0.78 0.17 75 / 0.35);
   }
   .glow-danger {
-    box-shadow: 0 0 40px oklch(0.62 0.24 25 / 0.35);
+    box-shadow: 0 0 20px oklch(0.62 0.24 25 / 0.35);
   }
 
   /* Shimmer for skeletons */
@@ -376,6 +357,21 @@
       radial-gradient(circle at 20% 80%, var(--mesh-4) 0%, transparent 45%);
     filter: blur(60px);
   }
+
+  /* Floating blobs — pure CSS opacity pulse (compositor-thread friendly,
+     no per-frame layout/style reads). Replaces Framer Motion x/y/scale loop. */
+  @keyframes blob-pulse-1 {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 0.8; }
+  }
+  @keyframes blob-pulse-2 {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 0.75; }
+  }
+  .blob-1 { animation: blob-pulse-1 22s ease-in-out infinite; }
+  .blob-2 { animation: blob-pulse-2 26s ease-in-out infinite; }
+  .blob-3 { animation: blob-pulse-1 30s ease-in-out infinite; }
+  .blob-4 { animation: blob-pulse-2 24s ease-in-out infinite; }
 
   .gradient-text {
     background: linear-gradient(135deg, var(--primary), oklch(0.7 0.2 340), var(--info));

@@ -314,7 +314,6 @@ export function PurchasesView() {
               {filtered.map((p) => (
                 <motion.div
                   key={p.id}
-                  layout
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
