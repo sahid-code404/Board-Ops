@@ -55,6 +55,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { DigitalClockPicker } from "@/components/ui/digital-clock-picker";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -228,68 +229,6 @@ const DEFAULT_FORM_VALUES: MealFormValues = {
 // Helpers
 // ─────────────────────────────────────────────────────────────
 
-/**
- * Custom 12-hour time picker with AM/PM select.
- * Always displays 12-hour AM/PM format regardless of browser locale.
- * Stores/returns "HH:mm" (24-hour) format for backend compatibility.
- */
-function TimePicker12({
-  value,
-  onChange,
-  error,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  error?: string;
-}) {
-  // Parse "HH:mm" → { hour: 1-12, minute, period: AM|PM }
-  const [h24, m] = (value || "08:00").split(":").map(Number);
-  const period = h24 >= 12 ? "PM" : "AM";
-  const hour12 = h24 % 12 === 0 ? 12 : h24 % 12;
-  const minute = m || 0;
-
-  const update = (newHour12: number, newMinute: number, newPeriod: "AM" | "PM") => {
-    let h = newHour12 % 12;
-    if (newPeriod === "PM") h += 12;
-    onChange(`${String(h).padStart(2, "0")}:${String(newMinute).padStart(2, "0")}`);
-  };
-
-  return (
-    <div className="flex items-center gap-1.5">
-      {/* Hour (1-12) */}
-      <select
-        value={hour12}
-        onChange={(e) => update(Number(e.target.value), minute, period)}
-        className="h-10 rounded-2xl glass px-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
-      >
-        {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
-          <option key={h} value={h}>{h}</option>
-        ))}
-      </select>
-      <span className="text-muted-foreground text-sm">:</span>
-      {/* Minute (00-59, step 5) */}
-      <select
-        value={minute}
-        onChange={(e) => update(hour12, Number(e.target.value), period)}
-        className="h-10 rounded-2xl glass px-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
-      >
-        {Array.from({ length: 12 }, (_, i) => i * 5).map((m) => (
-          <option key={m} value={m}>{String(m).padStart(2, "0")}</option>
-        ))}
-      </select>
-      {/* AM / PM */}
-      <select
-        value={period}
-        onChange={(e) => update(hour12, minute, e.target.value as "AM" | "PM")}
-        className="h-10 rounded-2xl glass px-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
-      >
-        <option value="AM">AM</option>
-        <option value="PM">PM</option>
-      </select>
-      {error && <p className="text-[11px] text-destructive ml-1">{error}</p>}
-    </div>
-  );
-}
 
 function formatTime12(t: string): string {
   const [h, m] = t.split(":").map(Number);
@@ -521,26 +460,18 @@ function MealForm({
 
       {/* Times */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label className="ml-1 block text-xs font-medium text-muted-foreground">Service start</Label>
-          <TimePicker12
-            value={watch("startTime") || "08:00"}
-            onChange={(v) => setValue("startTime", v, { shouldValidate: true, shouldDirty: true })}
-          />
-          {errors.startTime?.message && (
-            <p className="text-[11px] text-destructive ml-1">{errors.startTime.message}</p>
-          )}
-        </div>
-        <div className="space-y-1.5">
-          <Label className="ml-1 block text-xs font-medium text-muted-foreground">Service end</Label>
-          <TimePicker12
-            value={watch("endTime") || "10:00"}
-            onChange={(v) => setValue("endTime", v, { shouldValidate: true, shouldDirty: true })}
-          />
-          {errors.endTime?.message && (
-            <p className="text-[11px] text-destructive ml-1">{errors.endTime.message}</p>
-          )}
-        </div>
+        <DigitalClockPicker
+          label="Service start"
+          value={watch("startTime") || "08:00"}
+          onChange={(v) => setValue("startTime", v, { shouldValidate: true, shouldDirty: true })}
+          error={errors.startTime?.message}
+        />
+        <DigitalClockPicker
+          label="Service end"
+          value={watch("endTime") || "10:00"}
+          onChange={(v) => setValue("endTime", v, { shouldValidate: true, shouldDirty: true })}
+          error={errors.endTime?.message}
+        />
       </div>
 
       {/* Cutoff */}
@@ -576,14 +507,12 @@ function MealForm({
               )}
             />
           </div>
-          <div className="space-y-1.5">
-            <Label className="ml-1 block text-xs font-medium text-muted-foreground">Cutoff time</Label>
-            <TimePicker12
-              value={watch("cutoffTime") || "16:00"}
-              onChange={(v) => setValue("cutoffTime", v, { shouldValidate: true, shouldDirty: true })}
-              error={errors.cutoffTime?.message}
-            />
-          </div>
+          <DigitalClockPicker
+            label="Cutoff time"
+            value={watch("cutoffTime") || "16:00"}
+            onChange={(v) => setValue("cutoffTime", v, { shouldValidate: true, shouldDirty: true })}
+            error={errors.cutoffTime?.message}
+          />
         </div>
 
         {watchedStrategy === "CUSTOM_OFFSET" && (

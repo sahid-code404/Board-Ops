@@ -2598,3 +2598,39 @@ Stage Summary:
   19. ✓ 0 overrideFlag references in codebase
   20. ✓ Schema defaultState is "OFF"
 - `bun run lint`: 0 errors. Server running cleanly (200 OK).
+
+---
+
+Task ID: DIGITAL-CLOCK-PICKER
+Agent: digital-clock-picker-agent
+
+Task: Replace native/dropdown time pickers with a reusable popover-based digital clock face picker.
+
+Work Log:
+- Created `src/components/ui/digital-clock-picker.tsx` — a `"use client"` popover-based time picker:
+  - Trigger: glass button showing 12-hour AM/PM time (e.g. "7:00 AM") + a small "24h" hint + Clock lucide icon
+  - Popover content (glass-strong, 280px wide, max-w `calc(100vw-2rem)` for mobile):
+    - Header row: large live readout of selected time + a primary "Done" button (with Check icon) that closes the popover
+    - AM/PM segmented toggle (glass-soft track, primary fill for active)
+    - Tabs (Hour | Minute) using the existing shadcn `Tabs` primitive
+    - Hour grid: 1..12 in a 4-column × 3-row grid
+    - Minute grid: 00, 05, 10, ..., 55 in a 4-column × 3-row grid
+    - Selected cell highlighted with `bg-primary text-primary-foreground` + soft shadow; unselected use `glass-soft`
+    - Subtle footer hint: "5-minute steps · returns 24-hour format"
+  - Clicking a value updates state via `onChange` but keeps the popover open (so the user can pick both hour and minute)
+  - Closes on outside-click (default Radix Popover behaviour) or via the Done button
+  - All transitions are CSS-only (`transition-all duration-150`, `hover:scale-[1.04]`, `active:scale-95`) — no Framer Motion / JS animations
+  - Internal helpers: `parse24`, `to12`, `to24`, `formatDisplay` — value always round-trips as "HH:mm" 24-hour
+  - Display always 12-hour AM/PM regardless of locale
+- Updated `src/components/features/meals/meals-config-view.tsx`:
+  - Removed the old `TimePicker12` (three native `<select>` dropdowns) helper function entirely
+  - Added import for `DigitalClockPicker` from `@/components/ui/digital-clock-picker`
+  - Replaced the three usages (Service start, Service end, Cutoff time) — kept the exact same `watch`/`setValue` integration and error wiring. `DigitalClockPicker` renders its own `<label>`, so the wrapper `<Label>` + `<div>` blocks were collapsed into a single component call.
+- Searched all of `src/` for `type="time"` / `type='time'` and for any other `TimePicker12` references — none found. The meals-config view was the only place with time inputs.
+- Ran `bun run lint`: 0 errors. Two remaining warnings are pre-existing `react-hooks/incompatible-library` warnings about react-hook-form's `watch()` API (the same pattern already existed on `variables-view.tsx:739` and on this file's previous `TimePicker12` usage). Fixed two new a11y warnings I introduced (`aria-invalid` on `button`, `aria-pressed` on `gridcell`) by removing the unsupported `role="grid"` / `role="gridcell"` and the `aria-invalid` attribute.
+
+Files changed:
+- NEW: `src/components/ui/digital-clock-picker.tsx`
+- EDITED: `src/components/features/meals/meals-config-view.tsx` (removed `TimePicker12`, wired in `DigitalClockPicker` × 3)
+
+Reusable for any future time field — `import { DigitalClockPicker } from "@/components/ui/digital-clock-picker"` and pass `value` / `onChange` (plus optional `label`, `error`, `className`, `id`, `ariaLabel`).
