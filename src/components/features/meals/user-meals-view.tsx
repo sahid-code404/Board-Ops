@@ -256,18 +256,24 @@ export function UserMealsView() {
     return { on, off, locked };
   }, [dayEntries]);
 
-  // Registration date — used for the pre-reg toast message
+  // Registration date — used for the pre-reg toast message + before-enrollment labels.
+  // Normalize to local midnight so the comparison is date-only (not affected by timezone).
   const registrationDate = useMemo(() => {
     const raw = monthData?.registrationDate ?? dayData?.registrationDate;
-    return raw ? new Date(raw) : null;
+    if (!raw) return null;
+    const d = new Date(raw);
+    d.setHours(0, 0, 0, 0);
+    return d;
   }, [monthData, dayData]);
 
-  // Whether the selected day (day view) is before registration
+  // Whether the selected day (day view) is before registration.
+  // Uses date-only comparison (both normalized to local midnight) so a user who
+  // registered on July 8 is NOT "before enrollment" on July 8.
   const isDayBeforeRegistration = useMemo(() => {
     if (!registrationDate) return false;
     const sel = new Date(selectedDay);
     sel.setHours(0, 0, 0, 0);
-    return sel < registrationDate;
+    return sel.getTime() < registrationDate.getTime();
   }, [registrationDate, selectedDay]);
 
   // Short toast shown when a user tries to toggle a pre-registration meal
