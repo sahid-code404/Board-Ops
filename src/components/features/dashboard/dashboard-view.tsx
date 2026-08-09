@@ -108,7 +108,7 @@ export function DashboardView() {
             <span className={cn("bg-gradient-to-r bg-clip-text text-transparent", getGradientForName(user?.name || "User"))}>
               {user?.name.split(" ")[0]}
             </span>
-            <span className="text-xl">{getTimeGreeting().emoji}</span>
+            <span className="text-3xl">{getTimeGreeting().emoji}</span>
           </h2>
         </GlassCard>
       </StaggerItem>
