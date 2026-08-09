@@ -98,10 +98,10 @@ export function DashboardView() {
           <p className="text-sm text-muted-foreground mb-2">
             {new Date().toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long" })}
           </p>
-          <h2 className="text-2xl font-bold flex items-baseline gap-2.5 flex-wrap">
+          <h2 className="text-2xl font-bold flex items-baseline gap-1.5 flex-wrap">
             <span>{getTimeGreeting().greeting},</span>
             {((user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && (
-              <span className={cn("bg-gradient-to-r bg-clip-text text-transparent text-xl", getGradientForName(user?.name || "User"))}>
+              <span className={cn("bg-gradient-to-r bg-clip-text text-transparent", getGradientForName(user?.name || "User"))}>
                 Admin
               </span>
             ))}
