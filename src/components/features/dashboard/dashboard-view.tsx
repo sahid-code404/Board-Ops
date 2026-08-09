@@ -100,9 +100,11 @@ export function DashboardView() {
           </p>
           <h2 className="text-2xl font-bold flex items-baseline gap-2.5 flex-wrap">
             <span>{getTimeGreeting().greeting},</span>
-            <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              {user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" ? "Admin" : ""}
-            </span>
+            {((user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && (
+              <span className={cn("bg-gradient-to-r bg-clip-text text-transparent text-xl", getGradientForName(user?.name || "User"))}>
+                Admin
+              </span>
+            ))}
             <span className={cn("bg-gradient-to-r bg-clip-text text-transparent", getGradientForName(user?.name || "User"))}>
               {user?.name.split(" ")[0]}
             </span>
