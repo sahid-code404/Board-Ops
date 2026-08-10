@@ -21,10 +21,14 @@ import {
   Search,
   ChevronDown,
   ShieldCheck,
+  Trash2,
+  Plane,
+  CheckCircle2,
+  Ban,
 } from "lucide-react";
 import { GlassCard } from "@/components/glass/glass-card";
 import { GlassButton } from "@/components/glass/glass-button";
-import { GlassInput } from "@/components/glass/glass-input";
+import { GlassInput, GlassTextarea } from "@/components/glass/glass-input";
 import { AnimatedCounter } from "@/components/glass/animated-counter";
 import {
   StaggerGroup,
@@ -32,6 +36,21 @@ import {
 } from "@/components/glass/page-transition";
 import { ShimmerSkeleton } from "@/components/glass/shimmer-skeleton";
 import { UserAvatar } from "@/components/glass/user-avatar";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { useAppStore } from "@/stores/use-app-store";
 import { cn } from "@/lib/utils";
@@ -53,6 +72,14 @@ type MealCount = {
   off: number;
   guests: number;
   total: number;
+};
+
+type GuestMealEntry = {
+  id: string;
+  mealId: string;
+  guestCount: number;
+  notes: string | null;
+  guestName: string;
 };
 
 type UserMealItem = {
@@ -90,6 +117,26 @@ type KitchenResponse = {
     off: number;
   };
   userMealStatus?: UserMealStatus[];
+  guestMealEntries?: GuestMealEntry[];
+};
+
+type LeaveApplicationItem = {
+  id: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+  status: string;
+  mealType: string;
+  mealIds: string | null;
+  adminNotes: string | null;
+  createdAt: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    room: string | null;
+    avatarUrl: string | null;
+  };
 };
 
 type ApiResponse<T> = { success: boolean; data: T };
@@ -131,6 +178,7 @@ export function KitchenView() {
   const user = useAuthStore((s) => s.user);
   const setView = useAppStore((s) => s.setView);
   const [date, setDate] = useState<Date>(new Date());
+  const [guestMealOpen, setGuestMealOpen] = useState(false);
 
   const dateStr = toDateString(date);
   const datePickerLabels = getDatePickerLabels(date);
@@ -156,6 +204,7 @@ export function KitchenView() {
   });
 
   const counts = resp?.data?.counts ?? [];
+  const guestMealEntries = resp?.data?.guestMealEntries ?? [];
 
   const totals = useMemo(() => {
     return {
@@ -198,6 +247,79 @@ export function KitchenView() {
     },
   });
 
+  // ── Guest meal create/delete ──
+  const [guestMealMealId, setGuestMealMealId] = useState<string>("");
+  const [guestMealCount, setGuestMealCount] = useState<number>(1);
+  const [guestMealNotes, setGuestMealNotes] = useState<string>("");
+  const [deleteLoadingId, setDeleteLoadingId] = useState<string | null>(null);
+
+  const createGuestMealMutation = useMutation({
+    mutationFn: async (input: { mealId: string; guestCount: number; notes?: string; serviceDate: string }) => {
+      await api.post("/kitchen", input);
+    },
+    onSuccess: () => {
+      toast.success("Guest meal added");
+      setGuestMealOpen(false);
+      setGuestMealMealId("");
+      setGuestMealCount(1);
+      setGuestMealNotes("");
+      qc.invalidateQueries({ queryKey: ["kitchen"] });
+    },
+    onError: (e: Error) => toast.error(e.message || "Failed to add guest meal"),
+  });
+
+  const deleteGuestMealMutation = useMutation({
+    mutationFn: async (guestMealId: string) => {
+      setDeleteLoadingId(guestMealId);
+      await api.delete("/kitchen", { body: JSON.stringify({ guestMealId }) });
+    },
+    onSuccess: () => {
+      toast.success("Guest meal removed");
+      setDeleteLoadingId(null);
+      qc.invalidateQueries({ queryKey: ["kitchen"] });
+    },
+    onError: (e: Error) => {
+      toast.error(e.message || "Failed to remove guest meal");
+      setDeleteLoadingId(null);
+    },
+  });
+
+  // Active meals list for the guest meal dialog dropdown
+  const { data: mealsResp } = useQuery({
+    queryKey: ["meals-config-active"],
+    queryFn: () => api.get<ApiResponse<{ id: string; name: string; displayName: string; icon: string; status: string }[]>>("/meals/config"),
+    enabled: !isUser,
+    staleTime: 60_000,
+  });
+  const activeMeals = (mealsResp?.data ?? []).filter((m) => m.status === "ACTIVE");
+
+  // ── Pending leave applications (admin only) ──
+  const { data: leaveResp } = useQuery({
+    queryKey: ["leave-applications"],
+    queryFn: () => api.get<ApiResponse<LeaveApplicationItem[]>>("/leave"),
+    enabled: !isUser,
+    refetchInterval: 60_000,
+  });
+  const pendingLeaves = (leaveResp?.data ?? []).filter((l) => l.status === "PENDING");
+
+  const [leaveActionLoadingId, setLeaveActionLoadingId] = useState<string | null>(null);
+  const decideLeaveMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: "APPROVED" | "REJECTED" }) => {
+      setLeaveActionLoadingId(id);
+      await api.patch(`/leave/${id}`, { status });
+    },
+    onSuccess: (_data, vars) => {
+      toast.success(vars.status === "APPROVED" ? "Leave approved — meals set to OFF" : "Leave rejected");
+      setLeaveActionLoadingId(null);
+      qc.invalidateQueries({ queryKey: ["leave-applications"] });
+      qc.invalidateQueries({ queryKey: ["kitchen"] });
+    },
+    onError: (e: Error) => {
+      toast.error(e.message || "Failed to update leave application");
+      setLeaveActionLoadingId(null);
+    },
+  });
+
   // Filtered users (search only, no sort)
   const filteredUsers = useMemo(() => {
     if (!userMealStatus) return [];
@@ -225,7 +347,7 @@ export function KitchenView() {
     <StaggerGroup className="space-y-4">
       {/* Date picker — wide capsule with centered text + circular arrows */}
       <StaggerItem>
-        <div className="flex items-center justify-center gap-4">
+        <div className="flex items-center justify-center gap-3 sm:gap-4">
           {/* Left arrow — circular */}
           <motion.button
             whileTap={{ scale: 0.9 }}
@@ -239,14 +361,14 @@ export function KitchenView() {
           {/* Date capsule — wide, centered text with relative day label */}
           <button
             onClick={() => !isSameDay(date, new Date()) && setDate(new Date())}
-            className="flex-1 max-w-[280px] flex items-center justify-center gap-2.5 glass-soft rounded-full px-6 py-2.5 transition-all hover:ring-1 hover:ring-primary/30"
+            className="flex-1 max-w-[280px] flex items-center justify-center gap-2.5 glass-soft rounded-full px-4 sm:px-6 py-2.5 transition-all hover:ring-1 hover:ring-primary/30"
           >
             <CalendarDays className="h-4 w-4 text-primary shrink-0" />
-            <div className="leading-tight text-center">
-              <p className="text-sm font-bold text-primary">
+            <div className="leading-tight text-center min-w-0">
+              <p className="text-sm font-bold text-primary truncate">
                 {datePickerLabels.top}
               </p>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground truncate">
                 {datePickerLabels.bottom}
               </p>
             </div>
@@ -264,6 +386,17 @@ export function KitchenView() {
           >
             <ChevronRight className="h-5 w-5" />
           </motion.button>
+
+          {/* Add Guest Meal — small icon button next to the date picker */}
+          <GlassButton
+            variant="secondary"
+            size="icon"
+            onClick={() => setGuestMealOpen(true)}
+            aria-label="Add guest meal"
+            className="shrink-0"
+          >
+            <UserPlus className="h-5 w-5" />
+          </GlassButton>
         </div>
       </StaggerItem>
 
@@ -319,7 +452,13 @@ export function KitchenView() {
           <StaggerItem>
             <div className="grid-cards gap-3">
               {counts.map((m) => (
-                <MealCard key={m.id} meal={m} />
+                <MealCard
+                  key={m.id}
+                  meal={m}
+                  guestMealEntries={guestMealEntries.filter((g) => g.mealId === m.id)}
+                  onDeleteGuestMeal={(id) => deleteGuestMealMutation.mutate(id)}
+                  deleteLoadingId={deleteLoadingId}
+                />
               ))}
             </div>
           </StaggerItem>
@@ -531,8 +670,157 @@ export function KitchenView() {
               </GlassCard>
             </StaggerItem>
           )}
+
+          {/* Pending leave applications — admin approval */}
+          {pendingLeaves.length > 0 && (
+            <StaggerItem>
+              <GlassCard className="p-4" hover={false}>
+                <div className="flex items-center gap-2 mb-3">
+                  <Plane className="h-5 w-5 text-primary" />
+                  <h3 className="font-semibold">Pending Leave Applications</h3>
+                  <span className="text-xs text-muted-foreground">· {pendingLeaves.length} pending</span>
+                </div>
+
+                <div className="space-y-2">
+                  {pendingLeaves.map((l) => {
+                    const start = l.startDate.slice(0, 10);
+                    const end = l.endDate.slice(0, 10);
+                    const isLoading = leaveActionLoadingId === l.id;
+                    return (
+                      <div
+                        key={l.id}
+                        className="flex items-start gap-3 p-3 rounded-2xl glass-soft"
+                      >
+                        <UserAvatar
+                          name={l.user.name}
+                          avatarUrl={l.user.avatarUrl}
+                          className="h-9 w-9 rounded-xl shrink-0"
+                          fallbackClassName="text-xs"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-medium truncate">{l.user.name}</p>
+                            {l.user.room && (
+                              <span className="text-[10px] text-muted-foreground">Room {l.user.room}</span>
+                            )}
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-medium shrink-0">
+                              {l.mealType === "ALL" ? "All meals" : "Specific meals"}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {start === end ? start : `${start} → ${end}`}
+                          </p>
+                          <p className="text-[11px] text-foreground/80 mt-1 line-clamp-2">{l.reason}</p>
+                        </div>
+                        <div className="flex flex-col gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => decideLeaveMutation.mutate({ id: l.id, status: "APPROVED" })}
+                            disabled={isLoading}
+                            aria-label="Approve leave"
+                            className="grid place-items-center h-8 w-8 rounded-xl bg-success/15 text-success hover:bg-success/25 transition-colors disabled:opacity-50"
+                          >
+                            <CheckCircle2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => decideLeaveMutation.mutate({ id: l.id, status: "REJECTED" })}
+                            disabled={isLoading}
+                            aria-label="Reject leave"
+                            className="grid place-items-center h-8 w-8 rounded-xl bg-destructive/15 text-destructive hover:bg-destructive/25 transition-colors disabled:opacity-50"
+                          >
+                            <Ban className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </GlassCard>
+            </StaggerItem>
+          )}
         </>
       )}
+
+      {/* Add Guest Meal Dialog */}
+      <Dialog open={guestMealOpen} onOpenChange={setGuestMealOpen}>
+        <DialogContent className="rounded-3xl max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5 text-primary" />
+              Add Guest Meal
+            </DialogTitle>
+            <DialogDescription>
+              Add guest meal counts for {format(date, "d MMM yyyy")}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground ml-1">Meal</label>
+              <Select value={guestMealMealId} onValueChange={setGuestMealMealId}>
+                <SelectTrigger className="w-full h-11 rounded-2xl">
+                  <SelectValue placeholder="Select a meal…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {activeMeals.length === 0 ? (
+                    <SelectItem value="__none" disabled>
+                      No active meals
+                    </SelectItem>
+                  ) : (
+                    activeMeals.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.icon} {m.displayName}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground ml-1">Guest count</label>
+              <GlassInput
+                type="number"
+                min={1}
+                value={guestMealCount}
+                onChange={(e) => setGuestMealCount(Math.max(1, Number(e.target.value) || 1))}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground ml-1">Notes (optional)</label>
+              <GlassTextarea
+                rows={2}
+                placeholder="e.g. family visitors"
+                value={guestMealNotes}
+                onChange={(e) => setGuestMealNotes(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <GlassButton variant="ghost" onClick={() => setGuestMealOpen(false)}>
+              Cancel
+            </GlassButton>
+            <GlassButton
+              disabled={!guestMealMealId || guestMealMealId === "__none" || guestMealCount < 1 || createGuestMealMutation.isPending}
+              loading={createGuestMealMutation.isPending}
+              onClick={() =>
+                createGuestMealMutation.mutate({
+                  mealId: guestMealMealId,
+                  guestCount: guestMealCount,
+                  notes: guestMealNotes.trim() || undefined,
+                  serviceDate: dateStr,
+                })
+              }
+            >
+              <UserPlus className="h-4 w-4" />
+              Add Guest Meal
+            </GlassButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </StaggerGroup>
   );
 }
@@ -598,7 +886,17 @@ function KpiCard({
   );
 }
 
-function MealCard({ meal }: { meal: MealCount }) {
+function MealCard({
+  meal,
+  guestMealEntries = [],
+  onDeleteGuestMeal,
+  deleteLoadingId,
+}: {
+  meal: MealCount;
+  guestMealEntries?: GuestMealEntry[];
+  onDeleteGuestMeal?: (id: string) => void;
+  deleteLoadingId?: string | null;
+}) {
   return (
     <motion.div
       whileHover={{ y: -4, scale: 1.01 }}
@@ -667,6 +965,35 @@ function MealCard({ meal }: { meal: MealCount }) {
             </span>
           </div>
         </div>
+
+        {/* Per-guest-meal delete chips — only render if there are guest entries */}
+        {guestMealEntries.length > 0 && onDeleteGuestMeal && (
+          <div className="mt-3 pt-3 border-t border-border/30 space-y-1.5">
+            {guestMealEntries.map((g) => (
+              <div
+                key={g.id}
+                className="flex items-center justify-between gap-2 text-[11px] glass-soft rounded-xl px-2.5 py-1.5"
+              >
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <UserPlus className="h-3 w-3 text-primary shrink-0" />
+                  <span className="font-medium tabular-nums shrink-0">×{g.guestCount}</span>
+                  {g.notes && (
+                    <span className="text-muted-foreground truncate">— {g.notes}</span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onDeleteGuestMeal(g.id)}
+                  disabled={deleteLoadingId === g.id}
+                  aria-label="Delete guest meal"
+                  className="shrink-0 grid place-items-center h-6 w-6 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50 disabled:cursor-wait"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </motion.div>
   );

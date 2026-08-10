@@ -124,3 +124,25 @@ export function formatServiceDate(d: Date): string {
     year: "numeric",
   });
 }
+
+/**
+ * Dynamic override check — `true` when the meal's Current State (status)
+ * diverges from the user's Original State (originalState).
+ *
+ * Override status is NEVER stored in the database; it is always derived on
+ * read using this formula. LOCKED is treated as ON because LOCKED is the
+ * immutable variant of ON (a meal the user confirmed AND that has now
+ * passed its cutoff — semantically still "on").
+ *
+ * Used by the dashboard + kitchen routes to decide whether to count a meal
+ * toward "on"/"off" — admin-overridden meals are always counted (the admin
+ * made an explicit choice), while unlocked meals the user can still toggle
+ * are not.
+ */
+export function isOverridden(entry: {
+  status: string;
+  originalState: string;
+}): boolean {
+  const effective = entry.status === "LOCKED" ? "ON" : entry.status;
+  return effective !== entry.originalState;
+}

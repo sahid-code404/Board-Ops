@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/session";
 import { ok, handleApiError } from "@/lib/api-response";
+import { isOverridden } from "@/lib/meal-engine";
 
 /**
  * GET /api/reports/meals?month=X&year=Y
@@ -44,10 +45,7 @@ export async function GET(req: Request) {
       const mealEntries = entries.filter((e) => e.mealId === m.id);
       const on = mealEntries.filter((e) => e.status === "ON" || e.status === "LOCKED").length;
       const off = mealEntries.filter((e) => e.status === "OFF").length;
-      const overridden = mealEntries.filter((e) => {
-        const eff = e.status === "LOCKED" ? "ON" : e.status;
-        return eff !== e.originalState;
-      }).length;
+      const overridden = mealEntries.filter((e) => isOverridden(e)).length;
       const guests = guestMeals
         .filter((g) => g.mealId === m.id)
         .reduce((s, g) => s + g.guestCount, 0);

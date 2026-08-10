@@ -20,17 +20,35 @@ import {
   Sun,
   UserPlus,
   ShieldCheck,
+  Plane,
 } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { GlassCard } from "@/components/glass/glass-card";
 import { GlassButton } from "@/components/glass/glass-button";
+import { GlassInput, GlassTextarea } from "@/components/glass/glass-input";
 import { AnimatedCounter } from "@/components/glass/animated-counter";
 import {
   StaggerGroup,
   StaggerItem,
 } from "@/components/glass/page-transition";
 import { ShimmerSkeleton } from "@/components/glass/shimmer-skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -134,6 +152,47 @@ export function UserMealsView() {
   const [selectedDay, setSelectedDay] = useState(new Date());
   const isThisMonth = isSameMonth(new Date(selectedYear, selectedMonth, 1), now);
   const [expandedDay, setExpandedDay] = useState<string | null>(toDateString(now));
+
+  // ── Leave application dialog state ──
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [leaveStart, setLeaveStart] = useState(toDateString(now));
+  const [leaveEnd, setLeaveEnd] = useState(toDateString(now));
+  const [leaveReason, setLeaveReason] = useState("");
+  const [leaveMealType, setLeaveMealType] = useState<"ALL" | "SPECIFIC">("ALL");
+  const [leaveMealIds, setLeaveMealIds] = useState<string[]>([]);
+
+  // Active meals list — for the SPECIFIC meal selection in the leave dialog
+  const { data: mealsConfigResp } = useQuery({
+    queryKey: ["meals-config-active"],
+    queryFn: () =>
+      api.get<ApiResponse<{ id: string; name: string; displayName: string; icon: string; status: string }[]>>("/meals/config"),
+    enabled: leaveOpen,
+    staleTime: 60_000,
+  });
+  const activeMealsForLeave = (mealsConfigResp?.data ?? []).filter((m) => m.status === "ACTIVE");
+
+  const applyLeaveMutation = useMutation({
+    mutationFn: async (input: {
+      startDate: string;
+      endDate: string;
+      reason: string;
+      mealType: "ALL" | "SPECIFIC";
+      mealIds: string[];
+    }) => {
+      await api.post("/leave", input);
+    },
+    onSuccess: () => {
+      toast.success("Leave application submitted");
+      setLeaveOpen(false);
+      setLeaveStart(toDateString(now));
+      setLeaveEnd(toDateString(now));
+      setLeaveReason("");
+      setLeaveMealType("ALL");
+      setLeaveMealIds([]);
+      qc.invalidateQueries({ queryKey: ["leave-applications"] });
+    },
+    onError: (e: Error) => toast.error(e.message || "Failed to submit leave application"),
+  });
 
   // Month query — for agenda + calendar views
   const { data: monthData, isLoading: monthLoading } = useQuery({
@@ -449,9 +508,9 @@ export function UserMealsView() {
         </div>
       </StaggerItem>
 
-      {/* View mode toggle — segmented control (below KPIs) */}
+      {/* View mode toggle — segmented control (below KPIs) + Apply for Leave */}
       <StaggerItem>
-        <div className="flex items-center justify-center">
+        <div className="flex items-center justify-center gap-2 flex-wrap">
           <div className="inline-flex items-center gap-1 glass-soft rounded-2xl p-1">
             {([
               { mode: "agenda" as const, label: "Agenda", icon: List },
@@ -477,6 +536,15 @@ export function UserMealsView() {
               );
             })}
           </div>
+          <GlassButton
+            variant="secondary"
+            size="sm"
+            onClick={() => setLeaveOpen(true)}
+            aria-label="Apply for leave"
+          >
+            <Plane className="h-4 w-4" />
+            Apply for Leave
+          </GlassButton>
         </div>
       </StaggerItem>
 
@@ -547,7 +615,7 @@ export function UserMealsView() {
                 while (cells.length % 7 !== 0) cells.push(null);
 
                 return cells.map((date, i) => {
-                  if (!date) return <div key={`pad-${i}`} className="aspect-square" />;
+                  if (!date) return <div key={`pad-${i}`} className="aspect-square min-h-[44px]" />;
                   const ds = toDateString(date);
                   const entries = dayMap.get(ds) ?? [];
                   const isToday = ds === toDateString(now);
@@ -569,7 +637,7 @@ export function UserMealsView() {
                         setViewMode("day");
                       }}
                       className={cn(
-                        "aspect-square rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all text-[10px] relative",
+                        "aspect-square min-h-[44px] rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all text-[10px] relative",
                         isPreReg
                           ? "bg-muted/30 ring-1 ring-dashed ring-border/50 hover:bg-muted/50"
                           : isToday
@@ -697,6 +765,130 @@ export function UserMealsView() {
           )}
         </StaggerItem>
       )}
+
+      {/* Apply for Leave Dialog */}
+      <Dialog open={leaveOpen} onOpenChange={setLeaveOpen}>
+        <DialogContent className="rounded-3xl max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plane className="h-5 w-5 text-primary" />
+              Apply for Leave
+            </DialogTitle>
+            <DialogDescription>
+              Submit a leave application. An admin will review and set your meals to OFF for the selected period.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground ml-1">Start date</label>
+                <GlassInput
+                  type="date"
+                  value={leaveStart}
+                  onChange={(e) => setLeaveStart(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground ml-1">End date</label>
+                <GlassInput
+                  type="date"
+                  value={leaveEnd}
+                  onChange={(e) => setLeaveEnd(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground ml-1">Reason</label>
+              <GlassTextarea
+                rows={2}
+                placeholder="e.g. family trip, medical leave"
+                value={leaveReason}
+                onChange={(e) => setLeaveReason(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground ml-1">Applies to</label>
+              <Select
+                value={leaveMealType}
+                onValueChange={(v) => {
+                  setLeaveMealType(v as "ALL" | "SPECIFIC");
+                  if (v === "ALL") setLeaveMealIds([]);
+                }}
+              >
+                <SelectTrigger className="w-full h-11 rounded-2xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All meals</SelectItem>
+                  <SelectItem value="SPECIFIC">Specific meals</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {leaveMealType === "SPECIFIC" && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground ml-1">Select meals</label>
+                <div className="grid grid-cols-1 gap-1.5 p-2 rounded-2xl glass-soft">
+                  {activeMealsForLeave.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-2">No active meals</p>
+                  ) : (
+                    activeMealsForLeave.map((m) => {
+                      const checked = leaveMealIds.includes(m.id);
+                      return (
+                        <label
+                          key={m.id}
+                          className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-secondary/40 cursor-pointer text-sm"
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(c) => {
+                              if (c) setLeaveMealIds((prev) => [...prev, m.id]);
+                              else setLeaveMealIds((prev) => prev.filter((x) => x !== m.id));
+                            }}
+                          />
+                          <span className="text-base leading-none">{m.icon}</span>
+                          <span className="font-medium">{m.displayName}</span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <GlassButton variant="ghost" onClick={() => setLeaveOpen(false)}>
+              Cancel
+            </GlassButton>
+            <GlassButton
+              disabled={
+                !leaveStart ||
+                !leaveEnd ||
+                leaveReason.trim().length < 3 ||
+                (leaveMealType === "SPECIFIC" && leaveMealIds.length === 0) ||
+                applyLeaveMutation.isPending
+              }
+              loading={applyLeaveMutation.isPending}
+              onClick={() =>
+                applyLeaveMutation.mutate({
+                  startDate: leaveStart,
+                  endDate: leaveEnd,
+                  reason: leaveReason.trim(),
+                  mealType: leaveMealType,
+                  mealIds: leaveMealIds,
+                })
+              }
+            >
+              <Plane className="h-4 w-4" />
+              Submit Application
+            </GlassButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </StaggerGroup>
   );
 }

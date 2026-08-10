@@ -40,9 +40,17 @@ function getTransporter(): nodemailer.Transporter | null {
   return transporter;
 }
 
-/** Is real SMTP configured? If false, emails are logged to console (dev mode). */
+/** Is real SMTP configured? If false, emails are logged to console (dev mode).
+ *
+ *  Required env vars: `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`. `SMTP_PORT`
+ *  defaults to 587 (STARTTLS) and `SMTP_FROM` defaults to a no-reply address,
+ *  so neither is required for email to be considered "configured".
+ *
+ *  Pure check — does NOT initialize the transporter. The transporter is built
+ *  lazily on the first `sendOtpEmail` / `sendNotificationEmail` call (which
+ *  also caches it for subsequent calls). */
 export function isEmailConfigured(): boolean {
-  return getTransporter() !== null;
+  return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
 }
 
 /** Get the configured "from" address, or a dev-mode fallback. */

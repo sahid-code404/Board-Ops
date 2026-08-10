@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { verifyPassword, generateToken, getTokenExpiry } from "@/lib/auth";
-import { getClientIp, getUserAgent } from "@/lib/session";
+import { getClientIp, getUserAgent, setAuthCookie } from "@/lib/session";
 import { ok, err, handleApiError } from "@/lib/api-response";
 import { z } from "zod";
 import { logAudit } from "@/lib/audit";
@@ -82,28 +82,31 @@ export async function POST(req: Request) {
       userAgent: await getUserAgent(),
     });
 
-    return ok({
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-        status: user.status,
-        avatarUrl: user.avatarUrl,
-        room: user.room,
-        gender: user.gender,
-        emergencyContact: user.emergencyContact,
-        theme: user.theme,
-        language: user.language,
-        timezone: user.timezone,
-        twoFactorEnabled: user.twoFactorEnabled,
-        createdAt: user.createdAt,
-        lastLoginAt: user.lastLoginAt,
-      },
-      expiresAt,
-    });
+    return setAuthCookie(
+      ok({
+        token,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          role: user.role,
+          status: user.status,
+          avatarUrl: user.avatarUrl,
+          room: user.room,
+          gender: user.gender,
+          emergencyContact: user.emergencyContact,
+          theme: user.theme,
+          language: user.language,
+          timezone: user.timezone,
+          twoFactorEnabled: user.twoFactorEnabled,
+          createdAt: user.createdAt,
+          lastLoginAt: user.lastLoginAt,
+        },
+        expiresAt,
+      }),
+      token
+    );
   } catch (e) {
     return handleApiError(e);
   }

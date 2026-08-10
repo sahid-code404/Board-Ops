@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { requireAuth } from "@/lib/session";
 import { ok, handleApiError } from "@/lib/api-response";
-import { computeEditableUntil, isLocked, isPreRegistration, isMealBeforeEnrollment, getRegistrationDate } from "@/lib/meal-engine";
+import { computeEditableUntil, isLocked, isPreRegistration, isMealBeforeEnrollment, getRegistrationDate, isOverridden } from "@/lib/meal-engine";
 import { toLocalDateKey } from "@/lib/utils";
 import type { MealConfiguration } from "@prisma/client";
 
@@ -208,8 +208,7 @@ export async function GET(req: Request) {
         const entry = map.get(key);
         if (!entry) continue;
         // Dynamic override calculation: Current State vs Original State
-        const effectiveStatus = entry.status === "LOCKED" ? "ON" : entry.status;
-        const overridden = effectiveStatus !== entry.originalState;
+        const overridden = isOverridden(entry);
         // Before-enrollment entries are only shown to the user if they have an
         // active admin override (overridden=true). If the admin set the meal
         // back to its default state (overridden=false), the entry is hidden —

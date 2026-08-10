@@ -2,11 +2,9 @@ import { db } from "@/lib/db";
 import { requireAuth, requireRole } from "@/lib/session";
 import { ok, err, handleApiError } from "@/lib/api-response";
 import { logAudit } from "@/lib/audit";
-import { createNotification } from "@/lib/notify";
 import { purgeExpiredBills, getDeletionDate } from "@/lib/user-cleanup";
-import { recomputeBillPaidState } from "@/lib/bill-sync";
 import { getReadiness } from "@/lib/monthly-closing";
-import { createBillSettlementLedger } from "@/lib/resident-fund";
+import { generateBillsForPeriod } from "@/lib/bill-calculation";
 import { runBackgroundTasks } from "@/lib/task-runner";
 
 /** GET /api/bills — list bills (user sees own; admin sees all).
@@ -95,7 +93,13 @@ const MONTHS = [
 /** POST /api/bills/generate — generate or refresh bills for a billing period.
  *  Admins can run this multiple times. Existing non-void, non-deleted bills are
  *  re-calculated (meal charges updated from current meal entries) while payment
- *  history is preserved (paidAmount kept, dueAmount + status recomputed). */
+ *  history is preserved (paidAmount kept, dueAmount + status recomputed).
+ *
+ *  LB-1: This endpoint is the single authoritative bill-generation path. The
+ *  monthly-closing workflow (`executeClosing`) calls the same shared
+ *  `generateBillsForPeriod` helper so both paths produce identical charges.
+ *  The readiness check below is the gatekeeper — bills cannot be generated
+ *  until every readiness item is "ready" (no errors AND no warnings). */
 export async function POST(req: Request) {
   try {
     const user = await requireRole("ADMIN");
@@ -118,241 +122,21 @@ export async function POST(req: Request) {
       );
     }
 
-    // Optional custom due date from the admin. If omitted, existing bills keep
-    // their current due date; new bills default to the 10th of next month.
+    // Optional custom due date from the admin. If omitted, the shared helper
+    // keeps existing bills' due dates and defaults new bills to the
+    // `policy.billing.dueDateDay`-th of next month.
     const customDueDate = body.dueDate ? new Date(body.dueDate) : null;
-    // Read due date day from policy variable (default 10th)
-    const dueDateDayVar = await db.variable.findUnique({ where: { key: "policy.billing.dueDateDay" } });
-    const dueDateDay = dueDateDayVar ? parseInt(dueDateDayVar.value) || 10 : 10;
-    const defaultDueDate = new Date(year, month + 1, dueDateDay);
     const dueDate = customDueDate && !isNaN(customDueDate.getTime())
       ? customDueDate
-      : null; // null = use existing or default
+      : undefined;
 
-    const activeUsers = await db.user.findMany({
-      where: { status: "ACTIVE", role: "USER" },
-      // BLG-1: select `createdAt` explicitly so the proration math has the
-      // user's registration date without pulling relations.
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        room: true,
-        avatarUrl: true,
-        createdAt: true,
-      },
-    });
-
-    // PRD: Meal charge is a SINGLE dynamic value = (Total Expenses - Guest Revenue) / Total Resident Meals
-    // NOT fixed per-meal rates. Calculated from the month's actual expenses and meal counts.
-    const roomRentVar = await db.variable.findUnique({ where: { key: "billing.roomRent" } });
-    const cleaningVar = await db.variable.findUnique({ where: { key: "billing.cleaningCharges" } });
-    const roomRent = roomRentVar ? Number(roomRentVar.value) : 0;
-    const cleaning = cleaningVar ? Number(cleaningVar.value) : 0;
-
-    const start = new Date(year, month, 1);
-    const end = new Date(year, month + 1, 0, 23, 59, 59, 999);
-
-    // Calculate total expenses for the period
-    const expenses = await db.expense.findMany({
-      where: { expenseDate: { gte: start, lte: end }, deletedAt: null, status: { not: "DELETED" } },
-      select: { amount: true },
-    });
-    const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
-
-    // Calculate total resident meals + guest meals for the period
-    const meals = await db.mealConfiguration.findMany();
-    const mealNameById: Record<string, string> = {};
-    meals.forEach((m) => (mealNameById[m.id] = m.name));
-
-    // Exclude admin users' meals — only resident meals count
-    const allMealEntries = await db.mealEntry.findMany({
-      where: { serviceDate: { gte: start, lte: end }, status: { in: ["ON", "LOCKED"] }, user: { role: "USER" } },
-    });
-    const totalResidentMeals = allMealEntries.length;
-
-    // Guest meals + revenue
-    const guestMeals = await db.guestMeal.findMany({
-      where: { serviceDate: { gte: start, lte: end } },
-      include: { meal: true },
-    });
-    let totalGuestMeals = 0;
-    let guestRevenue = 0;
-    // Load guest meal charge variable if it exists
-    const guestChargeVar = await db.variable.findUnique({ where: { key: "billing.guestMealCharge" } });
-    const guestChargePerMeal = guestChargeVar ? Number(guestChargeVar.value) : 0;
-    for (const g of guestMeals) {
-      totalGuestMeals += g.guestCount || 1;
-      guestRevenue += (g.guestCount || 1) * guestChargePerMeal;
-    }
-
-    // PRD: per-meal charge = (Total Expenses - Guest Revenue) / Total Resident Meals
-    const perMealCharge = totalResidentMeals > 0
-      ? Math.max(0, (totalExpenses - guestRevenue) / totalResidentMeals)
-      : 0;
-
-    let created = 0;
-    let updated = 0;
-    let skipped = 0;
-
-    for (const u of activeUsers) {
-      const existing = await db.bill.findUnique({
-        where: { userId_periodMonth_periodYear: { userId: u.id, periodMonth: month, periodYear: year } },
-      });
-
-      // Skip VOID bills (deliberately voided by admin — don't resurrect via generation)
-      // and soft-deleted bills (use the restore endpoint instead).
-      if (existing && (existing.status === "VOID" || existing.deletedAt)) {
-        skipped++;
-        continue;
-      }
-
-      const entries = await db.mealEntry.findMany({
-        where: { userId: u.id, serviceDate: { gte: start, lte: end } },
-      });
-      const counts: Record<string, number> = {};
-      entries.forEach((e) => {
-        if (e.status === "ON" || e.status === "LOCKED") {
-          const name = mealNameById[e.mealId] || "unknown";
-          counts[name] = (counts[name] || 0) + 1;
-        }
-      });
-
-      // PRD: meal charges = resident's total meal count × per-meal charge (dynamic, not fixed rates)
-      const residentMealCount = Object.values(counts).reduce((s, c) => s + c, 0);
-      const mealCharges = Math.round(residentMealCount * perMealCharge);
-      const otherCharges = roomRent + cleaning;
-
-      // BLG-1: Proration for mid-month joiners. A resident who registered on,
-      // say, July 20 should only pay ~12/31 of the month's room rent + cleaning.
-      // Meal charges are NOT prorated — they're based on actual meal entries,
-      // which only exist for post-registration dates anyway.
-      const periodStart = new Date(year, month, 1);
-      const periodEndDay = new Date(year, month + 1, 0); // last calendar day of the month, midnight
-      const daysInMonth = periodEndDay.getDate();
-      const userRegDate = new Date(
-        u.createdAt.getFullYear(),
-        u.createdAt.getMonth(),
-        u.createdAt.getDate()
-      );
-      const enrollmentStart = periodStart > userRegDate ? periodStart : userRegDate;
-      const MS_PER_DAY = 24 * 60 * 60 * 1000;
-      const rawDays =
-        Math.floor((periodEndDay.getTime() - enrollmentStart.getTime()) / MS_PER_DAY) + 1;
-      const daysEnrolled = Math.max(0, rawDays);
-      const prorationFactor = daysInMonth > 0 ? daysEnrolled / daysInMonth : 1;
-      const proratedOtherCharges = Math.round(otherCharges * prorationFactor);
-      const totalAmount = mealCharges + proratedOtherCharges;
-      const snapshot = JSON.stringify({
-        counts,
-        residentMealCount,
-        perMealCharge,
-        mealCharges,
-        roomRent,
-        cleaning,
-        otherCharges,
-        proratedOtherCharges,
-        prorationFactor,
-        daysEnrolled,
-        daysInMonth,
-        totalExpenses,
-        guestRevenue,
-        totalResidentMeals,
-      });
-
-      if (existing) {
-        // Recalculate on an existing bill — preserve paidAmount, recompute due + status.
-        // After writing, call recomputeBillPaidState to guarantee paidAmount matches
-        // the actual APPROVED payments on this bill (defensive — catches any drift
-        // from manual DB edits or prior bugs).
-        const paidAmount = existing.paidAmount;
-        const dueAmount = Math.max(0, totalAmount - paidAmount);
-        let newStatus: string;
-        if (totalAmount > 0 && paidAmount >= totalAmount) {
-          newStatus = "PAID";
-        } else if (paidAmount > 0) {
-          newStatus = "PARTIALLY_PAID";
-        } else {
-          newStatus = "GENERATED";
-        }
-
-        // Due date: use the new one if provided, otherwise keep the existing one,
-        // otherwise fall back to the default.
-        const effectiveDueDate = dueDate ?? existing.dueDate ?? defaultDueDate;
-
-        await db.bill.update({
-          where: { id: existing.id },
-          data: {
-            mealCharges,
-            // BLG-1: store the prorated value as the charged otherCharges
-            otherCharges: proratedOtherCharges,
-            totalAmount,
-            dueAmount,
-            status: newStatus,
-            generatedAt: new Date(),
-            dueDate: effectiveDueDate,
-            snapshot,
-          },
-        });
-        // Re-sync paid/due/status from actual APPROVED payments (authoritative)
-        await recomputeBillPaidState(existing.id);
-        // MF-2: create a BILL_SETTLEMENT ledger entry (idempotent — skipped if
-        // one already exists for this bill, so re-generation doesn't double-debit).
-        await createBillSettlementLedger(u.id, existing.id, totalAmount, month, year);
-        updated++;
-
-        // Notify the user when their bill amount increased (e.g. more meals added
-        // after the initial generation). Skip no-op regenerations and decreases
-        // (decreases are usually followed by a refund or adjustment notification).
-        if (totalAmount > existing.totalAmount) {
-          const diff = totalAmount - existing.totalAmount;
-          await createNotification({
-            userId: u.id,
-            title: "Bill updated",
-            description: `Your ${periodLabel} bill increased by ₹${Math.round(diff)} — new total ₹${Math.round(totalAmount)}.`,
-            type: "WARNING",
-            priority: "HIGH",
-            route: "billing",
-          });
-        }
-      } else {
-        // Create a new bill for this period
-        const createdBill = await db.bill.create({
-          data: {
-            userId: u.id,
-            periodMonth: month,
-            periodYear: year,
-            mealCharges,
-            // BLG-1: store the prorated value as the charged otherCharges
-            otherCharges: proratedOtherCharges,
-            totalAmount,
-            paidAmount: 0,
-            dueAmount: totalAmount,
-            status: "GENERATED",
-            generatedAt: new Date(),
-            dueDate: dueDate ?? defaultDueDate,
-            snapshot,
-          },
-        });
-        // MF-2: create a BILL_SETTLEMENT ledger entry debiting the resident's
-        // fund account. Idempotent — only runs once per billId.
-        await createBillSettlementLedger(u.id, createdBill.id, totalAmount, month, year);
-        created++;
-
-        // Notify the user that their bill is ready
-        const billDueDate = dueDate ?? defaultDueDate;
-        const dueLabel = billDueDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-        await createNotification({
-          userId: u.id,
-          title: "Bill generated",
-          description: `Your ${periodLabel} bill of ₹${Math.round(totalAmount)} is now available. Due ${dueLabel}.`,
-          type: "INFO",
-          priority: "HIGH",
-          route: "billing",
-        });
-      }
-    }
-
+    // LB-1: delegate the actual bill calculation to the shared helper so
+    // POST /api/bills and executeClosing produce identical charges.
+    const { created, updated, skipped } = await generateBillsForPeriod(
+      month,
+      year,
+      { dueDate, adminId: user.id }
+    );
     const generated = created + updated;
 
     await logAudit({

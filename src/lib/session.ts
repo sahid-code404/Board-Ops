@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { parseSessionToken } from "./auth";
+import type { NextResponse } from "next/server";
 import type { User } from "@prisma/client";
 
 export type SessionUser = Pick<
@@ -23,11 +24,60 @@ export type SessionUser = Pick<
   | "lastLoginAt"
 >;
 
-export async function getAuthUser(): Promise<SessionUser | null> {
+/**
+ * SEC-3 — Session cookie configuration.
+ *
+ * The auth token is now stored in an httpOnly cookie to protect against XSS
+ * token exfiltration. The cookie is sent automatically on every same-origin
+ * fetch (with `credentials: "include"` on the client) and is read server-side
+ * via the `cookies()` API from `next/headers`.
+ *
+ * For backward compatibility, the Bearer token in the `Authorization` header
+ * is still accepted (and is still set client-side as a fallback so the client
+ * knows whether the user is authenticated before the first API call).
+ */
+export const AUTH_COOKIE_NAME = "boardops_session";
+export const AUTH_COOKIE_MAX_AGE = 30 * 24 * 60 * 60; // 30 days in seconds
+
+/** Set the auth token as an httpOnly cookie on a NextResponse. */
+export function setAuthCookie(response: NextResponse, token: string): NextResponse {
+  response.cookies.set(AUTH_COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: AUTH_COOKIE_MAX_AGE,
+  });
+  return response;
+}
+
+/** Clear the auth cookie on a NextResponse (used by logout). */
+export function clearAuthCookie(response: NextResponse): NextResponse {
+  response.cookies.delete(AUTH_COOKIE_NAME);
+  return response;
+}
+
+/**
+ * Resolve the session token for the current request.
+ *
+ * Order of precedence:
+ *   1. `boardops_session` httpOnly cookie (preferred, SEC-3)
+ *   2. `Authorization: Bearer <token>` header (backward compat fallback)
+ */
+export async function getSessionToken(): Promise<string | null> {
+  const cookieStore = await cookies();
+  const cookieToken = cookieStore.get(AUTH_COOKIE_NAME)?.value ?? null;
+  if (cookieToken) return cookieToken;
+
   const h = await headers();
   const auth = h.get("authorization") || h.get("Authorization");
   if (!auth?.startsWith("Bearer ")) return null;
-  const token = auth.slice("Bearer ".length).trim();
+  return auth.slice("Bearer ".length).trim();
+}
+
+export async function getAuthUser(): Promise<SessionUser | null> {
+  const token = await getSessionToken();
+  if (!token) return null;
   const parsed = parseSessionToken(token);
   if (!parsed) return null;
   const session = await db.userSession.findUnique({

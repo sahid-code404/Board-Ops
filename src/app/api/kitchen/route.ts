@@ -1,7 +1,8 @@
 import { db } from "@/lib/db";
 import { requireAuth, requireRole } from "@/lib/session";
-import { ok, handleApiError } from "@/lib/api-response";
-import { isLocked, isPreRegistration, computeEditableUntil } from "@/lib/meal-engine";
+import { ok, err, handleApiError } from "@/lib/api-response";
+import { isLocked, isPreRegistration, computeEditableUntil, isOverridden } from "@/lib/meal-engine";
+import { z } from "zod";
 
 // ── Counting helpers ──
 // The admin kitchen only counts meals that are CONFIRMED:
@@ -9,12 +10,6 @@ import { isLocked, isPreRegistration, computeEditableUntil } from "@/lib/meal-en
 //   - Admin-overridden (the admin explicitly set the Current State)
 // Unlocked meals that the user can still toggle are NOT counted.
 // Admin-overridden OFF meals are NOT counted toward "off" either.
-
-/** Dynamic override check: Current State !== Original State */
-function isOverridden(e: { status: string; originalState: string }): boolean {
-  const effective = e.status === "LOCKED" ? "ON" : e.status;
-  return effective !== e.originalState;
-}
 
 /** Is this entry effectively locked (user can no longer change it)? */
 function isEntryLocked(e: { locked: boolean; status: string; editableUntil: Date }, isPastDate: boolean): boolean {
@@ -74,6 +69,15 @@ export async function GET(req: Request) {
     const guestMeals = await db.guestMeal.findMany({
       where: { serviceDate: target },
     });
+    // Expose individual guest-meal entries so the kitchen UI can render
+    // per-meal delete buttons (grouped by mealId).
+    const guestMealEntries = guestMeals.map((g) => ({
+      id: g.id,
+      mealId: g.mealId,
+      guestCount: g.guestCount,
+      notes: g.notes,
+      guestName: g.guestName,
+    }));
 
     // Daily counts — only count confirmed meals (locked or admin-overridden)
     const counts = meals.map((m) => {
@@ -200,7 +204,67 @@ export async function GET(req: Request) {
       };
     });
 
-    return ok({ date: target.toISOString(), counts, activeUsers, monthTotals, userMealStatus });
+    return ok({ date: target.toISOString(), counts, activeUsers, monthTotals, userMealStatus, guestMealEntries });
+  } catch (e) {
+    return handleApiError(e);
+  }
+}
+
+// ── POST /api/kitchen — Add a guest meal entry (admin only) ──
+const createGuestMealSchema = z.object({
+  mealId: z.string().min(1),
+  guestCount: z.number().int().min(1).max(100).default(1),
+  notes: z.string().optional(),
+  serviceDate: z.string().min(1), // "YYYY-MM-DD"
+});
+
+export async function POST(req: Request) {
+  try {
+    const user = await requireRole("ADMIN", "SUPER_ADMIN");
+    const body = await req.json();
+    const data = createGuestMealSchema.parse(body);
+
+    // Parse "YYYY-MM-DD" as local time (consistent with GET handler)
+    const [y, m, d] = data.serviceDate.split("-").map(Number);
+    const target = new Date(y, (m || 1) - 1, d || 1);
+    target.setHours(0, 0, 0, 0);
+
+    // Validate the meal exists and is active
+    const meal = await db.mealConfiguration.findUnique({
+      where: { id: data.mealId },
+    });
+    if (!meal || meal.status !== "ACTIVE") {
+      return err("Meal not found or inactive", 404);
+    }
+
+    const guestMeal = await db.guestMeal.create({
+      data: {
+        mealId: data.mealId,
+        userId: user.id, // admin is the host
+        guestName: `Guest (${meal.displayName})`,
+        guestCount: data.guestCount,
+        serviceDate: target,
+        notes: data.notes,
+      },
+    });
+
+    return ok(guestMeal, 201);
+  } catch (e) {
+    return handleApiError(e);
+  }
+}
+
+// ── DELETE /api/kitchen — Remove a guest meal entry (admin only) ──
+// Body: { guestMealId: string }
+export async function DELETE(req: Request) {
+  try {
+    await requireRole("ADMIN", "SUPER_ADMIN");
+    const body = await req.json().catch(() => ({}));
+    const guestMealId = typeof body?.guestMealId === "string" ? body.guestMealId : null;
+    if (!guestMealId) return err("guestMealId is required", 400);
+
+    await db.guestMeal.delete({ where: { id: guestMealId } });
+    return ok({ deleted: true });
   } catch (e) {
     return handleApiError(e);
   }

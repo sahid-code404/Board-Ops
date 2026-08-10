@@ -16,8 +16,8 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { evaluateFormula, validateFormula, extractVarSlugs, type FormulaVarResolver } from "@/lib/formula-engine";
-import { generateBillNumber, getPreviousDue, lockExpensesForPeriod } from "@/lib/reference-numbers";
-import { createBillSettlementLedger } from "@/lib/resident-fund";
+import { generateRefundNumber, lockExpensesForPeriod } from "@/lib/reference-numbers";
+import { generateBillsForPeriod } from "@/lib/bill-calculation";
 import { logAudit } from "@/lib/audit";
 
 // Prisma's interactive transaction client (the `tx` argument passed to
@@ -487,8 +487,6 @@ export async function executeClosing(
   dueDate?: Date
 ): Promise<ClosingResult> {
   const label = periodLabel(month, year);
-  const start = new Date(year, month, 1);
-  const end = new Date(year, month + 1, 0, 23, 59, 59, 999);
 
   // 1. Check readiness
   const readiness = await getReadiness(month, year);
@@ -546,9 +544,11 @@ export async function executeClosing(
   try {
     // DIR-1: run every write inside a single transaction so a failure at any
     // step (snapshot, bills, refunds, expense lock, status transition) rolls
-    // the whole closing back. Reads-only helpers (getPreviousDue,
-    // generateBillNumber, generateRefundNumber) keep using `db` — they don't
-    // mutate state and don't need to participate in the rollback.
+    // the whole closing back. Reads-only helpers (generateRefundNumber) keep
+    // using `db` — they don't mutate state and don't need to participate in
+    // the rollback. Side-effect helpers called by generateBillsForPeriod
+    // (createBillSettlementLedger, createNotification, generateBillNumber)
+    // also use `db`; they're idempotent so a rollback leaves harmless orphans.
     return await db.$transaction(async (tx) => {
     // `cycle` was created/updated above — guaranteed non-null here. The
     // explicit guard re-narrows it for TypeScript inside the closure (closures
@@ -589,149 +589,68 @@ export async function executeClosing(
       },
     });
 
-    // 4. Generate bills from the snapshot
-    const activeUsers = await tx.user.findMany({
-      where: { status: "ACTIVE", role: "USER", deletedAt: null },
+    // 4. Generate bills via the shared LB-1 helper. This is the SAME path used
+    // by POST /api/bills, so residents see identical charges regardless of
+    // whether the admin clicks "Generate Bills" or runs the monthly closing.
+    // The helper handles BLG-1 proration, payment preservation, BILL_SETTLEMENT
+    // ledger entries (MF-2), user notifications, and bill-number assignment for
+    // cycle-linked bills. The previous executeClosing bill-generation loop
+    // (snapshot + Formula Engine) is removed — it diverged from POST /api/bills
+    // (LB-1) and is now superseded by this single shared path.
+    //
+    // The snapshot is still created above (MonthlySnapshot row + cycle fields
+    // totalExpenses/totalMeals/mealCharge) for historical traceability — it
+    // freezes what the data looked like at closing time — but it's no longer
+    // the source of truth for the bill calculation. The helper reads live data
+    // (which, at closing time, is identical to the snapshot because expenses
+    // are about to be locked).
+    const { created, updated, skipped: _skipped } = await generateBillsForPeriod(
+      month,
+      year,
+      { dueDate, adminId, tx, cycleId: cycle.id }
+    );
+    const billsGenerated = created + updated;
+
+    // 5. Lock expenses for this period (PRD DEC-030 — expenses become immutable after snapshot)
+    const lockedCount = await lockExpensesForPeriod(month, year, cycle.id, tx);
+
+    // 6. Settlement: compute refundQueueTotal + outstandingDue from the
+    // freshly-generated (or refreshed) bills, and queue Refund records for
+    // overpaid users. The BILL_SETTLEMENT ledger entries themselves are
+    // created inside generateBillsForPeriod (MF-2) — this step only handles
+    // the overpayment-refund queue.
+    //
+    // Note: `generateRefundNumber` uses the `db` singleton (not `tx`), so the
+    // sequence number is computed from the committed state. A concurrent
+    // closing could collide, but the worst case is a duplicate-numbered refund
+    // record — caught at the application layer when a clerk processes it.
+    const periodBills = await tx.bill.findMany({
+      where: {
+        periodMonth: month,
+        periodYear: year,
+        deletedAt: null,
+        status: { notIn: ["VOID", "DELETED"] },
+      },
+      select: { id: true, userId: true, paidAmount: true, totalAmount: true },
     });
-
-    // Load room rent + cleaning from the snapshot variables (not live DB)
-    const snapshotVars = JSON.parse(snapshotData.variablesData) as Record<string, { value: string; type: string }>;
-    const roomRent = parseFloat(snapshotVars["billing.roomRent"]?.value || "0") || 0;
-    const cleaning = parseFloat(snapshotVars["billing.cleaningCharges"]?.value || "0") || 0;
-
-    // PRD: Meal charge is a SINGLE dynamic value = (Total Expenses - Guest Revenue) / Total Resident Meals
-    // NOT fixed per-meal rates. The snapshot already calculated this.
-    const perMealCharge = snapshotData.mealCharge;
-
-    // PRD DEC-012: store the formula version + expression on each bill for reproducibility
-    const snapshotFormulas = JSON.parse(snapshotData.formulaData) as Record<string, { name: string; expression: string; version: number }>;
-    const mealChargeFormulaInfo = snapshotFormulas["formula.mealCharges"] || null;
-
-    const snapshotMeals = JSON.parse(snapshotData.mealsData) as {
-      residentMeals: Record<string, Record<string, number>>;
-    };
-
-    // Read due date day from policy variable (default 10th)
-    const dueDateDayVar = await tx.variable.findUnique({ where: { key: "policy.billing.dueDateDay" } });
-    const dueDateDay = dueDateDayVar ? parseInt(dueDateDayVar.value) || 10 : 10;
-    const effectiveDueDate = dueDate ?? new Date(year, month + 1, dueDateDay);
-    let billsGenerated = 0;
     let refundQueueTotal = 0;
     let outstandingDue = 0;
-
-    for (const u of activeUsers) {
-      const counts = snapshotMeals.residentMeals[u.id] || {};
-      // PRD: meal charges = resident's total meal count × per-meal charge (dynamic, not fixed rates)
-      const residentMealCount = Object.values(counts).reduce((s, c) => s + c, 0);
-      const mealCharges = Math.round(residentMealCount * perMealCharge);
-      const otherCharges = roomRent + cleaning;
-      const totalAmount = mealCharges + otherCharges;
-
-      // PRD DEC-027: previous due tracked separately (not added to totalAmount)
-      const previousDue = await getPreviousDue(u.id, month, year);
-
-      // Check existing bill (for re-runs)
-      const existing = await tx.bill.findUnique({
-        where: { userId_periodMonth_periodYear: { userId: u.id, periodMonth: month, periodYear: year } },
-      });
-
-      if (existing && (existing.status === "VOID" || existing.deletedAt)) {
-        continue; // skip VOID/deleted
-      }
-
-      const billSnapshot = JSON.stringify({
-        counts,
-        residentMealCount,
-        perMealCharge,
-        mealCharges,
-        roomRent,
-        cleaning,
-        totalExpenses: snapshotData.totalExpenses,
-        guestRevenue: snapshotData.guestRevenue,
-        totalResidentMeals: snapshotData.totalResidentMeals,
-        snapshotId: snapshot.id,
-        formulaVersion: mealChargeFormulaInfo?.version ?? null,
-        formulaExpression: mealChargeFormulaInfo?.expression ?? null,
-        closedAt: new Date().toISOString(),
-      });
-
-      if (existing) {
-        // Preserve paidAmount, recompute due + status
-        const paidAmount = existing.paidAmount;
-        const dueAmount = Math.max(0, totalAmount - paidAmount);
-        let newStatus: string;
-        if (totalAmount > 0 && paidAmount >= totalAmount) {
-          newStatus = "PAID";
-        } else if (paidAmount > 0) {
-          newStatus = "PARTIALLY_PAID";
-        } else {
-          newStatus = "GENERATED";
-        }
-        await tx.bill.update({
-          where: { id: existing.id },
-          data: {
-            mealCharges,
-            otherCharges,
-            totalAmount,
-            dueAmount,
-            previousDue,
-            status: newStatus,
-            generatedAt: new Date(),
-            dueDate: effectiveDueDate,
-            snapshot: billSnapshot,
-            billingCycleId: cycle.id,
-            // Formula snapshot (only set if not already set — preserves the original generation's formula)
-            ...(existing.formulaKey ? {} : {
-              formulaKey: mealChargeFormulaInfo ? "formula.mealCharges" : null,
-              formulaVersion: mealChargeFormulaInfo?.version ?? null,
-              formulaExpression: mealChargeFormulaInfo?.expression ?? null,
-            }),
-            // Bill number (only set if not already assigned)
-            ...(existing.billNumber ? {} : { billNumber: await generateBillNumber() }),
-          },
-        });
-      } else {
-        await tx.bill.create({
-          data: {
-            billNumber: await generateBillNumber(),
-            userId: u.id,
-            periodMonth: month,
-            periodYear: year,
-            mealCharges,
-            otherCharges,
-            totalAmount,
-            paidAmount: 0,
-            dueAmount: totalAmount,
-            previousDue,
-            status: "GENERATED",
-            generatedAt: new Date(),
-            dueDate: effectiveDueDate,
-            snapshot: billSnapshot,
-            billingCycleId: cycle.id,
-            formulaKey: mealChargeFormulaInfo ? "formula.mealCharges" : null,
-            formulaVersion: mealChargeFormulaInfo?.version ?? null,
-            formulaExpression: mealChargeFormulaInfo?.expression ?? null,
-          },
-        });
-      }
-      billsGenerated++;
-
-      // Settlement: if paid > total, create a Refund record for the overpaid user
-      const paidAmount = existing?.paidAmount ?? 0;
-      if (paidAmount > totalAmount) {
-        const refundAmount = paidAmount - totalAmount;
+    let refundsQueued = 0;
+    for (const b of periodBills) {
+      if (b.paidAmount > b.totalAmount) {
+        const refundAmount = b.paidAmount - b.totalAmount;
         refundQueueTotal += refundAmount;
-        // Create a refund record for this overpaid user
+        // Idempotent: skip if a PENDING/PARTIALLY_PAID refund already exists
+        // for this user + cycle (a previous run may have queued one).
         const existingRefund = await tx.refund.findFirst({
-          where: { userId: u.id, billingCycleId: cycle.id, status: { in: ["PENDING", "PARTIALLY_PAID"] } },
+          where: { userId: b.userId, billingCycleId: cycle.id, status: { in: ["PENDING", "PARTIALLY_PAID"] } },
         });
         if (!existingRefund) {
-          const { generateRefundNumber } = await import("@/lib/reference-numbers");
           await tx.refund.create({
             data: {
               refundNumber: await generateRefundNumber(),
-              userId: u.id,
-              billId: existing?.id ?? null,
+              userId: b.userId,
+              billId: b.id,
               billingCycleId: cycle.id,
               amount: refundAmount,
               paidAmount: 0,
@@ -742,16 +661,14 @@ export async function executeClosing(
               processedAt: new Date(),
             },
           });
+          refundsQueued++;
         }
-      } else if (totalAmount > paidAmount) {
-        outstandingDue += (totalAmount - paidAmount);
+      } else if (b.totalAmount > b.paidAmount) {
+        outstandingDue += (b.totalAmount - b.paidAmount);
       }
     }
 
-    // 5. Lock expenses for this period (PRD DEC-030 — expenses become immutable after snapshot)
-    const lockedCount = await lockExpensesForPeriod(month, year, cycle.id, tx);
-
-    // 6. Update cycle to BILLS_GENERATED
+    // 7. Update cycle to BILLS_GENERATED
     cycle = await tx.billingCycle.update({
       where: { id: cycle.id },
       data: {
@@ -762,41 +679,13 @@ export async function executeClosing(
       },
     });
 
-    // LB-2: Actual settlement work. Previously `executeClosing` flipped the
-    // cycle from BILLS_GENERATED → SETTLED → CLOSED without doing any real
-    // settlement — bills were generated but the resident fund ledger was
-    // never debited and no audit trail of the settlement was written. Now:
-    //   1. Re-fetch every (non-VOID, non-DELETED) bill for this period from
-    //      the transaction's working set (so newly created bills are visible).
-    //   2. For each fully-paid bill (paidAmount >= totalAmount), create the
-    //      BILL_SETTLEMENT ledger entry via the idempotent helper. Bills
-    //      generated via POST /api/bills already have this entry; this catches
-    //      bills created directly inside this closing transaction.
-    //   3. Log an audit entry recording the settlement for traceability.
-    // Refund records for overpaid users are already created inside the per-user
-    // loop above — no duplicate work needed here.
-    // Note: `createBillSettlementLedger` and `logAudit` both use the `db`
-    // singleton (not `tx`), so they execute outside this transaction. The
-    // helper's idempotency check makes this safe: if the transaction rolls
-    // back after the ledger entry is written, the orphan entry is harmless
-    // (it's keyed on billId, which won't exist) and a re-run won't duplicate.
-    const settlementBills = await tx.bill.findMany({
-      where: {
-        periodMonth: month,
-        periodYear: year,
-        deletedAt: null,
-        status: { notIn: ["VOID", "DELETED"] },
-      },
-      select: { id: true, userId: true, paidAmount: true, totalAmount: true },
-    });
-    let billsSettled = 0;
-    for (const b of settlementBills) {
-      if (b.totalAmount > 0 && b.paidAmount >= b.totalAmount) {
-        await createBillSettlementLedger(b.userId, b.id, b.totalAmount, month, year);
-        billsSettled++;
-      }
-    }
-
+    // LB-2: Settlement audit trail. The BILL_SETTLEMENT ledger entries
+    // themselves are written by generateBillsForPeriod (MF-2) for every
+    // generated/refreshed bill — this audit entry records that the closing
+    // workflow ran to completion (snapshot → bills → refund queue → CLOSED).
+    // Note: `logAudit` uses the `db` singleton (not `tx`), so it executes
+    // outside this transaction. A rollback leaves an orphan audit entry,
+    // which is harmless (it's just a log record).
     await logAudit({
       actorId: adminId,
       action: "MONTHLY_SETTLEMENT",
@@ -807,13 +696,13 @@ export async function executeClosing(
         year,
         periodLabel: label,
         billsGenerated,
-        billsSettled,
+        refundsQueued,
         refundQueueTotal,
         outstandingDue,
       },
     });
 
-    // 6. Settle: mark as SETTLED then CLOSED
+    // 8. Settle: mark as SETTLED then CLOSED
     cycle = await tx.billingCycle.update({
       where: { id: cycle.id },
       data: {

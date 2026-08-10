@@ -1,15 +1,12 @@
 import { db } from "@/lib/db";
-import { getAuthUser, getClientIp, getUserAgent } from "@/lib/session";
+import { getAuthUser, getClientIp, getUserAgent, getSessionToken, clearAuthCookie } from "@/lib/session";
 import { ok, handleApiError } from "@/lib/api-response";
 import { logAudit } from "@/lib/audit";
-import { headers } from "next/headers";
 
 export async function POST() {
   try {
     const user = await getAuthUser();
-    const h = await headers();
-    const auth = h.get("authorization") || "";
-    const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : null;
+    const token = await getSessionToken();
     if (user && token) {
       await db.userSession.updateMany({
         where: { token, revokedAt: null },
@@ -24,7 +21,7 @@ export async function POST() {
         userAgent: await getUserAgent(),
       });
     }
-    return ok({ success: true });
+    return clearAuthCookie(ok({ success: true }));
   } catch (e) {
     return handleApiError(e);
   }

@@ -272,11 +272,19 @@ model LeaveApplication {
   reason      String
   status      String   @default("PENDING") // PENDING | APPROVED | REJECTED
   approvedBy  String?
+  // Meal targeting — which meals the leave applies to.
+  // mealType: ALL (every meal) | SPECIFIC (only mealIds listed)
+  // mealIds: JSON-encoded string array of MealConfiguration ids (empty when mealType=ALL)
+  mealType    String   @default("ALL") // ALL | SPECIFIC
+  mealIds     String?  // JSON array of meal ids
+  // Admin notes — set when an admin approves/rejects the application
+  adminNotes  String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
+  @@index([status, startDate])
 }
 
 model GuestMeal {

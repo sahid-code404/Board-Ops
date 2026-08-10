@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { requireAuth } from "@/lib/session";
 import { ok, handleApiError } from "@/lib/api-response";
-import { computeEditableUntil, isLocked } from "@/lib/meal-engine";
+import { computeEditableUntil, isLocked, isOverridden } from "@/lib/meal-engine";
 import { toLocalDateKey } from "@/lib/utils";
 import { runBackgroundTasks } from "@/lib/task-runner";
 
@@ -10,12 +10,6 @@ import { runBackgroundTasks } from "@/lib/task-runner";
 //   - Locked (past cutoff — the user can no longer change it), OR
 //   - Admin-overridden (the admin explicitly set the Current State)
 // Unlocked meals that the user can still toggle are NOT counted.
-
-/** Dynamic override check: Current State !== Original State */
-function isOverridden(e: { status: string; originalState: string }): boolean {
-  const effective = e.status === "LOCKED" ? "ON" : e.status;
-  return effective !== e.originalState;
-}
 
 /** Counts toward "on": status is ON/LOCKED AND (locked OR overridden) */
 function countsAsOn(e: { status: string; originalState: string; locked: boolean; editableUntil: Date }): boolean {

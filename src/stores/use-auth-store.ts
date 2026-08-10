@@ -33,6 +33,19 @@ type AuthState = {
   isAuthenticated: () => boolean;
 };
 
+/**
+ * SEC-3 — Auth state is now primarily stored in an httpOnly cookie set by the
+ * login/verify-otp routes. The token kept here in localStorage is intentionally
+ * retained for two reasons:
+ *   1. As a client-side hint that the user is signed in before the first API
+ *      call resolves (e.g. for the initial route guard in `AppShell`).
+ *   2. As a backward-compat `Authorization: Bearer` fallback that the API
+ *      accepts alongside the cookie. The server prefers the cookie when both
+ *      are present (see `getSessionToken` in `src/lib/session.ts`).
+ *
+ * On logout, the client clears this store AND calls `/api/auth/logout`, which
+ * clears the httpOnly cookie server-side.
+ */
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({

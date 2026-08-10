@@ -95,7 +95,7 @@ export function TopBar() {
 
   return (
     <header className="sticky top-0 z-30 safe-top px-3 sm:px-4 lg:px-6 pt-3">
-      <div className="mx-auto max-w-6xl glass rounded-3xl px-3 py-2.5 flex items-center gap-2">
+      <div className="mx-auto max-w-6xl glass rounded-3xl px-3 py-2.5 flex items-center gap-1.5 sm:gap-2">
         {/* Hamburger — always visible (mobile-first on all screens) */}
         <motion.button
           whileTap={{ scale: 0.9 }}
@@ -126,12 +126,13 @@ export function TopBar() {
           </motion.h1>
         </div>
 
-        {/* Search button — icon only on all screens */}
+        {/* Search button — hidden on mobile (< sm) to free up space; the
+            command palette is still reachable via the hamburger sidebar. */}
         <motion.button
           whileTap={{ scale: 0.9 }}
           onClick={() => setCommandOpen(true)}
           aria-label="Search"
-          className="grid place-items-center h-10 w-10 rounded-2xl glass-soft text-muted-foreground hover:text-foreground shrink-0"
+          className="hidden sm:grid place-items-center h-10 w-10 rounded-2xl glass-soft text-muted-foreground hover:text-foreground shrink-0"
         >
           <Search className="h-[18px] w-[18px]" />
         </motion.button>
