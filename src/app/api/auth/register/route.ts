@@ -5,7 +5,7 @@ import { getClientIp, getUserAgent } from "@/lib/session";
 import { ok, err, handleApiError } from "@/lib/api-response";
 import { logAudit } from "@/lib/audit";
 import { z } from "zod";
-import { createHash, randomInt } from "crypto";
+import { hashOtp, generateOtp } from "@/lib/otp";
 
 const schema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -24,15 +24,9 @@ const schema = z.object({
   }),
 });
 
-/** Hash a 6-digit OTP using sha256 — we never store the raw OTP. */
-export function hashOtp(otp: string): string {
-  return createHash("sha256").update(otp).digest("hex");
-}
-
-/** Generate a cryptographically-random 6-digit OTP string. */
-export function generateOtp(): string {
-  return String(randomInt(0, 1_000_000)).padStart(6, "0");
-}
+// Re-export so existing imports (`import { hashOtp } from "../register/route"`)
+// continue to resolve while callers migrate to `@/lib/otp` directly.
+export { hashOtp, generateOtp };
 
 export async function POST(req: Request) {
   try {
@@ -118,15 +112,11 @@ export async function POST(req: Request) {
       userAgent: await getUserAgent(),
     });
 
-    // Only return the OTP in the response body when ?dev=1 is present.
-    // This is a sandbox-only convenience so the frontend can display the code.
-    const url = new URL(req.url);
-    const isDev = url.searchParams.get("dev") === "1";
-
+    // SECURITY: Never expose the OTP in the API response.
+    // The OTP is sent via email only. The console.log is for sandbox debugging.
     return ok({
       userId: user.id,
       email: user.email,
-      ...(isDev ? { devOtp: otp } : {}),
     });
   } catch (e) {
     return handleApiError(e);

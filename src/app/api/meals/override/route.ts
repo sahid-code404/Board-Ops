@@ -55,10 +55,16 @@ export async function POST(req: Request) {
     // Pre-reg meals ALWAYS default to OFF, regardless of the meal config's
     // defaultState. The user wasn't enrolled yet, so their "original selection"
     // is OFF (not enrolled = no meal).
+    // LB-9: also verify the user is ACTIVE — overrides for INACTIVE/PENDING/
+    // SUSPENDED/DELETED users are rejected. Selecting `status` lets us check
+    // without an extra round-trip.
     const targetUser = await db.user.findUnique({
       where: { id: data.userId },
-      select: { createdAt: true },
+      select: { createdAt: true, status: true },
     });
+    if (!targetUser || targetUser.status !== "ACTIVE") {
+      return err("User not found or not active", 404);
+    }
     const isPreReg = targetUser
       ? isMealBeforeEnrollment(data.serviceDate, targetUser.createdAt, meal)
       : false;

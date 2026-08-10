@@ -5,6 +5,7 @@ import { ok, err, handleApiError } from "@/lib/api-response";
 import { z } from "zod";
 import { logAudit } from "@/lib/audit";
 import { verifyOtp, OTP_CONFIG } from "@/lib/otp";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { trustDevice, DEVICE_COOKIE_NAME, DEVICE_COOKIE_MAX_AGE } from "@/lib/device-trust";
 import { cookies } from "next/headers";
 
@@ -20,6 +21,10 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { pendingToken, code } = schema.parse(body);
     const ip = await getClientIp();
+    const rateLimit = checkRateLimit(ip, "verify-otp");
+    if (!rateLimit.allowed) {
+      return err("Too many attempts. Please try again later.", 429);
+    }
     const ua = await getUserAgent();
     const now = new Date();
 

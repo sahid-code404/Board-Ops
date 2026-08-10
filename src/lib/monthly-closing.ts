@@ -13,9 +13,18 @@
  * After publication, corrections require adjustment entries (PRD DEC-033).
  */
 
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { evaluateFormula, validateFormula, extractVarSlugs, type FormulaVarResolver } from "@/lib/formula-engine";
 import { generateBillNumber, getPreviousDue, lockExpensesForPeriod } from "@/lib/reference-numbers";
+import { createBillSettlementLedger } from "@/lib/resident-fund";
+import { logAudit } from "@/lib/audit";
+
+// Prisma's interactive transaction client (the `tx` argument passed to
+// `db.$transaction(async (tx) => ...)`). It is a strict subset of PrismaClient
+// (no $transaction/$connect/$disconnect). Use this for any helper that should
+// run inside a transaction.
+type Tx = Prisma.TransactionClient;
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -294,23 +303,23 @@ type SnapshotData = {
   mealCharge: number;
 };
 
-async function createSnapshot(month: number, year: number): Promise<SnapshotData> {
+async function createSnapshot(month: number, year: number, tx: Tx): Promise<SnapshotData> {
   const start = new Date(year, month, 1);
   const end = new Date(year, month + 1, 0, 23, 59, 59, 999);
 
   // ── Meals data: per-resident meal counts ──
-  const activeUsers = await db.user.findMany({
+  const activeUsers = await tx.user.findMany({
     where: { status: "ACTIVE", role: "USER", deletedAt: null },
     select: { id: true, name: true, room: true },
   });
-  const meals = await db.mealConfiguration.findMany({ where: { status: "ACTIVE" } });
+  const meals = await tx.mealConfiguration.findMany({ where: { status: "ACTIVE" } });
   const mealNameById: Record<string, string> = {};
   meals.forEach((m) => (mealNameById[m.id] = m.name));
 
-  const mealEntries = await db.mealEntry.findMany({
+  const mealEntries = await tx.mealEntry.findMany({
     where: { serviceDate: { gte: start, lte: end }, user: { role: "USER" } },
   });
-  const guestMeals = await db.guestMeal.findMany({
+  const guestMeals = await tx.guestMeal.findMany({
     where: { serviceDate: { gte: start, lte: end } },
   });
 
@@ -347,7 +356,7 @@ async function createSnapshot(month: number, year: number): Promise<SnapshotData
   });
 
   // ── Expenses data ──
-  const expenses = await db.expense.findMany({
+  const expenses = await tx.expense.findMany({
     where: {
       expenseDate: { gte: start, lte: end },
       deletedAt: null,
@@ -382,7 +391,7 @@ async function createSnapshot(month: number, year: number): Promise<SnapshotData
   });
 
   // ── Variables data ──
-  const variables = await db.variable.findMany({
+  const variables = await tx.variable.findMany({
     where: { status: "ACTIVE" },
   });
   const variablesData = JSON.stringify(
@@ -390,7 +399,7 @@ async function createSnapshot(month: number, year: number): Promise<SnapshotData
   );
 
   // ── Formula data ──
-  const formulas = await db.formula.findMany({
+  const formulas = await tx.formula.findMany({
     where: { status: "ACTIVE" },
     select: { key: true, name: true, expression: true, version: true, returnType: true },
   });
@@ -535,15 +544,25 @@ export async function executeClosing(
   }
 
   try {
+    // DIR-1: run every write inside a single transaction so a failure at any
+    // step (snapshot, bills, refunds, expense lock, status transition) rolls
+    // the whole closing back. Reads-only helpers (getPreviousDue,
+    // generateBillNumber, generateRefundNumber) keep using `db` — they don't
+    // mutate state and don't need to participate in the rollback.
+    return await db.$transaction(async (tx) => {
+    // `cycle` was created/updated above — guaranteed non-null here. The
+    // explicit guard re-narrows it for TypeScript inside the closure (closures
+    // don't inherit narrowing on `let` bindings from the outer scope).
+    if (!cycle) throw new Error("Billing cycle is null inside closing transaction");
     // 3. Create the snapshot
-    const snapshotData = await createSnapshot(month, year);
+    const snapshotData = await createSnapshot(month, year, tx);
 
     // Delete any existing snapshot (from a previous failed attempt)
     if (cycle.snapshotId) {
-      await db.monthlySnapshot.deleteMany({ where: { billingCycleId: cycle.id } });
+      await tx.monthlySnapshot.deleteMany({ where: { billingCycleId: cycle.id } });
     }
 
-    const snapshot = await db.monthlySnapshot.create({
+    const snapshot = await tx.monthlySnapshot.create({
       data: {
         billingCycleId: cycle.id,
         mealsData: snapshotData.mealsData,
@@ -558,7 +577,7 @@ export async function executeClosing(
       },
     });
 
-    cycle = await db.billingCycle.update({
+    cycle = await tx.billingCycle.update({
       where: { id: cycle.id },
       data: {
         status: "SNAPSHOT_CREATED",
@@ -571,7 +590,7 @@ export async function executeClosing(
     });
 
     // 4. Generate bills from the snapshot
-    const activeUsers = await db.user.findMany({
+    const activeUsers = await tx.user.findMany({
       where: { status: "ACTIVE", role: "USER", deletedAt: null },
     });
 
@@ -593,7 +612,7 @@ export async function executeClosing(
     };
 
     // Read due date day from policy variable (default 10th)
-    const dueDateDayVar = await db.variable.findUnique({ where: { key: "policy.billing.dueDateDay" } });
+    const dueDateDayVar = await tx.variable.findUnique({ where: { key: "policy.billing.dueDateDay" } });
     const dueDateDay = dueDateDayVar ? parseInt(dueDateDayVar.value) || 10 : 10;
     const effectiveDueDate = dueDate ?? new Date(year, month + 1, dueDateDay);
     let billsGenerated = 0;
@@ -612,7 +631,7 @@ export async function executeClosing(
       const previousDue = await getPreviousDue(u.id, month, year);
 
       // Check existing bill (for re-runs)
-      const existing = await db.bill.findUnique({
+      const existing = await tx.bill.findUnique({
         where: { userId_periodMonth_periodYear: { userId: u.id, periodMonth: month, periodYear: year } },
       });
 
@@ -648,7 +667,7 @@ export async function executeClosing(
         } else {
           newStatus = "GENERATED";
         }
-        await db.bill.update({
+        await tx.bill.update({
           where: { id: existing.id },
           data: {
             mealCharges,
@@ -672,7 +691,7 @@ export async function executeClosing(
           },
         });
       } else {
-        await db.bill.create({
+        await tx.bill.create({
           data: {
             billNumber: await generateBillNumber(),
             userId: u.id,
@@ -703,12 +722,12 @@ export async function executeClosing(
         const refundAmount = paidAmount - totalAmount;
         refundQueueTotal += refundAmount;
         // Create a refund record for this overpaid user
-        const existingRefund = await db.refund.findFirst({
+        const existingRefund = await tx.refund.findFirst({
           where: { userId: u.id, billingCycleId: cycle.id, status: { in: ["PENDING", "PARTIALLY_PAID"] } },
         });
         if (!existingRefund) {
           const { generateRefundNumber } = await import("@/lib/reference-numbers");
-          await db.refund.create({
+          await tx.refund.create({
             data: {
               refundNumber: await generateRefundNumber(),
               userId: u.id,
@@ -730,10 +749,10 @@ export async function executeClosing(
     }
 
     // 5. Lock expenses for this period (PRD DEC-030 — expenses become immutable after snapshot)
-    const lockedCount = await lockExpensesForPeriod(month, year, cycle.id);
+    const lockedCount = await lockExpensesForPeriod(month, year, cycle.id, tx);
 
     // 6. Update cycle to BILLS_GENERATED
-    cycle = await db.billingCycle.update({
+    cycle = await tx.billingCycle.update({
       where: { id: cycle.id },
       data: {
         status: "BILLS_GENERATED",
@@ -743,15 +762,66 @@ export async function executeClosing(
       },
     });
 
+    // LB-2: Actual settlement work. Previously `executeClosing` flipped the
+    // cycle from BILLS_GENERATED → SETTLED → CLOSED without doing any real
+    // settlement — bills were generated but the resident fund ledger was
+    // never debited and no audit trail of the settlement was written. Now:
+    //   1. Re-fetch every (non-VOID, non-DELETED) bill for this period from
+    //      the transaction's working set (so newly created bills are visible).
+    //   2. For each fully-paid bill (paidAmount >= totalAmount), create the
+    //      BILL_SETTLEMENT ledger entry via the idempotent helper. Bills
+    //      generated via POST /api/bills already have this entry; this catches
+    //      bills created directly inside this closing transaction.
+    //   3. Log an audit entry recording the settlement for traceability.
+    // Refund records for overpaid users are already created inside the per-user
+    // loop above — no duplicate work needed here.
+    // Note: `createBillSettlementLedger` and `logAudit` both use the `db`
+    // singleton (not `tx`), so they execute outside this transaction. The
+    // helper's idempotency check makes this safe: if the transaction rolls
+    // back after the ledger entry is written, the orphan entry is harmless
+    // (it's keyed on billId, which won't exist) and a re-run won't duplicate.
+    const settlementBills = await tx.bill.findMany({
+      where: {
+        periodMonth: month,
+        periodYear: year,
+        deletedAt: null,
+        status: { notIn: ["VOID", "DELETED"] },
+      },
+      select: { id: true, userId: true, paidAmount: true, totalAmount: true },
+    });
+    let billsSettled = 0;
+    for (const b of settlementBills) {
+      if (b.totalAmount > 0 && b.paidAmount >= b.totalAmount) {
+        await createBillSettlementLedger(b.userId, b.id, b.totalAmount, month, year);
+        billsSettled++;
+      }
+    }
+
+    await logAudit({
+      actorId: adminId,
+      action: "MONTHLY_SETTLEMENT",
+      entity: "BillingCycle",
+      entityId: cycle.id,
+      newValue: {
+        month,
+        year,
+        periodLabel: label,
+        billsGenerated,
+        billsSettled,
+        refundQueueTotal,
+        outstandingDue,
+      },
+    });
+
     // 6. Settle: mark as SETTLED then CLOSED
-    cycle = await db.billingCycle.update({
+    cycle = await tx.billingCycle.update({
       where: { id: cycle.id },
       data: {
         status: "SETTLED",
       },
     });
 
-    cycle = await db.billingCycle.update({
+    cycle = await tx.billingCycle.update({
       where: { id: cycle.id },
       data: {
         status: "CLOSED",
@@ -775,6 +845,7 @@ export async function executeClosing(
         outstandingDue,
       },
     };
+    }); // end db.$transaction
   } catch (e) {
     // Mark cycle as FAILED
     await db.billingCycle.update({

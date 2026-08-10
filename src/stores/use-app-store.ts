@@ -12,6 +12,7 @@ export type ViewKey =
   | "payments"
   | "expenses"
   | "funds"
+  | "monthly-closing"
   | "formula-engine"
   | "users"
   | "notifications"

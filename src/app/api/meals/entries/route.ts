@@ -55,6 +55,30 @@ export async function GET(req: Request) {
       },
     });
 
+    // MF-4: fetch active holidays that disable meals and overlap the requested
+    // date range. Meal entries are NOT auto-created on these dates — the
+    // kitchen is closed. Admin overrides can still create them explicitly via
+    // /api/meals/override.
+    const activeMealHolidays = await db.holiday.findMany({
+      where: {
+        status: "ACTIVE",
+        mealsDisabled: true,
+        startDate: { lte: end },
+        endDate: { gte: start },
+      },
+      select: { startDate: true, endDate: true },
+    });
+    // Normalize each holiday to [start-of-day, end-of-day] for date-only compares
+    const holidayRanges = activeMealHolidays.map((h) => {
+      const s = new Date(h.startDate); s.setHours(0, 0, 0, 0);
+      const e = new Date(h.endDate); e.setHours(23, 59, 59, 999);
+      return { start: s.getTime(), end: e.getTime() };
+    });
+    const isHolidayDisabled = (date: Date): boolean => {
+      const t = date.getTime();
+      return holidayRanges.some((r) => t >= r.start && t <= r.end);
+    };
+
     const map = new Map<string, typeof entries[number]>();
     entries.forEach((e) => map.set(`${e.mealId}_${e.serviceDate.toDateString()}`, e));
 
@@ -101,6 +125,11 @@ export async function GET(req: Request) {
         // has already passed, don't create an entry (the user missed it).
         // Admin overrides can still create these explicitly via /api/meals/override.
         if (isMealBeforeEnrollment(d, user.createdAt, meal)) continue;
+
+        // MF-4: skip auto-creating entries on holidays where meals are disabled.
+        // The kitchen is closed — no meal is served. Admin overrides can still
+        // create these explicitly via /api/meals/override.
+        if (isHolidayDisabled(d)) continue;
 
         const key = `${meal.id}_${d.toDateString()}`;
         let entry = map.get(key);

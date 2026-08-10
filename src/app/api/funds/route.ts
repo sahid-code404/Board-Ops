@@ -54,7 +54,7 @@ export async function GET(req: Request) {
     // Get all active residents
     const residents = await db.user.findMany({
       where: { status: "ACTIVE", role: "USER" },
-      select: { id: true, name: true, email: true, room: true, avatarUrl: true },
+      select: { id: true, name: true, email: true, room: true, avatarUrl: true, createdAt: true },
       orderBy: { name: "asc" },
     });
 
@@ -85,15 +85,44 @@ export async function GET(req: Request) {
       select: { userId: true, amount: true },
     });
 
-    // Build per-user data
-    // Per-user deficit = (total expenses ÷ number of residents) − user's deposit.
-    // This is calculated instantly from actual expenses + payments — no bill
-    // generation needed. Each resident gets an equal share of the month's
-    // expenses. If they paid less than their share, they have a deficit.
-    const activeResidentCount = residents.length || 1;
-    const perUserExpense = totalExpenses / activeResidentCount;
+    // ── LB-6: Prorated expense share ──
+    // Instead of an equal split (totalExpenses / residentCount), each
+    // resident's share is weighted by how many days they were enrolled in
+    // the month. A resident who joined on the 20th pays proportionally less
+    // than one who was there all month. `daysEnrolled` runs from the user's
+    // registration date to the end of the month (or today for the current
+    // month) — clamped to a minimum of 1 day so a brand-new joiner still
+    // gets a non-zero share on their first day.
+    const now = new Date();
+    const isCurrentMonth = now.getFullYear() === year && now.getMonth() === month;
+    // Upper bound for the enrollment window — end of month for past months,
+    // "right now" for the current month.
+    const periodEnd = isCurrentMonth ? now : monthEnd;
+    const DAY_MS = 24 * 60 * 60 * 1000;
 
-    const userBreakdown = residents.map((u) => {
+    const residentsWithDays = residents.map((u) => {
+      // Enrollment starts at registration date (or month-start if the user
+      // was registered before this month).
+      const start = u.createdAt > monthStart ? u.createdAt : monthStart;
+      let days = 0;
+      if (start <= periodEnd) {
+        days = Math.max(1, Math.ceil((periodEnd.getTime() - start.getTime()) / DAY_MS));
+      }
+      return { ...u, daysEnrolled: days };
+    });
+
+    const totalEnrolledDays = residentsWithDays.reduce((s, u) => s + u.daysEnrolled, 0);
+    // Fallback: equal split when no one was enrolled (edge case: all
+    // residents registered after the end of the month).
+    const fallbackPerUser = totalExpenses / (residents.length || 1);
+
+    // Build per-user data.
+    // Per-user deficit = user's prorated share of expenses − user's deposit.
+    // This is calculated instantly from actual expenses + payments — no bill
+    // generation needed. Each resident gets a prorated share of the month's
+    // expenses based on days enrolled. If they paid less than their share,
+    // they have a deficit.
+    const userBreakdown = residentsWithDays.map((u) => {
       const userBills = bills.filter((b) => b.userId === u.id);
       const billTotal = userBills.reduce((s, b) => s + b.totalAmount, 0);
       const billDue = userBills.reduce((s, b) => s + b.dueAmount, 0);
@@ -105,6 +134,13 @@ export async function GET(req: Request) {
 
       const needToPay = Math.max(0, billDue);
       const hasBills = userBills.length > 0;
+
+      // Prorated share — weighted by daysEnrolled. Falls back to equal split
+      // when totalEnrolledDays is 0 so we never divide by zero.
+      const perUserExpense =
+        totalEnrolledDays > 0
+          ? totalExpenses * (u.daysEnrolled / totalEnrolledDays)
+          : fallbackPerUser;
 
       // Deficit = user's share of expenses − user's deposit.
       // Instant calculation — doesn't depend on bill generation.

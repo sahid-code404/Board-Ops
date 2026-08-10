@@ -224,6 +224,10 @@ export function BillingView() {
   }, [searchInput]);
   const [statusFilter, setStatusFilter] = useState<BillStatus | "ALL" | "DELETED">("ALL");
   const [generateOpen, setGenerateOpen] = useState(false);
+  // UX-3: confirmation dialog shown when the admin clicks "Generate" inside the
+  // Generate Bills dialog. Forces an explicit confirm before recalculating
+  // every resident's bill for the selected period.
+  const [confirmGenerateOpen, setConfirmGenerateOpen] = useState(false);
   // Default to last month — bills can only be generated for past months
   const nowDate = new Date();
   const [genMonth, setGenMonth] = useState<number>(
@@ -819,7 +823,7 @@ export function BillingView() {
           <DialogFooter>
             <GlassButton variant="ghost" onClick={() => setGenerateOpen(false)}>Cancel</GlassButton>
             <GlassButton
-              onClick={() => generateMutation.mutate()}
+              onClick={() => setConfirmGenerateOpen(true)}
               loading={generateMutation.isPending}
               disabled={!readiness?.canClose}
             >
@@ -829,6 +833,39 @@ export function BillingView() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* UX-3: final confirmation before generating bills */}
+      <AlertDialog
+        open={confirmGenerateOpen}
+        onOpenChange={(o) => !o && setConfirmGenerateOpen(false)}
+      >
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-warning" />
+              Generate bills for {MONTHS[genMonth]} {genYear}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will recalculate all resident bills. Existing bills will be updated with new meal charges. Payment history is preserved.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-2xl" disabled={generateMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90"
+              disabled={generateMutation.isPending}
+              onClick={() => {
+                generateMutation.mutate();
+                setConfirmGenerateOpen(false);
+              }}
+            >
+              {generateMutation.isPending ? "Generating…" : "Generate Bills"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Bill detail dialog */}
       <Dialog

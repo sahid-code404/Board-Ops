@@ -3366,3 +3366,273 @@ Below is the structured audit report.
 4. **Long-term (3+ months)**: Implement proper RBAC with Role/Permission tables (MF-8), build resident checkout wizard (MF-11, BLG-11), add security deposit tracking (MF-12), integrate payment gateway (BLG-15).
 
 No code was modified during this audit. All findings are read-only observations based on the current state of the codebase.
+
+---
+Task ID: SEC-1-FIX
+Agent: general-purpose sub-agent
+Task: Remove all `?dev=1` OTP exposures from auth endpoints (audit finding SEC-1)
+
+Work Log:
+- Read full worklog context, then audited the 3 affected API routes and the auth-screen frontend for OTP leak vectors.
+- Backend — `src/app/api/auth/send-verification/route.ts`: removed `const url = new URL(req.url); const isDev = url.searchParams.get("dev") === "1";` and the `...(isDev ? { devOtp: otp } : {})` spread. Response is now `{ sent: true }`. `console.log` OTP line retained for sandbox debugging.
+- Backend — `src/app/api/auth/resend-otp/route.ts`: removed `const devMode = !isEmailConfigured();` and the `...(devMode ? { devOtp: otpCode } : {})` spread. Response is now `{ resent: true, expiresAt }`. Removed the now-unused `isEmailConfigured` import (kept `sendOtpEmail`).
+- Backend — `src/app/api/auth/forgot-password/route.ts`: removed `const url = new URL(req.url); const isDev = url.searchParams.get("dev") === "1";` and `return ok({ sent: true, devOtp: isDev ? otp : undefined });`. Response is now `{ sent: true }`. Updated the JSDoc to drop the "returned with ?dev=1" mention. `console.log` OTP line retained.
+- Frontend — `src/components/features/auth/auth-screen.tsx`:
+  - Removed the `// ?dev=1 lets the sandbox frontend display the OTP...` comment above the register call.
+  - Removed `devOtp`/`setDevOtp` and `forgotDevOtp`/`setForgotDevOtp` state declarations entirely (no remaining references after the display blocks were deleted).
+  - `resendOtp`: removed `?dev=1` query param, removed `res.data.devOtp` read, simplified the response type to `{ sent: boolean }`, dropped the now-unused `res` binding.
+  - `submitForgotPassword`: removed `?dev=1` query param, removed `res.data.devOtp` read, simplified response type, dropped the now-unused `res` binding.
+  - `resetToLogin` and `submit` (register branch): removed the now-dead `setDevOtp(null)` / `setForgotDevOtp(null)` calls.
+  - Removed both "Dev mode — your code" display blocks (forgot-otp screen and verify screen), including the inline `KeyRound` usage in the verify block. `KeyRound` import retained — still used by the forgot-code and reset-screen headers.
+- Searched the entire `src/` tree for any remaining `devOtp`, `forgotDevOtp`, `devMode`, `dev=1`, `searchParams.get("dev")`, `isDev`, and `isEmailConfigured` references — zero matches in auth code. (The only other `isEmailConfigured` and `isDev`-like symbols elsewhere were unrelated, e.g. `isDeviceTrusted` in `device-trust.ts`.)
+- Ran `bun run lint` — passes with 0 errors and 0 warnings attributable to this change. (2 pre-existing warnings in `meals-config-view.tsx` and `variables-view.tsx` about React Hook Form + React Compiler interaction, unrelated to this fix.)
+
+Security impact:
+- OTP codes are no longer present in any HTTP response body for `/api/auth/send-verification`, `/api/auth/resend-otp`, or `/api/auth/forgot-password`, regardless of any query string. The account-takeover vector described in audit finding SEC-1 is closed.
+- The sandbox dev workflow still works: OTPs are still printed to the server `console.log`, which is the intended sandbox-debug channel (server-side only, not exposed to the client).
+
+Next actions (suggested):
+- Audit `/api/auth/register` and `/api/auth/verify-email` for any analogous dev-mode OTP returns (out of scope for this task but worth a sweep).
+- Consider deleting the now-orphaned `isEmailConfigured` export from `src/lib/email.ts` if nothing else imports it (verify with a project-wide grep first).
+
+---
+Task ID: BATCH-FIX-1
+Agent: general-purpose sub-agent
+Task: Apply 7 audit fixes (DIR-1, LB-3, DIR-6, LB-9, LB-10, DIR-5, BLG-3) to backend billing/payments/meal-override paths.
+
+Work Log:
+- Read the full worklog context first, then read each of the 6 target files plus `src/lib/bill-sync.ts` and `src/lib/reference-numbers.ts` to understand existing call patterns before making changes.
+
+- DIR-1 — `src/lib/monthly-closing.ts` (`executeClosing`): wrapped the entire try-block body (snapshot creation, bill generation, refund processing, expense locking, status transitions through BILLS_GENERATED → SETTLED → CLOSED) in `return await db.$transaction(async (tx) => { ... });`. Every `db.*` call inside the block was changed to `tx.*`. The catch-block (which marks the cycle as FAILED) intentionally stays on `db` because the transaction has already rolled back by the time we reach it. Cycle creation/update (the "PREPARING" step before the try block) is left outside the transaction by design — it's the bootstrap step that survives a failed close attempt.
+  - To support this, `createSnapshot(month, year, tx)` was given a mandatory `tx: Prisma.TransactionClient` parameter and all its reads (`user`, `mealConfiguration`, `mealEntry`, `guestMeal`, `expense`, `variable`, `formula`) were switched to `tx.*`.
+  - `lockExpensesForPeriod` in `src/lib/reference-numbers.ts` was given an optional `tx: Prisma.TransactionClient | typeof db = db` parameter so it can run inside the caller's transaction. Backward-compatible default keeps any future caller that omits `tx` working.
+  - Added `import { Prisma } from "@prisma/client"; type Tx = Prisma.TransactionClient;` to both files. (Initial attempt used `PrismaClient.TransactionClient` which is not a valid namespace access — fixed to `Prisma.TransactionClient`.)
+  - Added an `if (!cycle) throw …` guard at the top of the transaction callback to re-narrow `cycle` for TypeScript (closures don't inherit `let`-narrowing from the outer scope, which produced 4 "possibly null" errors without the guard).
+  - Read-only helpers `generateBillNumber`, `generateRefundNumber`, and `getPreviousDue` continue to use `db` directly — they don't mutate state and don't need to participate in the rollback.
+
+- LB-3 — `src/app/api/meals/toggle/route.ts` (POST bulk toggle): added the missing `evaluateRestrictions` check. The check is user-scoped, so it is evaluated exactly once before the loop (only when `status === "ON"`) and the boolean result is reused for every entry. Inside the loop, before the `mealEntry.update`, restricted users now get `{ id, success: false, error: "Restricted" }` pushed to results and `continue`. OFF toggles are unaffected (residents can always turn meals OFF).
+
+- DIR-6 — `src/app/api/payments/[id]/route.ts` (DELETE): verified already in place. The `recomputeBillPaidState` import on line 7 and the `if (existing.billId) { await recomputeBillPaidState(existing.billId); }` call after the soft-delete (lines 253–256) were already present in the codebase — the audit was filed against an older revision. No code change needed; documented for completeness.
+
+- LB-9 — `src/app/api/meals/override/route.ts` (POST): the `targetUser` query previously selected only `createdAt`. Extended the `select` to include `status`, then added `if (!targetUser || targetUser.status !== "ACTIVE") return err("User not found or not active", 404);` immediately after the fetch. This blocks overrides for INACTIVE / PENDING / SUSPENDED / DELETED users and for unknown userIds, with the exact 404 status code specified in the task.
+
+- LB-10 — `src/app/api/payments/[id]/route.ts` (PATCH approve/reject): added a guard right after the idempotency check. When `newStatus === "APPROVED"` and `payment.billId` is set, the linked bill is fetched with `select: { status: true, deletedAt: true }`. If the bill is missing, has `status === "VOID"`, has `status === "DELETED"`, or has a non-null `deletedAt`, the request is rejected with `err("Cannot approve payment for a voided or deleted bill", 422)`. Rejecting a payment is still allowed regardless of bill state (rejection doesn't credit the resident).
+
+- DIR-5 — `src/app/api/funds/route.ts` (GET bills query): verified already in place. The `where` clause on the bills `findMany` (lines 63–69) already includes `deletedAt: null` alongside `status: { notIn: ["VOID"] }`. The audit was filed against an older revision; no code change needed.
+
+- BLG-3 — `src/app/api/bills/route.ts` (GET): added a self-healing overdue transition immediately after `purgeExpiredBills()`. A single `db.bill.updateMany` flips any non-deleted bill with `status` in `["GENERATED", "PARTIALLY_PAID"]` and `dueDate < now` to `status: "OVERDUE"`. Runs on every GET /api/bills request. When nothing matches, `updateMany` issues one UPDATE that touches zero rows (no actual writes), so the "only do this if there are any" qualifier from the audit is satisfied without an extra count query. PAID, VOID, already-OVERDUE, and soft-deleted bills are excluded.
+
+- Lint / type-check:
+  - `bun run lint` passes with 0 errors and 2 warnings, both pre-existing and unrelated (React Hook Form `watch()` + React Compiler interaction in `meals-config-view.tsx` and `variables-view.tsx`).
+  - `bunx tsc --noEmit` reports zero errors attributable to the changed files. (The wider codebase has many pre-existing `db is possibly 'undefined'` errors from the `PrismaClient | undefined` singleton pattern in `src/lib/db.ts`, plus an unrelated `OVERDUE` state-machine typing issue in `state-machine.ts` — all pre-existing, not introduced by this task.)
+
+Files changed:
+- `src/lib/monthly-closing.ts` — DIR-1 (transaction wrap, `createSnapshot` signature, type import)
+- `src/lib/reference-numbers.ts` — DIR-1 (optional `tx` parameter on `lockExpensesForPeriod`, type import)
+- `src/app/api/meals/toggle/route.ts` — LB-3 (bulk-toggle restriction check)
+- `src/app/api/meals/override/route.ts` — LB-9 (active-user check + `status` select)
+- `src/app/api/payments/[id]/route.ts` — LB-10 (void/deleted-bill check on approve)
+- `src/app/api/bills/route.ts` — BLG-3 (self-healing overdue transition)
+
+Files verified already-correct (no change required):
+- `src/app/api/payments/[id]/route.ts` — DIR-6 (DELETE already calls `recomputeBillPaidState`)
+- `src/app/api/funds/route.ts` — DIR-5 (bills query already has `deletedAt: null`)
+
+Next actions (suggested):
+- Run the monthly-closing end-to-end (ideally with a deliberately failing bill insert) to confirm the transaction rolls back snapshot + bills + refund records + expense locks + cycle status atomically.
+- Backfill `OVERDUE` on existing rows in production with a one-off `UPDATE "Bill" SET status='OVERDUE' WHERE status IN ('GENERATED','PARTIALLY_PAID') AND "dueDate" < NOW() AND "deletedAt" IS NULL;` so the first GET /api/bills after deploy doesn't have to do all the work in one request.
+- The `state-machine.ts` typing issue (`OVERDUE` not declared in the state graph) is pre-existing but is now exercised more often because BLG-3 transitions bills to OVERDUE on every list call — worth fixing in a follow-up so the state machine becomes the single source of truth for allowed transitions.
+
+
+
+---
+
+Task ID: BATCH-FIX-2
+Agent: general-purpose sub-agent
+Task: Fix MF-1, MF-2, LB-5, MF-4, UX-3
+
+Work Log:
+Read worklog.md first, then applied the five fixes in order. All edits were scoped to the files listed in the task brief; no other functionality was touched.
+
+- MF-1 — Register `MonthlyClosingView` in nav + lazy-view-router. The component at `src/components/features/billing/monthly-closing-view.tsx` exports `MonthlyClosingView` but was never wired up. Changes:
+  - `src/stores/use-app-store.ts`: added `"monthly-closing"` to the `ViewKey` union (immediately after `"funds"`).
+  - `src/components/layout/nav-config.ts`: imported `CalendarCheck` from lucide-react; added `{ view: "monthly-closing", label: "Monthly Closing", icon: CalendarCheck, roles: ["ADMIN"], rail: true }` after the `funds` item; added `"monthly-closing": "Monthly Closing"` to `NAV_LABELS`.
+  - `src/components/layout/lazy-view-router.tsx`: added the lazy `MonthlyClosingView` import, the `LazyMonthlyClosing` memo wrapper, and the `case "monthly-closing": return isAdmin ? <LazyMonthlyClosing /> : null;` branch (after the `funds` case).
+  - `src/components/layout/command-palette.tsx`: imported `CalendarCheck` and added the new Finance command item with keywords `["closing", "settle", "snapshot", "freeze", "lock", "finalize"]`, `roles: ["ADMIN"]`, `group: "Finance"`.
+  - `src/app/page.tsx`: added `"monthly-closing"` to the `adminOnlyViews` array so residents are redirected away.
+  - `src/components/layout/nav-groups.ts`: also added `"monthly-closing"` to the Finance group filter so the desktop sidebar places it under Finance (the brief didn't list this file, but without it the item would have landed in Administration — keeping the brief's "Finance group" intent consistent).
+
+- MF-2 — Bill settlement creates a `BILL_SETTLEMENT` ledger entry.
+  - `src/lib/resident-fund.ts`: added a new exported `createBillSettlementLedger(userId, billId, amount, periodMonth, periodYear)` helper. It is **idempotent** — it first runs `db.ledgerEntry.findFirst({ where: { userId, type: "BILL_SETTLEMENT", entityId: billId } })` and returns immediately if one already exists, so re-running bill generation never double-debits the resident. The entry is created via the existing `createLedgerEntry` with `type: "BILL_SETTLEMENT"`, `amount: -amount` (negative = debit), `entityType: "Bill"`, `entityId: billId`, and `description: "Bill for {Month} {Year}"`.
+  - `src/app/api/bills/route.ts` (POST handler): imported `createBillSettlementLedger` and call it after each bill is created or updated — for the update branch, immediately after `recomputeBillPaidState(existing.id)`; for the create branch, switched the `db.bill.create` call to capture the returned row (`const createdBill = await db.bill.create(...)`) and then call `createBillSettlementLedger(u.id, createdBill.id, totalAmount, month, year)`. The idempotency check inside the helper guarantees one settlement entry per billId, even if the same bill is regenerated multiple times.
+
+- LB-5 — Unify locked logic between kitchen and dashboard. The kitchen `userMealStatus` section computed `effectivelyLocked` from `isPastDate` (date < today), whereas the counting helpers and the dashboard use `isLocked(editableUntil)`. This produced inconsistent UI (a meal whose cutoff had already passed on the current day was shown as editable in the per-user table but counted as locked in the daily counts).
+  - `src/app/api/kitchen/route.ts`: imported `computeEditableUntil` from `@/lib/meal-engine` and replaced the `effectivelyLocked` calculation in the `mealsOn.map(...)` block with the unified logic. For an existing entry: `isLocked(entry.editableUntil) || entry.locked || entry.status === "LOCKED"`. For a missing entry (no row in the DB yet): `isLocked(computeEditableUntil(m, target))` — i.e. the meal's own computed cutoff has passed. The `isPastDate` variable is left in place because it is still used by `countsAsOn`/`countsAsOff` for the daily counts (those helpers already incorporate `isLocked(e.editableUntil)` via `isEntryLocked`, so the daily numbers and the per-user status now agree).
+
+- MF-4 — Holidays consulted by the meal engine. The auto-creation loop in `GET /api/meals/entries` would create `MealEntry` rows even on days where an `ACTIVE` holiday with `mealsDisabled=true` was set, so residents saw meal toggles on days the kitchen was closed.
+  - `src/app/api/meals/entries/route.ts`: after the `entries` query, added a `db.holiday.findMany({ where: { status: "ACTIVE", mealsDisabled: true, startDate: { lte: end }, endDate: { gte: start } } })` fetch (only `startDate`/`endDate` are selected). The holidays are normalised to `[start-of-day, end-of-day]` time ranges and stored in a `holidayRanges` array; an `isHolidayDisabled(date)` helper runs a `.some(...)` over those ranges. Inside the auto-creation loop, immediately after the `isMealBeforeEnrollment` skip, a new `if (isHolidayDisabled(d)) continue;` guard skips entry creation for the holiday date. Admin overrides can still create entries explicitly via `POST /api/meals/override` (unchanged). `db` was already imported.
+
+- UX-3 — Confirmation dialog for bill generation. The "Generate" button inside the existing Generate Bills Dialog fired `generateMutation.mutate()` directly with no second-step confirmation. Now:
+  - `src/components/features/billing/billing-view.tsx`: added a `confirmGenerateOpen` state and changed the "Generate" button's `onClick` from `generateMutation.mutate()` to `setConfirmGenerateOpen(true)`. Added a new `AlertDialog` (the existing `AlertDialog` family from `@/components/ui/alert-dialog` was already imported) with title `Generate bills for {Month} {Year}?` and description `This will recalculate all resident bills. Existing bills will be updated with new meal charges. Payment history is preserved.` Footer has `Cancel` (AlertDialogCancel, disabled while pending) and `Generate Bills` (AlertDialogAction, disabled while pending; shows `Generating…` while pending). The action calls `generateMutation.mutate()` then closes the AlertDialog — the parent Generate Bills Dialog remains open and its "Generate" button still shows the loading spinner until `onSuccess`/`onError` fires (which already closes the parent dialog via `setGenerateOpen(false)`).
+
+Lint:
+- `bun run lint` passes with 0 errors and 2 warnings. Both warnings are pre-existing and unrelated to this batch (`react-hooks/incompatible-library` for React Hook Form's `watch()` in `meals-config-view.tsx` and `variables-view.tsx`).
+
+Files changed:
+- `src/stores/use-app-store.ts` — MF-1 (ViewKey union)
+- `src/components/layout/nav-config.ts` — MF-1 (nav item + label + icon import)
+- `src/components/layout/lazy-view-router.tsx` — MF-1 (lazy import + memo + switch case)
+- `src/components/layout/command-palette.tsx` — MF-1 (command item + icon import)
+- `src/components/layout/nav-groups.ts` — MF-1 (Finance group filter; needed for the new item to land in Finance on desktop)
+- `src/app/page.tsx` — MF-1 (adminOnlyViews permission guard)
+- `src/lib/resident-fund.ts` — MF-2 (new `createBillSettlementLedger` helper)
+- `src/app/api/bills/route.ts` — MF-2 (call helper after create/update)
+- `src/app/api/kitchen/route.ts` — LB-5 (unified `effectivelyLocked`)
+- `src/app/api/meals/entries/route.ts` — MF-4 (holiday fetch + skip in auto-create loop)
+- `src/components/features/billing/billing-view.tsx` — UX-3 (AlertDialog confirmation step)
+
+Next actions (suggested):
+- Backfill `BILL_SETTLEMENT` ledger entries for existing bills created before MF-2 was deployed. A one-off script can iterate all non-VOID, non-DELETED bills and call `createBillSettlementLedger` for each (the helper is idempotent — safe to re-run). Without this, the resident fund balances will only start reflecting debits from bills generated after deploy.
+- After MF-4, residents who already have `MealEntry` rows on existing holidays will still see them. Consider a cleanup pass that locks/hides those entries (or deletes admin-unmodified ones) so the kitchen-counts and user-meals views are consistent with the new "no entries on holidays" rule.
+- Consider unifying the `isPastDate`-based logic in `countsAsOn`/`countsAsOff`/`isEntryLocked` as well, so the kitchen route no longer has any `isPastDate` reference. The brief scoped LB-5 to the `userMealStatus` section only, so this was left for a follow-up.
+
+
+
+---
+
+Task ID: BATCH-FIX-3
+Agent: general-purpose sub-agent
+Task: Fix MF-6 (rate limiting on auth), DIR-7 (no hard-delete cascade), MF-10 (bcrypt for OTP), LB-6 (prorated expense share in funds).
+
+Work Log:
+Read worklog.md first to absorb prior context (BATCH-FIX-1 and BATCH-FIX-2 patterns). Read each target file plus `src/lib/session.ts`, `src/lib/api-response.ts`, `src/lib/audit.ts`, `package.json`, and the `User` model in `prisma/schema.prisma` before making any edits.
+
+- MF-6 — Created `src/lib/rate-limit.ts` verbatim from the task brief (in-memory `Map<string, {count, resetAt}>`, 1-minute window, 5-attempt cap per IP+action, periodic 5-minute cleanup `setInterval` guarded by `typeof setInterval !== "undefined"` so it no-ops in edge runtimes). Imported `checkRateLimit` into each of the five auth routes and added an early 429 return at the top of each `try` block:
+  - `src/app/api/auth/login/route.ts` — action `"login"`, message "Too many login attempts. Please try again later." Inserted before `req.json()` so even malformed payloads from a flooded IP get rate-limited.
+  - `src/app/api/auth/verify-email/route.ts` — action `"verify-email"`.
+  - `src/app/api/auth/forgot-password/route.ts` — action `"forgot-password"` (placed before the email-existence lookup so the early-return `{sent:true}` for unknown emails also consumes a slot — prevents enumeration via the rate-limit signal).
+  - `src/app/api/auth/verify-otp/route.ts` — action `"verify-otp"` (inserted between the existing `const ip = await getClientIp();` and `const ua = await getUserAgent();` so `ip` is reused).
+  - `src/app/api/auth/reset-password/route.ts` — action `"reset-password"`.
+  The `getClientIp()` helper in `src/lib/session.ts` was already imported in every target route, so no new import was needed for it — only `checkRateLimit`.
+
+- DIR-7 — `src/lib/user-cleanup.ts` `purgeExpiredUsers`: replaced the `db.user.deleteMany` (which cascaded to sessions, bills, payments, ledger, meal entries, etc.) with `db.user.updateMany` that flips `status` to `"ARCHIVED"` and refreshes `deletedAt` to the current moment. The `findMany` now also filters `status: { not: "ARCHIVED" }` so repeat GET /api/users calls are idempotent (don't re-issue the same update). Added an audit-log entry per archived user via `logAudit({ actorId: u.id, action: "USER_ARCHIVED", entity: "User", entityId: u.id, reason: "Soft-delete grace period (7 days) expired — record preserved." })` inside `Promise.all` — audit logging is fire-and-forget by design so a failure here doesn't roll back the archival. Added `import { logAudit } from "@/lib/audit";`. The other purge functions (`purgeExpiredBills`, `purgeExpiredPayments`, `purgeExpiredExpenses`) were left untouched — DIR-7 is scoped to users only.
+
+- MF-10 — Switched OTP hashing from SHA-256 to bcrypt.
+  - Verified `bcryptjs` was not installed; ran `bun add bcryptjs` → installed `bcryptjs@3.0.3` (ships its own TypeScript types, no `@types/bcryptjs` needed). Added `"bcryptjs": "^3.0.3"` to `package.json` dependencies.
+  - `src/lib/otp.ts`: replaced `scryptSync`-based hashing with `bcrypt.hashSync(code, 10)` (10 rounds ≈ 100ms — slow enough to deter brute force) and `bcrypt.compareSync(code, stored)` for verification. Removed the `timingSafeEqual`/`scryptSync` imports (bcrypt already does constant-time comparison internally). Kept `randomBytes` from `crypto` for `generateOtp` and `generatePendingToken`. Stored hash format is now bcrypt's standard `$2a$10$…` 60-char string (no separate salt column needed).
+  - `src/app/api/auth/register/route.ts`: removed the local `hashOtp`/`generateOtp` functions (which used `createHash("sha256")` and `randomInt`) and replaced with `import { hashOtp, generateOtp } from "@/lib/otp";`. Added `export { hashOtp, generateOtp };` re-export so any remaining callers (`import { hashOtp } from "../register/route"`) keep resolving during migration. Removed `import { createHash, randomInt } from "crypto";`.
+  - `src/app/api/auth/verify-email/route.ts`: switched from `import { hashOtp } from "../register/route"` (which compared `hashOtp(otp) === user.emailVerifyToken` — a SHA-256 equality check) to `import { verifyOtp } from "@/lib/otp";` and `if (!verifyOtp(otp, user.emailVerifyToken)) { return err("Invalid or expired code", 400); }`. This is the correct constant-time comparison against a bcrypt hash.
+  - `src/app/api/auth/forgot-password/route.ts`: replaced `crypto.createHash("sha256").update(otp).digest("hex")` with `hashOtp(otp)` from `@/lib/otp`; replaced `String(Math.floor(100000 + Math.random() * 900000))` with `generateOtp()` (uses `crypto.randomBytes` — cryptographically secure, where `Math.random` is not). Removed `import crypto from "crypto";`. Updated the JSDoc comment to say "bcrypt hash" instead of "SHA-256 hash".
+  - `src/app/api/auth/verify-reset-otp/route.ts`: this route verifies the OTP stored by `forgot-password` (now bcrypt) AND generates the reset token that `reset-password` will verify. Switched both sides: the OTP check is now `if (!verifyOtp(otp, user.resetOtpHash))` and the reset-token storage is now `const resetTokenHash = hashOtp(resetToken);` (was `crypto.createHash("sha256").update(resetToken).digest("hex")`). Kept `import crypto from "crypto";` because `crypto.randomBytes(32)` is still used to generate the 64-char reset token.
+  - `src/app/api/auth/reset-password/route.ts`: switched the reset-token verification from `const resetTokenHash = crypto.createHash("sha256").update(resetToken).digest("hex"); if (resetTokenHash !== user.resetOtpHash)` to `if (!verifyOtp(resetToken, user.resetOtpHash))`. Removed `import crypto from "crypto";`. bcrypt's 72-byte input cap is fine here (reset token is 64 ASCII chars).
+  - bcrypt handles any string up to 72 bytes, so the 6-digit OTP and 64-char reset token both fit. No schema migration needed — `resetOtpHash` and `emailVerifyToken` remain free-form `String?` columns; the format change from 64-char hex to 60-char bcrypt hash is invisible to Prisma. NOTE: existing rows with SHA-256 hashes become unverifiable after deploy — anyone mid-flow will need to request a fresh OTP. Acceptable for a sandbox deployment; flagged in Next Actions for production.
+
+- LB-6 — `src/app/api/funds/route.ts` GET: replaced the equal-split `perUserExpense = totalExpenses / activeResidentCount` with a days-enrollment-weighted share.
+  - Added `createdAt` to the residents `findMany` select.
+  - Computed `periodEnd` = `now` for the current month, `monthEnd` for past months (so the enrollment window doesn't extend into the future for past-month views).
+  - For each resident, `daysEnrolled` = `max(1, ceil((periodEnd - enrollmentStart) / DAY_MS))` where `enrollmentStart` is the user's `createdAt` clamped to `monthStart` (a user who registered before this month counts as enrolled for the whole month). The `max(1, …)` floor means a brand-new joiner still gets a non-zero share on their first day; `ceil` rounds up so a same-day joiner counts as 1 day, not 0.
+  - `totalEnrolledDays = sum of all residents' daysEnrolled`.
+  - `fallbackPerUser = totalExpenses / (residents.length || 1)` — used only when `totalEnrolledDays === 0` (edge case: every resident registered after the period end). This satisfies the brief's "fall back to equal split" requirement without dividing by zero.
+  - Inside the per-user map: `perUserExpense = totalExpenses * (u.daysEnrolled / totalEnrolledDays)` when `totalEnrolledDays > 0`, else `fallbackPerUser`. The `deficit = Math.max(0, perUserExpense - deposit)` calculation is unchanged — it just uses the now-prorated `perUserExpense` per resident.
+  - The sum of every resident's `perUserExpense` equals `totalExpenses` exactly (weighted-average identity), so the totals reconcile and the dashboard doesn't under- or over-allocate expenses.
+  - No response-shape change — the `users: userBreakdown` array still has the same fields, so the frontend `funds-view.tsx` doesn't need updating.
+
+Lint / type-check:
+- `bun run lint` passes with 0 errors and 2 warnings, both pre-existing and unrelated (`react-hooks/incompatible-library` for React Hook Form's `watch()` in `meals-config-view.tsx` and `variables-view.tsx`). Same baseline as BATCH-FIX-1 and BATCH-FIX-2.
+- `bunx tsc --noEmit` reports 478 total errors across the codebase, all pre-existing patterns (the `db is possibly 'undefined'` PrismaClient singleton issue noted by BATCH-FIX-1, the missing `emailOtp*`/`otpPending*`/`twoFactorMethod` Prisma schema fields, and unrelated `OVERDUE` state-machine + form-resolver + restriction-engine typing issues). After filtering for `is possibly 'undefined'`, `emailOtp`, `otpPending`, and `twoFactorMethod`, zero new TypeScript errors are introduced by my changes in any of the touched files.
+
+Files changed:
+- `src/lib/rate-limit.ts` — NEW (MF-6)
+- `src/lib/otp.ts` — MF-10 (bcrypt hash/verify, removed scryptSync/timingSafeEqual)
+- `src/lib/user-cleanup.ts` — DIR-7 (archive instead of hard-delete + audit log + `logAudit` import)
+- `src/app/api/funds/route.ts` — LB-6 (prorated `perUserExpense` based on `daysEnrolled`; added `createdAt` to residents select)
+- `src/app/api/auth/login/route.ts` — MF-6 (rate limit at top)
+- `src/app/api/auth/verify-email/route.ts` — MF-6 + MF-10 (rate limit + `verifyOtp` instead of SHA-256 compare)
+- `src/app/api/auth/forgot-password/route.ts` — MF-6 + MF-10 (rate limit + `hashOtp`/`generateOtp` from `@/lib/otp`)
+- `src/app/api/auth/verify-otp/route.ts` — MF-6 (rate limit at top, reusing `ip` variable)
+- `src/app/api/auth/reset-password/route.ts` — MF-6 + MF-10 (rate limit + `verifyOtp` for reset token)
+- `src/app/api/auth/verify-reset-otp/route.ts` — MF-10 (verify OTP via `verifyOtp`; hash reset token via `hashOtp`)
+- `src/app/api/auth/register/route.ts` — MF-10 (replaced local SHA-256 `hashOtp`/`generateOtp` with `@/lib/otp` imports + re-export)
+- `package.json` — added `bcryptjs@^3.0.3`
+
+Next actions (suggested):
+- Backfill consideration for MF-10: any user with an unexpired `emailVerifyToken` or `resetOtpHash` generated before deploy holds a SHA-256 hash and will fail verification under bcrypt. These columns have a 5–10 minute TTL so the issue self-heals within minutes; no migration script is required for sandbox use. For production, consider running a one-off `UPDATE "User" SET "emailVerifyToken" = NULL, "emailVerifyExpires" = NULL, "resetOtpHash" = NULL, "resetOtpExpires" = NULL;` at deploy time to invalidate stale hashes cleanly.
+- For MF-6, the in-memory rate limiter is per-instance — if the app runs behind multiple Node workers or in serverless mode (where each invocation may be a fresh isolate), the limit resets per isolate. The file already comments this; a Redis-backed limiter is the production follow-up.
+- For DIR-7, the existing `purgeExpiredBills`/`purgeExpiredPayments`/`purgeExpiredExpenses` still hard-delete. If the audit-trail preservation rationale applies to those entities too, follow the same archive-instead-of-delete pattern in a separate task (out of scope for this batch — DIR-7 was scoped to users only).
+- For LB-6, the `daysEnrolled` calculation counts calendar days, not "active meal days" — a resident who joined mid-month but was on leave for part of the month still pays for the full enrollment window. If meal-leave days should be excluded, that's a follow-up that would need to consult the `LeaveApplication` model (currently not fetched in this route).
+- The `verify-reset-otp/route.ts` was not in the rate-limit list in the brief but is on the critical path of the forgot-password flow. Consider adding `checkRateLimit(ip, "verify-reset-otp")` as a follow-up for defense-in-depth.
+
+
+
+
+---
+
+Task ID: BATCH-FIX-4
+Agent: general-purpose sub-agent
+Task: Fix BLG-1 (prorated billing for mid-month joiners), LB-2 (executeClosing actual settlement), MF-5 (background task runner), UX-1 (dashboard trend/meals/expense widgets).
+
+Work Log:
+Read worklog.md first to absorb prior context (BATCH-FIX-1/2/3 patterns and conventions — `db is possibly undefined` baseline, MF-2 `createBillSettlementLedger` helper existence, identical lint baseline of 0 errors + 2 pre-existing `react-hooks/incompatible-library` warnings). Read each target file plus `src/lib/resident-fund.ts`, `src/lib/audit.ts`, `src/lib/db.ts`, `src/lib/utils.ts`, `src/stores/use-app-store.ts`, and the relevant Prisma schema models (`Bill`, `Restriction`, `UserSession`, `LedgerEntry`, `Refund`) before making any edits.
+
+- BLG-1 — Prorated billing for mid-month joiners. The POST `/api/bills` handler charged the full `roomRent + cleaningCharges` to every active resident regardless of when they registered, so a resident who joined on July 20 was billed the same fixed charges as one who'd been there since July 1.
+  - `src/app/api/bills/route.ts`: added an explicit `select` clause to the `activeUsers` query (`id, name, email, room, avatarUrl, createdAt`) so the proration math has the user's registration date without pulling relations. (`createdAt` was already implicitly returned by the unscoped `findMany`, but the explicit select documents intent and prevents future schema growth from inflating the payload.)
+  - Inside the per-user loop, after fetching `entries` and computing `otherCharges = roomRent + cleaning`, added the proration block:
+    - `periodStart = new Date(year, month, 1)` — first day of the billing month.
+    - `periodEndDay = new Date(year, month + 1, 0)` — last calendar day of the month at midnight (the `day=0` rollover idiom gives "last day of previous month" = last day of `month`).
+    - `daysInMonth = periodEndDay.getDate()` — 28/29/30/31 depending on month + leap year.
+    - `userRegDate = new Date(u.createdAt.getFullYear(), u.createdAt.getMonth(), u.createdAt.getDate())` — `createdAt` normalized to start-of-day (drops HH:MM:SS.ms so the day-diff math is exact).
+    - `enrollmentStart = max(periodStart, userRegDate)` — a user who registered before this month counts as enrolled for the whole month; a mid-month joiner counts from their registration date.
+    - `rawDays = floor((periodEndDay - enrollmentStart) / MS_PER_DAY) + 1` — inclusive day count. For July 20 → July 31 this is `floor(11) + 1 = 12` days (Jul 20..Jul 31 inclusive).
+    - `daysEnrolled = max(0, rawDays)` — defensive floor for the edge case where the user registered after `periodEndDay` (shouldn't happen for ACTIVE users, but the math is now safe).
+    - `prorationFactor = daysInMonth > 0 ? daysEnrolled / daysInMonth : 1` — guards against a divide-by-zero if `daysInMonth` is ever 0 (impossible in practice — every month has ≥28 days — but the guard is cheap).
+    - `proratedOtherCharges = Math.round(otherCharges * prorationFactor)` — matches the brief's exact formula. `Math.round` (not `floor`/`ceil`) avoids systematic under-bias and matches the existing `Math.round` used for `mealCharges`.
+    - `totalAmount = mealCharges + proratedOtherCharges` — meal charges are NOT prorated (they're derived from actual `MealEntry` rows, which only exist for post-registration dates anyway).
+  - The bill snapshot JSON now includes `otherCharges` (the raw un-prorated value, for audit), `proratedOtherCharges`, `prorationFactor`, `daysEnrolled`, and `daysInMonth` — so the audit trail captures both the input and the computed proration, allowing retrospective verification of any bill.
+  - The `db.bill.update` (existing-bill branch) and `db.bill.create` (new-bill branch) `data` objects now store `otherCharges: proratedOtherCharges` instead of `otherCharges` — the bill's `otherCharges` column reflects what the resident was actually charged, not the raw policy value. `totalAmount` flows through unchanged (now equals `mealCharges + proratedOtherCharges`). All downstream logic (`dueAmount = max(0, totalAmount - paidAmount)`, `newStatus` derivation, MF-2 `createBillSettlementLedger(u.id, billId, totalAmount, month, year)`, the increase-notification `if (totalAmount > existing.totalAmount)`) continues to use the new `totalAmount` and is unaffected.
+
+- LB-2 — `executeClosing` was just status-flag theater. The function transitioned `BILLS_GENERATED → SETTLED → CLOSED` back-to-back inside the closing transaction with no actual settlement work in between — bills were generated directly via `tx.bill.create`/`tx.bill.update` (bypassing the POST `/api/bills` handler that MF-2 added `createBillSettlementLedger` to), so resident fund accounts were never debited for closing-generated bills, and no audit trail recorded that the settlement step ran.
+  - `src/lib/monthly-closing.ts`: added `import { createBillSettlementLedger } from "@/lib/resident-fund";` and `import { logAudit } from "@/lib/audit";` to the top-of-file imports.
+  - Inside `executeClosing`'s `db.$transaction(async (tx) => { ... })` block, between the `BILLS_GENERATED` cycle update and the `SETTLED` cycle update, added the actual settlement work:
+    1. Re-fetch every non-VOID, non-DELETED bill for this period via `tx.bill.findMany({ where: { periodMonth: month, periodYear: year, deletedAt: null, status: { notIn: ["VOID", "DELETED"] } }, select: { id, userId, paidAmount, totalAmount } })`. Using `tx` (not `db`) ensures newly-created bills from the same transaction are visible — `db` would only see committed rows and miss the just-created bills.
+    2. For each bill where `totalAmount > 0 && paidAmount >= totalAmount` (fully paid), call `createBillSettlementLedger(b.userId, b.id, b.totalAmount, month, year)`. The helper is idempotent (it does `findFirst({ type: "BILL_SETTLEMENT", entityId: billId })` and returns immediately if one already exists), so bills that already have their settlement entry from a prior POST `/api/bills` run are skipped, and re-running `executeClosing` doesn't double-debit. Counted via `billsSettled++`.
+    3. `await logAudit({ actorId: adminId, action: "MONTHLY_SETTLEMENT", entity: "BillingCycle", entityId: cycle.id, newValue: { month, year, periodLabel: label, billsGenerated, billsSettled, refundQueueTotal, outstandingDue } })` — writes a dedicated audit entry recording how many bills were settled vs. generated and the running totals, so admins can trace the settlement step from the audit log alone.
+  - Refund processing for overpaid users was already in place (the per-user loop at lines 718–746 creates `Refund` records inside `tx` when `paidAmount > totalAmount`). No change needed there — the brief's "make sure it actually creates refund records" check confirmed the existing `tx.refund.create` call is correct and idempotent (guarded by `existingRefund` lookup).
+  - Note on transactional scope: `createBillSettlementLedger` and `logAudit` both use the `db` singleton (not `tx`), so they execute outside the closing transaction. This is acceptable because (a) the helper's idempotency check makes a partial-failure re-run safe, and (b) `entityId` on `LedgerEntry` is a plain string column (no FK constraint to `Bill`), so creating a ledger entry referencing a billId that hasn't committed yet doesn't violate any constraint. If the transaction rolls back after the ledger entry is written, the orphan entry is harmless — it's keyed on a billId that will never exist, and a re-run won't create a duplicate. A full fix would require refactoring both helpers to accept an optional `tx` parameter; flagged in Next Actions.
+
+- MF-5 — Background task runner. Created `src/lib/task-runner.ts` verbatim from the brief: exports `runBackgroundTasks()` which runs three `updateMany`/`deleteMany` queries in a try/catch (silent fail — never breaks the calling request):
+    1. Auto-transition overdue bills: `db.bill.updateMany({ where: { status: { in: ["GENERATED", "PARTIALLY_PAID"] }, dueDate: { lt: new Date() }, deletedAt: null }, data: { status: "OVERDUE" } })`.
+    2. Auto-lift expired restrictions: `db.restriction.updateMany({ where: { status: "ACTIVE", expiresAt: { lt: new Date() } }, data: { status: "EXPIRED" } })`.
+    3. Clean up expired sessions: `db.userSession.deleteMany({ where: { expiresAt: { lt: new Date() } } })`.
+  - The `TASK_INTERVAL_MS = 60 * 60 * 1000` constant is included verbatim from the brief (it's currently unused — kept for future "only run if last run > 1h ago" throttling; `@typescript-eslint/no-unused-vars` is off in the eslint config so it doesn't trip lint).
+  - Integration:
+    - `src/app/api/dashboard/route.ts`: added `import { runBackgroundTasks } from "@/lib/task-runner";` and `await runBackgroundTasks();` at the very top of the `try` block in `GET()`, before `requireAuth()`. Awaiting (not `void`) per the brief's "actually, since it's lightweight, awaiting is fine" guidance.
+    - `src/app/api/bills/route.ts`: added the same import and `await runBackgroundTasks();` call at the top of `GET()`, after `await purgeExpiredBills()`. The existing BLG-3 `db.bill.updateMany` block (which is identical to task #1 in the runner) is intentionally left in place — the brief says "DO NOT change any other functionality", and the duplicate `updateMany` is idempotent (a no-op when nothing matches), so the cost is one extra SQL statement per request with zero behavioral impact.
+  - Errors inside `runBackgroundTasks` are caught and `console.error`'d, so a Prisma hiccup on the restrictions table can never cause a dashboard or bills list request to fail.
+
+- UX-1 — Dashboard widgets. The dashboard API was returning `todayMeals`, `trend` (7-day), and `expenseBreakdown` but `dashboard-view.tsx` only rendered the KPI grid + admin recent-activity list.
+  - `src/components/features/dashboard/dashboard-view.tsx`: added three new `StaggerItem` sections between the KPI grid and the Recent Activity section, all using existing `GlassCard`/`StaggerItem` primitives (no new chart libraries, no new icon imports — meal emojis come from `data.todayMeals[].icon`):
+    a) **Today's Meals** — a horizontal scrollable row (`flex gap-2 overflow-x-auto`) of small cards (one per meal). Each card shows the meal's emoji icon, `displayName`, `startTime–endTime` window, and a colored status dot + label. Status colors: ON = `--success` (green), LOCKED = `--warning` (orange), OFF/other = `--muted-foreground`. The label uses `effectiveLabel = m.locked ? "LOCKED" : m.status` so a meal whose cutoff has passed renders as LOCKED even if its underlying status is ON (a locked-ON meal is one the user can no longer toggle but is still eating). Header has a "Manage →" button that calls `setView("meals")`. Empty state: "No meals today".
+    b) **7-Day Meal Trend** — a pure-CSS bar chart (no Recharts/Chart.js). For each of the 7 `trend` entries, renders a pair of vertical bars (ON = green, OFF = orange) whose heights are `Math.round((value / max) * 100)`% of a fixed 28-`rem` (h-28) container. `max = Math.max(1, ...trend.map((t) => Math.max(t.on, t.off)))` — the `Math.max(1, ...)` floor prevents divide-by-zero on an all-empty trend. Day labels are derived by parsing `t.date` (a "YYYY-MM-DD" string from `toLocalDateKey`) with `new Date(\`${t.date}T00:00:00\`)` (the `T00:00:00` suffix forces local-time parsing — without it, `new Date("2026-07-15")` parses as UTC midnight and shifts the weekday by one in non-UTC timezones), then `.toLocaleDateString("en-US", { weekday: "short" }).slice(0, 3)` → "Mon"/"Tue"/etc. Zero-value bars get `minHeight: 0` and `opacity: 0.25` so they're visually distinct from non-zero bars without disappearing entirely. A legend (green "ON" / orange "OFF" swatches) sits below the chart.
+    c) **Expense Breakdown** — a category list with proportional bars. For each `expenseBreakdown` entry (Array of `{ category, amount }` — note the route converts the `Record<string, number>` to an Array via `Object.entries(...).map(...)` before returning, so the frontend types it as `Array<{ category, amount }>` not `Record<string, number>`), renders the category name, `₹{amount} · {pct}%`, and a 1.5-`rem`-tall progress bar whose width is `(amount / total) * 100`%. `total = sum of all amounts` — computed once via `reduce`. Empty state: "No expenses this month".
+  - The three sections are wrapped in two `StaggerItem`s: Today's Meals is its own item (full width), and Trend + Expense Breakdown share an item wrapped in `grid-cards gap-4` so they sit side-by-side on desktop and stack on mobile (matching the existing skeleton's `grid-cards` pattern from the loading state).
+  - No changes to the `DashboardData` type — `todayMeals`, `trend`, and `expenseBreakdown` were already declared; the new sections just consume them.
+
+Lint / type-check:
+- `bun run lint` passes with 0 errors and 2 warnings, both pre-existing and unrelated (`react-hooks/incompatible-library` for React Hook Form's `watch()` in `meals-config-view.tsx` and `variables-view.tsx`). Same baseline as BATCH-FIX-1/2/3.
+
+Files changed:
+- `src/app/api/bills/route.ts` — BLG-1 (proration math + explicit `createdAt` select + proratedOtherCharges in bill create/update + snapshot audit fields) + MF-5 (runBackgroundTasks call in GET)
+- `src/lib/monthly-closing.ts` — LB-2 (createBillSettlementLedger + logAudit imports; settlement loop + audit entry between BILLS_GENERATED and SETTLED transitions)
+- `src/lib/task-runner.ts` — NEW (MF-5)
+- `src/app/api/dashboard/route.ts` — MF-5 (runBackgroundTasks call in GET)
+- `src/components/features/dashboard/dashboard-view.tsx` — UX-1 (Today's Meals + 7-Day Trend + Expense Breakdown sections)
+
+Next actions (suggested):
+- For BLG-1, `executeClosing` in `monthly-closing.ts` still uses the un-prorated `otherCharges = roomRent + cleaning` when generating bills from the snapshot (lines 625–626 in the original file). BLG-1 was scoped to the POST `/api/bills` handler only, but if a resident's bills are generated via `executeClosing` instead of the POST handler, they won't be prorated. Consider applying the same proration logic to `executeClosing`'s per-user bill-generation loop in a follow-up — it would need the user's `createdAt` added to the `tx.user.findMany` select (currently `{ id, name, room }` only) and the same `enrollmentStart`/`daysEnrolled` math. The snapshot would also need to record the proration.
+- For BLG-1, existing bills generated before this fix are not retroactively re-prorated. A one-off backfill script can iterate all bills for periods where the resident's `createdAt` is after the period start, recompute `proratedOtherCharges`, and update the bill + snapshot. The MF-2 `createBillSettlementLedger` is idempotent, but the settlement amount was set to the original (un-prorated) `totalAmount` — backfilling the bill without also adjusting the ledger entry would cause a mismatch between the bill's `totalAmount` and the debit recorded in the resident fund ledger. A proper backfill would need to also write a correction `ADJUSTMENT` ledger entry for the difference.
+- For LB-2, the settlement loop only creates `BILL_SETTLEMENT` entries for fully-paid bills (`paidAmount >= totalAmount`). At the time `executeClosing` runs, most bills are still in `GENERATED` status (unpaid), so this loop will typically settle 0 bills on a fresh closing. The intent is to catch bills that were pre-paid before the cycle closed (e.g. a resident who deposited the expected amount before the bill was generated). For unpaid bills, the settlement ledger entry is created later when `POST /api/bills` regenerates them (MF-2) — but `executeClosing`-generated bills that are never re-generated via the POST handler will never get their settlement entry unless the resident pays in full and the closing is re-run. Consider adding a `createBillSettlementLedger` call for every bill (not just fully-paid ones) inside `executeClosing` in a follow-up, matching MF-2's behavior in the POST handler.
+- For LB-2, both `createBillSettlementLedger` and `logAudit` use the `db` singleton rather than the `tx` transaction client, so their writes aren't atomic with the closing transaction. A full fix would refactor both helpers to accept an optional `tx?: Prisma.TransactionClient` parameter and thread it through `createLedgerEntry`/`db.auditLog.create`. The current behavior is safe-but-not-atomic: a rollback leaves an orphan ledger entry keyed on a non-existent billId, which is harmless but untidy.
+- For MF-5, `TASK_INTERVAL_MS` is declared but not used. To actually throttle (so a request every second doesn't trigger 3 SQL statements every second), wrap the body in a `if (Date.now() - lastRunAt < TASK_INTERVAL_MS) return;` guard with a module-level `let lastRunAt = 0;`. Left as-is per the brief's verbatim code.
+- For MF-5, the runner is invoked from only two routes (`GET /api/dashboard` and `GET /api/bills`). Consider also invoking it from `GET /api/notifications` and `GET /api/users` so admins who navigate to those views directly (without hitting dashboard or bills first) still get the self-healing benefits.
+- For UX-1, the trend chart's bar heights use `%` of a `h-28` (7rem) container — on very narrow mobile screens (<360px) the bars get quite thin. If this is a problem, switch to `min-w-[8px]` on the bars or use a horizontal-scroll container like the Today's Meals row.
+- For UX-1, the expense breakdown shows every category returned by the API with no truncation. If a tenant has 20+ expense categories, the card will get tall. Consider collapsing categories below 5% into an "Other" bucket, or capping the list at the top 6 with a "Show all" expander.

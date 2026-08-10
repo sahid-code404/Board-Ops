@@ -112,6 +112,16 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { entryIds, status } = bulkSchema.parse(body);
 
+    // LB-3: bulk meal ON — apply the same financial-restriction check as the
+    // single PATCH. The check is user-scoped (not per-entry), so we evaluate
+    // it once before the loop and reuse the result for every entry. Users
+    // can still bulk-toggle meals OFF when restricted — only ON is blocked.
+    let restricted = false;
+    if (status === "ON") {
+      const restrictionEval = await evaluateRestrictions(user.id);
+      restricted = !restrictionEval.canBookMeals;
+    }
+
     const results: { id: string; success: boolean; error?: string }[] = [];
     for (const id of entryIds) {
       const entry = await db.mealEntry.findUnique({ where: { id }, include: { meal: true } });
@@ -126,6 +136,11 @@ export async function POST(req: Request) {
       // Before-enrollment meals cannot be toggled by the user (precise check)
       if (isMealBeforeEnrollment(entry.serviceDate, user.createdAt, entry.meal)) {
         results.push({ id, success: false, error: "Before enrollment" });
+        continue;
+      }
+      // LB-3: restricted users cannot turn meals ON. OFF is always allowed.
+      if (restricted && status === "ON") {
+        results.push({ id, success: false, error: "Restricted" });
         continue;
       }
       await db.mealEntry.update({

@@ -1,7 +1,16 @@
 import { db } from "@/lib/db";
+import { logAudit } from "@/lib/audit";
 
 /**
- * Permanently delete users whose soft-delete grace period (7 days) has expired.
+ * Archive users whose soft-delete grace period (7 days) has expired.
+ *
+ * DIR-7: Previously this hard-deleted the user with a cascading delete that
+ * wiped ALL related records (bills, payments, ledger, meal entries, etc.).
+ * That destroyed audit-trail data and broke historical reports. We now keep
+ * the row and flip its status to ARCHIVED, preserving every related record
+ * for compliance / reporting. `deletedAt` is also refreshed to the archival
+ * moment so downstream filters that exclude soft-deleted users still work.
+ *
  * Called on every GET /api/users to keep the deletion queue clean.
  */
 export async function purgeExpiredUsers(): Promise<number> {
@@ -11,22 +20,43 @@ export async function purgeExpiredUsers(): Promise<number> {
     const expired = await db.user.findMany({
       where: {
         deletedAt: { not: null, lt: now },
+        // Skip users who have already been archived — keeps this idempotent
+        // so repeated GET /api/users calls don't re-issue the same update.
+        status: { not: "ARCHIVED" },
       },
       select: { id: true },
     });
 
     if (expired.length === 0) return 0;
 
-    // Hard delete — cascades to sessions, meal entries, etc.
-    const result = await db.user.deleteMany({
+    // Soft-archive: keep the row + all related data, just flip status.
+    const result = await db.user.updateMany({
       where: {
         id: { in: expired.map((u) => u.id) },
       },
+      data: {
+        status: "ARCHIVED",
+        deletedAt: now, // refresh timestamp to mark archival moment
+      },
     });
+
+    // Best-effort audit log per archived user. Failures here don't roll back
+    // the archival — audit logging is fire-and-forget by design.
+    await Promise.all(
+      expired.map((u) =>
+        logAudit({
+          actorId: u.id,
+          action: "USER_ARCHIVED",
+          entity: "User",
+          entityId: u.id,
+          reason: "Soft-delete grace period (7 days) expired — record preserved.",
+        })
+      )
+    );
 
     return result.count;
   } catch (e) {
-    console.error("Failed to purge expired users:", e);
+    console.error("Failed to archive expired users:", e);
     return 0;
   }
 }

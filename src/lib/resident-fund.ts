@@ -74,6 +74,45 @@ export async function getEffectiveBillingCycle(): Promise<{ month: number; year:
 }
 
 /**
+ * Create a BILL_SETTLEMENT ledger entry that debits the resident's fund
+ * account when a bill is generated. Idempotent — only one BILL_SETTLEMENT
+ * entry is ever created per bill (subsequent regenerations update the bill
+ * but skip re-debiting the ledger, so the running balance isn't double-counted).
+ *
+ * The entry's amount is negative (a debit) equal to the bill's totalAmount.
+ */
+export async function createBillSettlementLedger(
+  userId: string,
+  billId: string,
+  amount: number,
+  periodMonth: number,
+  periodYear: number
+): Promise<void> {
+  // Idempotency: skip if a BILL_SETTLEMENT entry already exists for this bill
+  const existing = await db.ledgerEntry.findFirst({
+    where: { userId, type: "BILL_SETTLEMENT", entityId: billId },
+    select: { id: true },
+  });
+  if (existing) return;
+
+  const MONTHS = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ];
+
+  await createLedgerEntry({
+    userId,
+    type: "BILL_SETTLEMENT",
+    amount: -amount, // negative = debit
+    entityType: "Bill",
+    entityId: billId,
+    description: `Bill for ${MONTHS[periodMonth] ?? `Month ${periodMonth + 1}`} ${periodYear}`,
+    billingMonth: periodMonth,
+    billingYear: periodYear,
+  });
+}
+
+/**
  * Create a ledger entry for a financial event.
  * Updates the running balance for the user.
  */

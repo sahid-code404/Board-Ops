@@ -4,7 +4,7 @@ import { ok, err, handleApiError } from "@/lib/api-response";
 import { z } from "zod";
 import { logAudit } from "@/lib/audit";
 import { generateOtp, hashOtp, OTP_CONFIG } from "@/lib/otp";
-import { sendOtpEmail, isEmailConfigured } from "@/lib/email";
+import { sendOtpEmail } from "@/lib/email";
 
 const schema = z.object({
   pendingToken: z.string().min(10, "Invalid pending token"),
@@ -69,11 +69,9 @@ export async function POST(req: Request) {
       userAgent: ua,
     });
 
-    const devMode = !isEmailConfigured();
     return ok({
       resent: true,
       expiresAt: new Date(now.getTime() + OTP_CONFIG.ttlMs).toISOString(),
-      ...(devMode ? { devOtp: otpCode } : {}),
     });
   } catch (e) {
     return handleApiError(e);

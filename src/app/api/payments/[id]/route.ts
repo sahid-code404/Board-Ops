@@ -35,6 +35,20 @@ export async function PATCH(
       return ok(payment);
     }
 
+    // LB-10: don't approve a payment that is linked to a VOID or DELETED bill —
+    // doing so would credit the resident's fund account without ever reducing
+    // their outstanding due (the bill no longer exists). Rejecting is still
+    // allowed (it doesn't touch the bill).
+    if (newStatus === "APPROVED" && payment.billId) {
+      const linkedBill = await db.bill.findUnique({
+        where: { id: payment.billId },
+        select: { status: true, deletedAt: true },
+      });
+      if (!linkedBill || linkedBill.status === "VOID" || linkedBill.status === "DELETED" || linkedBill.deletedAt) {
+        return err("Cannot approve payment for a voided or deleted bill", 422);
+      }
+    }
+
     // PRD: determine the effective billing cycle when approving
     let effectiveMonth: number | undefined;
     let effectiveYear: number | undefined;

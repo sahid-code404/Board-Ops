@@ -4,6 +4,7 @@ import { getClientIp, getUserAgent } from "@/lib/session";
 import { ok, err, handleApiError } from "@/lib/api-response";
 import { z } from "zod";
 import { logAudit } from "@/lib/audit";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 const schema = z.object({
   email: z.string().email(),
@@ -12,6 +13,12 @@ const schema = z.object({
 
 export async function POST(req: Request) {
   try {
+    const ip = await getClientIp();
+    const rateLimit = checkRateLimit(ip, "login");
+    if (!rateLimit.allowed) {
+      return err("Too many login attempts. Please try again later.", 429);
+    }
+
     const body = await req.json();
     const { email, password } = schema.parse(body);
 

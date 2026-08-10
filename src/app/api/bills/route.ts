@@ -6,6 +6,8 @@ import { createNotification } from "@/lib/notify";
 import { purgeExpiredBills, getDeletionDate } from "@/lib/user-cleanup";
 import { recomputeBillPaidState } from "@/lib/bill-sync";
 import { getReadiness } from "@/lib/monthly-closing";
+import { createBillSettlementLedger } from "@/lib/resident-fund";
+import { runBackgroundTasks } from "@/lib/task-runner";
 
 /** GET /api/bills — list bills (user sees own; admin sees all).
  *  Optional `month` and `year` query params filter by billing period.
@@ -15,6 +17,25 @@ export async function GET(req: Request) {
   try {
     // Purge bills whose 7-day grace period has expired
     await purgeExpiredBills();
+
+    // MF-5: self-healing task runner — overdue transition + expired
+    // restriction lift + expired-session cleanup. Awaits (3 updateMany
+    // queries, all no-ops when nothing matches); errors are swallowed
+    // inside the helper so the main request can never break from here.
+    await runBackgroundTasks();
+
+    // BLG-3: self-healing overdue transition. Any non-deleted GENERATED or
+    // PARTIALLY_PAID bill whose due date has passed is flipped to OVERDUE.
+    // Runs on every GET /api/bills — the updateMany is a no-op when nothing
+    // matches, so this stays cheap. PAID/OVERDUE/VOID bills are skipped.
+    await db.bill.updateMany({
+      where: {
+        status: { in: ["GENERATED", "PARTIALLY_PAID"] },
+        dueDate: { lt: new Date() },
+        deletedAt: null,
+      },
+      data: { status: "OVERDUE" },
+    });
 
     const user = await requireAuth();
     const url = new URL(req.url);
@@ -110,6 +131,16 @@ export async function POST(req: Request) {
 
     const activeUsers = await db.user.findMany({
       where: { status: "ACTIVE", role: "USER" },
+      // BLG-1: select `createdAt` explicitly so the proration math has the
+      // user's registration date without pulling relations.
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        room: true,
+        avatarUrl: true,
+        createdAt: true,
+      },
     });
 
     // PRD: Meal charge is a SINGLE dynamic value = (Total Expenses - Guest Revenue) / Total Resident Meals
@@ -191,7 +222,27 @@ export async function POST(req: Request) {
       const residentMealCount = Object.values(counts).reduce((s, c) => s + c, 0);
       const mealCharges = Math.round(residentMealCount * perMealCharge);
       const otherCharges = roomRent + cleaning;
-      const totalAmount = mealCharges + otherCharges;
+
+      // BLG-1: Proration for mid-month joiners. A resident who registered on,
+      // say, July 20 should only pay ~12/31 of the month's room rent + cleaning.
+      // Meal charges are NOT prorated — they're based on actual meal entries,
+      // which only exist for post-registration dates anyway.
+      const periodStart = new Date(year, month, 1);
+      const periodEndDay = new Date(year, month + 1, 0); // last calendar day of the month, midnight
+      const daysInMonth = periodEndDay.getDate();
+      const userRegDate = new Date(
+        u.createdAt.getFullYear(),
+        u.createdAt.getMonth(),
+        u.createdAt.getDate()
+      );
+      const enrollmentStart = periodStart > userRegDate ? periodStart : userRegDate;
+      const MS_PER_DAY = 24 * 60 * 60 * 1000;
+      const rawDays =
+        Math.floor((periodEndDay.getTime() - enrollmentStart.getTime()) / MS_PER_DAY) + 1;
+      const daysEnrolled = Math.max(0, rawDays);
+      const prorationFactor = daysInMonth > 0 ? daysEnrolled / daysInMonth : 1;
+      const proratedOtherCharges = Math.round(otherCharges * prorationFactor);
+      const totalAmount = mealCharges + proratedOtherCharges;
       const snapshot = JSON.stringify({
         counts,
         residentMealCount,
@@ -199,6 +250,11 @@ export async function POST(req: Request) {
         mealCharges,
         roomRent,
         cleaning,
+        otherCharges,
+        proratedOtherCharges,
+        prorationFactor,
+        daysEnrolled,
+        daysInMonth,
         totalExpenses,
         guestRevenue,
         totalResidentMeals,
@@ -228,7 +284,8 @@ export async function POST(req: Request) {
           where: { id: existing.id },
           data: {
             mealCharges,
-            otherCharges,
+            // BLG-1: store the prorated value as the charged otherCharges
+            otherCharges: proratedOtherCharges,
             totalAmount,
             dueAmount,
             status: newStatus,
@@ -239,6 +296,9 @@ export async function POST(req: Request) {
         });
         // Re-sync paid/due/status from actual APPROVED payments (authoritative)
         await recomputeBillPaidState(existing.id);
+        // MF-2: create a BILL_SETTLEMENT ledger entry (idempotent — skipped if
+        // one already exists for this bill, so re-generation doesn't double-debit).
+        await createBillSettlementLedger(u.id, existing.id, totalAmount, month, year);
         updated++;
 
         // Notify the user when their bill amount increased (e.g. more meals added
@@ -257,13 +317,14 @@ export async function POST(req: Request) {
         }
       } else {
         // Create a new bill for this period
-        await db.bill.create({
+        const createdBill = await db.bill.create({
           data: {
             userId: u.id,
             periodMonth: month,
             periodYear: year,
             mealCharges,
-            otherCharges,
+            // BLG-1: store the prorated value as the charged otherCharges
+            otherCharges: proratedOtherCharges,
             totalAmount,
             paidAmount: 0,
             dueAmount: totalAmount,
@@ -273,6 +334,9 @@ export async function POST(req: Request) {
             snapshot,
           },
         });
+        // MF-2: create a BILL_SETTLEMENT ledger entry debiting the resident's
+        // fund account. Idempotent — only runs once per billId.
+        await createBillSettlementLedger(u.id, createdBill.id, totalAmount, month, year);
         created++;
 
         // Notify the user that their bill is ready

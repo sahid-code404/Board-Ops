@@ -1,15 +1,21 @@
-import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
+import { randomBytes } from "crypto";
+import bcrypt from "bcryptjs";
 
 /**
  * Email OTP helpers.
  *
- * Generates 6-digit numeric OTPs, hashes them for secure storage, and verifies
- * with constant-time comparison. OTPs expire after 5 minutes. Max 5 failed
- * verification attempts before the OTP is invalidated.
+ * Generates 6-digit numeric OTPs, hashes them with bcrypt (slow hash designed
+ * for passwords / OTPs — resistant to brute-force) for secure storage, and
+ * verifies via `bcrypt.compareSync`. OTPs expire after 5 minutes. Max 5
+ * failed verification attempts before the OTP is invalidated.
+ *
+ * NOTE: bcrypt hashes are ~60 chars and self-describe their salt+rounds, so
+ * the stored value does not need a separate salt column.
  */
 
 const OTP_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const MAX_OTP_ATTEMPTS = 5;
+const BCRYPT_ROUNDS = 10; // ~100ms — slow enough to deter brute force
 
 /** Generate a cryptographically-random 6-digit OTP code. */
 export function generateOtp(): string {
@@ -18,21 +24,16 @@ export function generateOtp(): string {
   return num.toString().padStart(6, "0");
 }
 
-/** Hash an OTP code for secure storage (scrypt with random salt). */
+/** Hash an OTP code for secure storage (bcrypt with 10 rounds). */
 export function hashOtp(code: string): string {
-  const salt = randomBytes(16).toString("hex");
-  const hash = scryptSync(code, salt, 32).toString("hex");
-  return `${salt}:${hash}`;
+  return bcrypt.hashSync(code, BCRYPT_ROUNDS);
 }
 
-/** Verify an OTP code against a stored hash (constant-time). */
+/** Verify an OTP code against a stored bcrypt hash. */
 export function verifyOtp(code: string, stored: string): boolean {
-  const [salt, hash] = stored.split(":");
-  if (!salt || !hash) return false;
-  const testHash = scryptSync(code, salt, 32);
-  const storedHash = Buffer.from(hash, "hex");
+  if (!stored) return false;
   try {
-    return testHash.length === storedHash.length && timingSafeEqual(testHash, storedHash);
+    return bcrypt.compareSync(code, stored);
   } catch {
     return false;
   }

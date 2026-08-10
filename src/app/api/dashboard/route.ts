@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/session";
 import { ok, handleApiError } from "@/lib/api-response";
 import { computeEditableUntil, isLocked } from "@/lib/meal-engine";
 import { toLocalDateKey } from "@/lib/utils";
+import { runBackgroundTasks } from "@/lib/task-runner";
 
 // ── Counting helpers (same logic as kitchen route) ──
 // Only count meals that are CONFIRMED:
@@ -32,6 +33,11 @@ function countsAsOff(e: { status: string; originalState: string; locked: boolean
 
 export async function GET() {
   try {
+    // MF-5: lightweight self-healing tasks on every dashboard load — flips
+    // overdue bills, lifts expired restrictions, purges expired sessions.
+    // Awaiting is fine (3 updateMany queries); errors are swallowed inside.
+    await runBackgroundTasks();
+
     const user = await requireAuth();
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());

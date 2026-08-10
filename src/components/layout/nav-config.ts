@@ -13,6 +13,7 @@ import {
   CreditCard,
   MoreHorizontal,
   PiggyBank,
+  CalendarCheck,
   Sigma,
   ScrollText,
   type LucideIcon,
@@ -41,6 +42,7 @@ export const NAV_ITEMS: NavItem[] = [
   { view: "payments", label: "Payments", icon: CreditCard, roles: ["ADMIN", "USER"], primary: true, rail: true },
   { view: "expenses", label: "Expenses", icon: Receipt, roles: ["ADMIN"], rail: true },
   { view: "funds", label: "Funds", icon: PiggyBank, roles: ["ADMIN"], rail: true },
+  { view: "monthly-closing", label: "Monthly Closing", icon: CalendarCheck, roles: ["ADMIN"], rail: true },
   // Administration
   { view: "formula-engine", label: "Formula Engine", icon: Sigma, roles: ["ADMIN"], rail: true },
   { view: "users", label: "Users", icon: Users, roles: ["ADMIN"], primary: true, rail: true },
@@ -59,6 +61,7 @@ export const NAV_LABELS: Record<ViewKey, string> = {
   payments: "Payments & Wallet",
   expenses: "Expenses & Procurement",
   funds: "Funds Overview",
+  "monthly-closing": "Monthly Closing",
   "formula-engine": "Formula Engine",
   users: "User Management",
 

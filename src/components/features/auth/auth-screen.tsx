@@ -134,12 +134,10 @@ export function AuthScreen() {
   // Verify mode state
   const [verifyEmail, setVerifyEmail] = useState("");
   const [otp, setOtp] = useState("");
-  const [devOtp, setDevOtp] = useState<string | null>(null);
 
   // Forgot password state
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotOtp, setForgotOtp] = useState("");
-  const [forgotDevOtp, setForgotDevOtp] = useState<string | null>(null);
   const [resetToken, setResetToken] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
@@ -165,10 +163,8 @@ export function AuthScreen() {
         toast.success(`Welcome back, ${res.data.user.name.split(" ")[0]}!`);
       } else {
         const data = registerSchema.parse(form);
-        // ?dev=1 lets the sandbox frontend display the OTP. In production
-        // this is sent via email and the param is omitted.
-        const res = await api.post<{ success: boolean; data: { userId: string; email: string; devOtp?: string } }>(
-          "/auth/register?dev=1",
+        const res = await api.post<{ success: boolean; data: { userId: string; email: string } }>(
+          "/auth/register",
           {
             name: data.name,
             institutionName: data.institutionName,
@@ -184,7 +180,6 @@ export function AuthScreen() {
         );
         setVerifyEmail(res.data.email);
         setPendingEmail(res.data.email);
-        setDevOtp(res.data.devOtp ?? null);
         setOtp("");
         setMode("verify");
         toast.success("Account created — verify your email next.");
@@ -225,11 +220,10 @@ export function AuthScreen() {
   const resendOtp = async () => {
     try {
       setLoading(true);
-      const res = await api.post<{ success: boolean; data: { devOtp?: string } }>(
-        "/auth/send-verification?dev=1",
+      await api.post<{ success: boolean; data: { sent: boolean } }>(
+        "/auth/send-verification",
         { email: verifyEmail }
       );
-      setDevOtp(res.data.devOtp ?? null);
       toast.success("A new code has been sent.");
     } catch (err: any) {
       toast.error(err.message || "Could not resend code");
@@ -241,12 +235,10 @@ export function AuthScreen() {
   const resetToLogin = () => {
     setMode("login");
     setOtp("");
-    setDevOtp(null);
     setVerifyEmail("");
     setPendingEmail("");
     setForgotEmail("");
     setForgotOtp("");
-    setForgotDevOtp(null);
     setResetToken("");
     setNewPassword("");
     setConfirmNewPassword("");
@@ -274,11 +266,10 @@ export function AuthScreen() {
     setErrors({});
     try {
       setLoading(true);
-      const res = await api.post<{ success: boolean; data: { sent: boolean; devOtp?: string } }>(
-        "/auth/forgot-password?dev=1",
+      await api.post<{ success: boolean; data: { sent: boolean } }>(
+        "/auth/forgot-password",
         { email: forgotEmail }
       );
-      setForgotDevOtp(res.data.devOtp ?? null);
       setMode("forgot-otp");
       toast.success("Reset code sent to your email");
     } catch (err: any) {
@@ -423,13 +414,6 @@ export function AuthScreen() {
             We sent a 6-digit code to <span className="font-medium text-foreground">{forgotEmail}</span>.
             Enter it below to continue.
           </p>
-          {forgotDevOtp && (
-            <div className="glass-soft rounded-2xl p-3 text-xs text-muted-foreground mb-4">
-              <p className="font-semibold text-foreground">Dev mode — your code</p>
-              <p className="text-lg font-mono font-bold text-primary">{forgotDevOtp}</p>
-              <p className="text-[10px] mt-1">In production this is emailed.</p>
-            </div>
-          )}
           <div className="space-y-4">
             <InputOTP maxLength={6} value={forgotOtp} onChange={(v) => setForgotOtp(v)}>
               <InputOTPGroup>
@@ -526,19 +510,6 @@ export function AuthScreen() {
             <span className="font-medium text-foreground">{verifyEmail}</span>.
             Enter it below to confirm your email address.
           </p>
-
-          {devOtp && (
-            <div className="glass-soft rounded-2xl p-3 mb-5 border-2 border-primary/30 bg-primary/5 flex items-start gap-2">
-              <KeyRound className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-              <div className="text-xs">
-                <p className="font-semibold text-primary">Dev mode — your code</p>
-                <p className="text-foreground/80 mt-0.5">
-                  In production this is emailed. For this sandbox, use:{" "}
-                  <span className="font-mono font-bold tracking-widest text-base">{devOtp}</span>
-                </p>
-              </div>
-            </div>
-          )}
 
           <div className="flex flex-col items-center gap-5 py-2">
             <InputOTP

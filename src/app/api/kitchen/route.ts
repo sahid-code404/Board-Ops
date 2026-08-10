@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { requireAuth, requireRole } from "@/lib/session";
 import { ok, handleApiError } from "@/lib/api-response";
-import { isLocked, isPreRegistration } from "@/lib/meal-engine";
+import { isLocked, isPreRegistration, computeEditableUntil } from "@/lib/meal-engine";
 
 // ── Counting helpers ──
 // The admin kitchen only counts meals that are CONFIRMED:
@@ -152,11 +152,13 @@ export async function GET(req: Request) {
       const isPreRegDate = isPreRegistration(target, u.createdAt);
       const mealsOn = meals.map((m) => {
         const entry = userEntries.find((e) => e.mealId === m.id);
-        const effectivelyLocked = isPastDate
-          ? true
-          : entry
-            ? (entry.locked || entry.status === "LOCKED" || isLocked(entry.editableUntil))
-            : false;
+        // LB-5: unified locked logic — same as the counting helpers and the
+        // dashboard. For an existing entry: locked when past editableUntil,
+        // explicitly locked, or status LOCKED. For a missing entry: locked when
+        // the meal's own computed cutoff (editableUntil) has passed.
+        const effectivelyLocked = entry
+          ? (isLocked(entry.editableUntil) || entry.locked || entry.status === "LOCKED")
+          : isLocked(computeEditableUntil(m, target));
         // When no entry exists for a pre-registration date, default to "OFF".
         const currentStatus = entry?.status || (isPreRegDate ? "OFF" : m.defaultState);
         // Pre-reg meals ALWAYS default to OFF, regardless of meal config.

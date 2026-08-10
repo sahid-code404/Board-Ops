@@ -21,7 +21,10 @@
  *   ADJ-{YEAR}-{SEQ}      → ADJ-2026-00001
  */
 
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+
+type Tx = Prisma.TransactionClient;
 
 const DEFAULTS: Record<string, { prefix: string; format: string }> = {
   bill: { prefix: "BILL", format: "BILL-{YEAR}-{SEQ}" },
@@ -161,16 +164,21 @@ export async function getPreviousDue(userId: string, currentMonth: number, curre
 /**
  * Lock all expenses for a billing period after the monthly snapshot is created.
  * PRD DEC-030: expenses become permanently immutable after snapshot creation.
+ *
+ * @param tx Optional Prisma transaction client. When provided, the update runs
+ *           inside the caller's transaction (used by `executeClosing` so the
+ *           lock is rolled back if a later step fails).
  */
 export async function lockExpensesForPeriod(
   month: number,
   year: number,
-  billingCycleId: string
+  billingCycleId: string,
+  tx: Tx | typeof db = db
 ): Promise<number> {
   const start = new Date(year, month, 1);
   const end = new Date(year, month + 1, 0, 23, 59, 59, 999);
 
-  const result = await db.expense.updateMany({
+  const result = await tx.expense.updateMany({
     where: {
       expenseDate: { gte: start, lte: end },
       deletedAt: null,

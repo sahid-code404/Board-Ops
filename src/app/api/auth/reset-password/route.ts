@@ -3,7 +3,8 @@ import { ok, err, handleApiError } from "@/lib/api-response";
 import { logAudit } from "@/lib/audit";
 import { getClientIp, getUserAgent } from "@/lib/session";
 import { hashPassword, validatePassword } from "@/lib/password-policy";
-import crypto from "crypto";
+import { verifyOtp } from "@/lib/otp";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { z } from "zod";
 
 /**
@@ -19,6 +20,12 @@ const schema = z.object({
 
 export async function POST(req: Request) {
   try {
+    const ip = await getClientIp();
+    const rateLimit = checkRateLimit(ip, "reset-password");
+    if (!rateLimit.allowed) {
+      return err("Too many attempts. Please try again later.", 429);
+    }
+
     const body = await req.json();
     const { email, resetToken, newPassword } = schema.parse(body);
 
@@ -31,9 +38,8 @@ export async function POST(req: Request) {
       return err("Reset token has expired. Start the password reset process again.", 400);
     }
 
-    // Verify reset token hash
-    const resetTokenHash = crypto.createHash("sha256").update(resetToken).digest("hex");
-    if (resetTokenHash !== user.resetOtpHash) {
+    // Verify reset token hash (bcrypt-hashed in verify-reset-otp)
+    if (!verifyOtp(resetToken, user.resetOtpHash)) {
       return err("Invalid reset token", 400);
     }
 

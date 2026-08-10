@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { ok, err, handleApiError } from "@/lib/api-response";
 import { logAudit } from "@/lib/audit";
 import { getClientIp, getUserAgent } from "@/lib/session";
+import { hashOtp, verifyOtp } from "@/lib/otp";
 import crypto from "crypto";
 import { z } from "zod";
 
@@ -23,14 +24,13 @@ export async function POST(req: Request) {
       return err("Reset code has expired. Request a new one.", 400);
     }
 
-    const otpHash = crypto.createHash("sha256").update(otp).digest("hex");
-    if (otpHash !== user.resetOtpHash) {
+    if (!verifyOtp(otp, user.resetOtpHash)) {
       return err("Invalid reset code", 400);
     }
 
     // Generate a temporary reset token
     const resetToken = crypto.randomBytes(32).toString("hex");
-    const resetTokenHash = crypto.createHash("sha256").update(resetToken).digest("hex");
+    const resetTokenHash = hashOtp(resetToken);
 
     await db.user.update({
       where: { id: user.id },

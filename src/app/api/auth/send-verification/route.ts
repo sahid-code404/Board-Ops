@@ -45,13 +45,7 @@ export async function POST(req: Request) {
       userAgent: await getUserAgent(),
     });
 
-    const url = new URL(req.url);
-    const isDev = url.searchParams.get("dev") === "1";
-
-    return ok({
-      sent: true,
-      ...(isDev ? { devOtp: otp } : {}),
-    });
+    return ok({ sent: true });
   } catch (e) {
     return handleApiError(e);
   }

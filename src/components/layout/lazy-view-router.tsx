@@ -38,6 +38,9 @@ const ExpensesHubView = lazy(() =>
 const FundsView = lazy(() =>
   import("@/components/features/billing/funds-view").then((m) => ({ default: m.FundsView }))
 );
+const MonthlyClosingView = lazy(() =>
+  import("@/components/features/billing/monthly-closing-view").then((m) => ({ default: m.MonthlyClosingView }))
+);
 const FormulaEngineView = lazy(() =>
   import("@/components/features/variables/formula-engine-view").then((m) => ({ default: m.FormulaEngineView }))
 );
@@ -107,6 +110,9 @@ const LazyExpenses = memo(() => (
 const LazyFunds = memo(() => (
   <Suspense fallback={<ViewSkeleton />}><FundsView /></Suspense>
 ));
+const LazyMonthlyClosing = memo(() => (
+  <Suspense fallback={<ViewSkeleton />}><MonthlyClosingView /></Suspense>
+));
 const LazyFormulaEngine = memo(() => (
   <Suspense fallback={<ViewSkeleton />}><FormulaEngineView /></Suspense>
 ));
@@ -147,6 +153,7 @@ export function LazyViewRouter({
       case "payments": return <LazyPayments />;
       case "expenses": return isAdmin ? <LazyExpenses /> : null;
       case "funds": return isAdmin ? <LazyFunds /> : null;
+      case "monthly-closing": return isAdmin ? <LazyMonthlyClosing /> : null;
       case "formula-engine": return isAdmin ? <LazyFormulaEngine /> : null;
       case "users": return isAdmin ? <LazyUsers /> : null;
       case "notifications": return <LazyNotifications />;
