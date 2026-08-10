@@ -2634,3 +2634,735 @@ Files changed:
 - EDITED: `src/components/features/meals/meals-config-view.tsx` (removed `TimePicker12`, wired in `DigitalClockPicker` × 3)
 
 Reusable for any future time field — `import { DigitalClockPicker } from "@/components/ui/digital-clock-picker"` and pass `value` / `onChange` (plus optional `label`, `error`, `className`, `id`, `ariaLabel`).
+
+---
+Task ID: AUDIT-ANALYSIS
+Agent: general-purpose audit agent
+Task: Read-only codebase audit of the BoardOps platform
+
+Work Log:
+- Read full worklog.md to understand the platform (configurable operational management platform for residential institutions — hostels, PGs, mess halls; Next.js 15 + Prisma + SQLite backend, React + TanStack Query + Framer Motion + glass design system frontend)
+- Read the full Prisma schema (896 lines) to map the data model: User, RegistrationRequest, UserSession, LoginHistory, MealConfiguration, MealEntry, MealHistory, MealOverride, MealPreset, MealPresetItem, LeaveApplication, GuestMeal, Variable, Formula, FormulaVersion, BillingCycle, MonthlySnapshot, Bill, Payment, Expense, Unit, Product, Purchase, PurchaseItem, Refund, RefundTransaction, Adjustment, LedgerEntry, Restriction, Holiday, Notification, Announcement, AuditLog, BackgroundTask, StaffRecord, Setting, Institution
+- Read all core lib files: meal-engine.ts, credit.ts, bill-sync.ts, monthly-closing.ts, restriction-engine.ts, resident-fund.ts, formula-engine.ts, user-cleanup.ts, audit.ts, notify.ts, session.ts, auth.ts, utils.ts, api-response.ts
+- Read all key API routes: meals/entries, meals/toggle, meals/override, kitchen, bills, payments, payments/[id], payments/refund, refunds/[id]/partial, funds, dashboard, auth/register, auth/login, users, users/[id], restrictions, billing-cycles, billing-cycles/readiness
+- Skimmed the frontend views: dashboard-view, user-meals-view, kitchen-view, billing-view, payments-view, funds-view, users-view, lazy-view-router, app/page.tsx
+- Cross-checked that the MonthlyClosingView component exists but is NOT registered in lazy-view-router.tsx or nav-config.ts (i.e., the full closing workflow is unreachable from the UI)
+- Verified that LedgerEntry writes happen for DEPOSIT (payment approve) and REFUND (partial refund) but NEVER for BILL_SETTLEMENT — bills don't debit the resident's ledger
+- Verified that the Holiday model is not consulted by the meal auto-generation logic in /api/meals/entries
+- Verified that the LeaveApplication model has no API route
+
+Below is the structured audit report.
+
+---
+
+## 1. MISSING FEATURES
+
+### MF-1: Monthly Closing Workflow is unreachable from the UI
+- **Severity**: Critical
+- **Description**: `src/components/features/billing/monthly-closing-view.tsx` exists and calls `POST /api/billing-cycles` (which invokes `executeClosing` — the full snapshot/lock/settle workflow). However, this view is NOT imported in `src/components/layout/lazy-view-router.tsx` and is NOT referenced in `nav-config.ts` or `billing-hub-view.tsx`. The only bill-generation path reachable from the UI is `POST /api/bills`, which uses simpler logic (live data, no snapshot, no expense locking, legacy per-meal charge formula instead of the Formula Engine).
+- **Impact**: The entire PRD Module 13 (Monthly Closing Engine) — snapshots, expense locking, formula-driven meal charge, refund queue, cycle status tracking — is dead code in practice. Bills generated from the UI are not reproducible (no snapshot), expenses can be edited after bills are generated (no locking), and the formula engine is bypassed.
+- **Recommendation**: Register `MonthlyClosingView` in `lazy-view-router.tsx` (e.g., a new `monthly-closing` view key), add it to `nav-config.ts` under the Finance group, and have the billing-hub-view link to it. Either deprecate `POST /api/bills` or restrict it to "regenerate bills within an already-open cycle" semantics.
+
+### MF-2: No Bill Settlement in the Resident Ledger
+- **Severity**: Critical
+- **Description**: `LedgerEntry.type` includes `BILL_SETTLEMENT` (debit, negative amount) per the schema comment, and `createLedgerEntry` is called for DEPOSIT (payment approve) and REFUND (partial refund), but it is **never** called when a bill is generated or closed. Bills exist as records but never debit the resident's fund account.
+- **Impact**: `ResidentFundAccount.availableBalance` (which is derived from the ledger's running balance) does NOT reflect what the resident owes. A resident who deposited ₹5000 and was billed ₹4000 will still show ₹5000 as their available balance. Refund eligibility (`getUserCredit`) uses a different formula (approved − billed − refunded) so it works, but the two numbers disagree, which will confuse admins and residents.
+- **Recommendation**: In `executeClosing` (or in `POST /api/bills` if that's the real path), after creating each bill, call `createLedgerEntry({ type: "BILL_SETTLEMENT", amount: -totalAmount, entityType: "Bill", entityId: bill.id, ... })`. Add a reversing entry when a bill is voided or deleted.
+
+### MF-3: Leave Application workflow has no API or UI
+- **Severity**: High
+- **Description**: The `LeaveApplication` model exists in the schema (userId, startDate, endDate, reason, status PENDING|APPROVED|REJECTED, approvedBy). But there is no `/api/leaves` route (verified by `ls`), no UI view, and no integration with the meal engine. A resident going on leave must manually toggle every meal OFF for every day they're away — and if the cutoff has passed, they can't.
+- **Impact**: Common real-world scenario (resident goes home for a week) is unsupported. Residents are billed for meals they didn't consume.
+- **Recommendation**: Build `POST /api/leaves` (resident applies), `PATCH /api/leaves/[id]` (admin approves/rejects), and on approval, batch-create `MealOverride` records (TURN_OFF) for every meal in the date range. Add a "Leave" section to the resident's meals view and an admin approval queue.
+
+### MF-4: Holiday Calendar is not integrated with the Meal Engine
+- **Severity**: High
+- **Description**: `Holiday` model has `mealsDisabled: Boolean @default(true)` and the PRD comment says "Holidays automatically disable meals." But `meal-engine.ts` and `/api/meals/entries/route.ts` never query the Holiday table. Meal entries are auto-created with the meal config's `defaultState` even on holidays.
+- **Impact**: On a holiday, residents are auto-opted into meals they won't eat (if defaultState=ON), inflating kitchen counts and billable meals.
+- **Recommendation**: In `/api/meals/entries` GET, before auto-creating entries, check `db.holiday.findFirst({ where: { startDate: { lte: d }, endDate: { gte: d }, mealsDisabled: true, status: "ACTIVE" } })`. If a holiday is active, skip auto-creation (or force `defaultState = "OFF"`).
+
+### MF-5: Guest Meal management has no admin UI
+- **Severity**: Medium
+- **Description**: `GuestMeal` model exists, `/api/kitchen` returns guest counts, and `monthly-closing.ts` calculates guest revenue. But there's no `/api/guest-meals` CRUD route and no admin UI to add/edit/delete guest meal records. The only way to create them is via direct DB access.
+- **Impact**: Guest meal tracking is effectively non-functional.
+- **Recommendation**: Build `POST /api/guest-meals` (admin adds guest count for a meal/date), `DELETE /api/guest-meals/[id]`, and a UI panel in the kitchen view.
+
+### MF-6: Meal Presets have no UI to apply them
+- **Severity**: Medium
+- **Description**: `MealPreset` and `MealPresetItem` models exist, `/api/meals/presets` route exists (GET), and `POST /api/meals/toggle` uses `triggerSource: "PRESET"` for bulk toggles. But there's no admin/resident UI to browse and apply presets.
+- **Impact**: The preset feature is half-built. Residents can't say "apply the Vegetarian preset to next week."
+- **Recommendation**: Add a "Presets" section to the user-meals-view that lists available presets with an "Apply to next 7 days" button.
+
+### MF-7: No background task runner
+- **Severity**: High
+- **Description**: `BackgroundTask` model exists with types `MONTHLY_CLOSING | REPORT_EXPORT | SESSION_CLEANUP | ANNOUNCEMENT_SCHEDULE | BILL_GENERATION`. But there's no worker, no cron, no queue consumer. The model is unused.
+- **Impact**: No automatic session cleanup (expired sessions accumulate), no scheduled announcements, no automatic overdue bill marking, no automatic financial restriction enforcement. The `checkAndApplyFinancialRestriction` function exists but is never called.
+- **Recommendation**: Add a cron-based worker (e.g., Vercel Cron + a `/api/cron` endpoint, or an external worker) that runs daily to: purge expired sessions, mark overdue bills, evaluate financial restrictions, send scheduled announcements.
+
+### MF-8: Role/Permission tables exist but RBAC is hardcoded
+- **Severity**: Medium
+- **Description**: `Role`, `Permission`, `RolePermission` models exist in the schema. But the code only checks `user.role === "ADMIN"` (string comparison). The `Role` table is never queried, permissions are never checked.
+- **Impact**: Custom roles (e.g., "Kitchen Manager" who can only manage meals) are impossible. The MANAGER role mentioned in the User.role comment is treated as USER.
+- **Recommendation**: Either remove the Role/Permission tables (and document that RBAC is role-string-based), or implement actual permission checks via a `hasPermission(user, "meals", "configure")` helper backed by the tables.
+
+### MF-9: No email/SMS delivery — OTPs logged to console only
+- **Severity**: High
+- **Description**: `src/app/api/auth/register/route.ts` line 105: `console.log([EMAIL OTP for ${user.email}]: ${otp})`. Same for password reset. There's an `email.ts` lib but no actual transport configured.
+- **Impact**: In production, users can't verify email or reset password — the OTP is never sent. The `?dev=1` query param exposes the OTP in the response body, which works in sandbox but is a security hole if shipped.
+- **Recommendation**: Integrate an email provider (Resend, SendGrid, AWS SES). Remove the `?dev=1` OTP exposure and the console.log. Gate dev OTP exposure behind `process.env.NODE_ENV !== "production"`.
+
+### MF-10: No rate limiting on auth endpoints
+- **Severity**: High
+- **Description**: `/api/auth/login`, `/api/auth/register`, `/api/auth/verify-otp`, `/api/auth/forgot-password`, `/api/auth/verify-reset-otp` have no rate limiting. OTPs are 6-digit (1M combinations) and stored as SHA-256 (fast hash).
+- **Impact**: Brute-force attacks on login (password) and OTP (6-digit code) are trivially feasible. Account takeover via OTP brute force is realistic for a determined attacker.
+- **Recommendation**: Add per-IP and per-identifier rate limits (e.g., 5 OTP attempts per 10 minutes, 10 login attempts per 15 minutes). Use a slow hash (bcrypt/scrypt) for OTP storage. Add exponential backoff after failed attempts.
+
+### MF-11: No resident checkout / move-out workflow
+- **Severity**: Medium
+- **Description**: When a resident leaves, there's no flow to: generate a final bill, settle outstanding dues, refund security deposit, deactivate account, revoke sessions. Admins must manually run each step.
+- **Impact**: Resident exits are error-prone and leave orphaned data (open bills, unused sessions, unreconciled payments).
+- **Recommendation**: Add a "Checkout Resident" wizard in the users view that orchestrates: final bill generation, payment reconciliation, refund of credit, account archival, session revocation.
+
+### MF-12: No security deposit / refundable deposit model
+- **Severity**: Medium
+- **Description**: Hostels/PGs typically collect a refundable security deposit at admission. The schema has no `Deposit` model or `securityDeposit` field on User. Deposits are presumably recorded as regular payments, which conflates them with monthly fee payments.
+- **Impact**: Refundable deposits can't be tracked separately. At checkout, there's no clear "deposit to refund" amount.
+- **Recommendation**: Add a `Deposit` model (userId, amount, type SECURITY|MONTHLY, status, refundDate) or a `depositBalance` field tracked via ledger entries of type `DEPOSIT` with a sub-type.
+
+### MF-13: No expense approval workflow
+- **Severity**: Low
+- **Description**: Expenses are created with `status: "APPROVED"` by default (per schema). There's no manager approval step for large expenses.
+- **Impact**: Any admin can record any expense with no oversight. Errors or fraud go undetected until audit.
+- **Recommendation**: Add a `PENDING_APPROVAL` status, require a second admin to approve expenses above a threshold (configurable via Variable).
+
+### MF-14: No report exports (PDF/Excel)
+- **Severity**: Low
+- **Description**: `/api/reports/export` route exists but I did not verify it produces actual PDF/Excel files. The reports-view.tsx exists. Likely incomplete — typical boarding management requires printable monthly statements, audit logs, expense reports for accounting.
+- **Impact**: Admins can't export data for accounting, tax filing, or audits.
+- **Recommendation**: Verify the export route generates proper PDF/Excel with the institution's letterhead and signature lines.
+
+### MF-15: No notification preferences
+- **Severity**: Low
+- **Description**: All notifications are created unconditionally. Users can't opt out of low-priority notifications, choose email vs. in-app, or set quiet hours.
+- **Impact**: Notification fatigue; users ignore important alerts.
+- **Recommendation**: Add a `NotificationPreference` model (userId, type, channel, enabled) and respect it in `createNotification`.
+
+---
+
+## 2. LOGICAL PROBLEMS / BUGS
+
+### LB-1: Two divergent bill-generation paths produce different charges
+- **Severity**: Critical
+- **Description**: `POST /api/bills` (used by the billing-view UI) calculates per-meal charge as `(totalExpenses - guestRevenue) / totalResidentMeals` using **live data** and a **flat guest charge** from the `billing.guestMealCharge` variable. `executeClosing` in `monthly-closing.ts` (used by `POST /api/billing-cycles`, which is unreachable from the UI) calculates per-meal charge via the **Formula Engine** using `meal.rate.<name>` variables for guest revenue. The two paths will produce different `mealCharges` for the same period.
+- **Impact**: Inconsistency depending on which path is used. If an admin later discovers the monthly-closing view and runs it after already generating bills via the other path, residents' bills will change unpredictably.
+- **Recommendation**: Unify the two paths. Either delete `POST /api/bills` and route the UI through `executeClosing`, or make `POST /api/bills` call `executeClosing` internally.
+
+### LB-2: `executeClosing` skips the actual settlement step
+- **Severity**: Critical
+- **Description**: `monthly-closing.ts` lines 736-761 — after `BILLS_GENERATED`, the code immediately sets `SETTLED` then `CLOSED` in two successive `db.billingCycle.update` calls. There is no settlement logic between them. No ledger entries are created for the bill charges, no refunds are actually processed (only PENDING `Refund` records are created), and `outstandingDue` is just a counter.
+- **Impact**: The "settlement" step is a no-op. Bills are generated but never settled against the resident's fund account. Refunds created here sit in PENDING forever unless manually processed.
+- **Recommendation**: Between `BILLS_GENERATED` and `SETTLED`, add: (1) `createLedgerEntry({ type: "BILL_SETTLEMENT", amount: -totalAmount, ... })` for each bill, (2) auto-process refunds by creating `RefundTransaction` records and `REFUND` ledger entries.
+
+### LB-3: `createLedgerEntry` running-balance race condition
+- **Severity**: High
+- **Description**: `resident-fund.ts` lines 90-97 — reads the last ledger entry's `runningBalance`, computes `newBalance = previousBalance + amount`, then creates a new entry. Two concurrent calls (e.g., two payment approvals for the same user) would both read the same `previousBalance` and the second insert would not reflect the first.
+- **Impact**: Running balances drift. The "available balance" shown to users would be wrong. SQLite has some natural serialization but Prisma's async queries don't guarantee it.
+- **Recommendation**: Wrap the read-compute-write in `db.$transaction` with `SELECT ... FOR UPDATE` semantics, OR compute the running balance lazily on read (sum all entries) instead of storing it. Alternatively, use a SQL atomic update: `INSERT INTO ledger ... ; UPDATE ... SET runningBalance = (SELECT SUM(amount) FROM ledger WHERE userId = ?)`.
+
+### LB-4: `recomputeBillPaidState` overwrites OVERDUE status
+- **Severity**: Medium
+- **Description**: `bill-sync.ts` lines 45-52 — sets status to `PAID`, `PARTIALLY_PAID`, or `GENERATED`. The comment says "OVERDUE is not set here — derived from due date elsewhere," but no code actually derives OVERDUE. If a bill was marked OVERDUE (manually or by a future cron), the next `recomputeBillPaidState` call (e.g., from a payment approval) would reset it to GENERATED or PARTIALLY_PAID.
+- **Impact**: Overdue status is lost. Overdue bills silently revert to "Generated."
+- **Recommendation**: In `recomputeBillPaidState`, after computing the base status, check if `dueDate < now && dueAmount > 0` and override to `OVERDUE` (unless PAID). Or, make OVERDUE a computed field in the API response (not stored) so it can never drift.
+
+### LB-5: Bulk meal toggle doesn't check financial restrictions
+- **Severity**: High
+- **Description**: `POST /api/meals/toggle` (bulk, lines 109-150) iterates `entryIds` and toggles each without calling `evaluateRestrictions`. The single-toggle `PATCH` endpoint (lines 46-54) does check. So a restricted resident can bulk-toggle meals ON even though single-toggle is blocked.
+- **Impact**: Financial restriction enforcement is bypassable via the bulk endpoint.
+- **Recommendation**: Call `evaluateRestrictions` once at the start of `POST /api/meals/toggle` when `status === "ON"`, and reject the entire request if restricted.
+
+### LB-6: Refund creates a `Payment` record with `method: "REFUND"` (invalid enum)
+- **Severity**: Medium
+- **Description**: `payments/refund/route.ts` line 128 — creates a Payment with `method: "REFUND"`. The Payment schema's `method` field is documented as `CASH | UPI | CARD | BANK_TRANSFER | WALLET`. "REFUND" is not in that list. The frontend `payments-view.tsx` (line 98) added `REFUND` to its `PaymentMethod` type to compensate, but the backend schema has no enum constraint (Prisma SQLite uses plain strings), so it's accepted.
+- **Impact**: Schema-documentation mismatch. Future migrations to Postgres with a real enum would break. Reports filtering by method won't account for REFUND consistently.
+- **Recommendation**: Use the `Refund` model (which exists for exactly this purpose) instead of creating Payment records with status REFUNDED. The `/api/refunds/[id]/partial` route already does this correctly — make `/api/payments/refund` either delegate to it or be deprecated.
+
+### LB-7: Refund POST validates against `getUserCredit` but not actual ledger balance
+- **Severity**: Medium
+- **Description**: `payments/refund/route.ts` line 89 — `getUserCredit` computes credit as `approved payments − billed − already-refunded`, but `getResidentFundAccount` computes `availableBalance` from the ledger (which includes adjustments, deposits, etc.). The two can disagree. A user with a positive ledger balance (from an adjustment) but no excess payments would be denied a refund via this endpoint, even though they have funds.
+- **Impact**: Refunds are blocked in scenarios where they should be allowed, or allowed where they shouldn't (if adjustments reduced the ledger but `getUserCredit` doesn't see them).
+- **Recommendation**: Use `getResidentFundAccount(userId).availableBalance` as the single source of truth for refund eligibility.
+
+### LB-8: `executeClosing` creates PENDING refunds with `processedAt = now` and `processedBy = adminId`
+- **Severity**: Low
+- **Description**: `monthly-closing.ts` lines 721-724 — creates a Refund with `status: "PENDING"` but sets `processedAt: new Date()` and `processedBy: adminId`. A PENDING refund shouldn't have a processedAt timestamp.
+- **Impact**: Reporting on refund processing times will be incorrect. The `processedAt` field semantically means "when the refund was paid out," not "when it was queued."
+- **Recommendation**: Only set `processedAt` and `processedBy` when the refund transitions to `COMPLETED` (in `/api/refunds/[id]/partial`).
+
+### LB-9: `getReadiness` blocks the current month even for bill regeneration
+- **Severity**: Medium
+- **Description**: `monthly-closing.ts` lines 280-289 — adds an `error` if `selectedPeriod >= currentPeriod`. This makes `canClose = false` for the current month. But the `POST /api/bills` route also calls `getReadiness` and refuses to generate bills if `!canClose`. So admins cannot generate a "preview" bill for the current month to show residents a running balance.
+- **Impact**: Residents have no visibility into their accumulating bill mid-month. They only see a bill after the month ends.
+- **Recommendation**: Differentiate "preview bills" (current month, allowed) from "close cycle" (past month, required). `getReadiness` should take a `mode: "preview" | "close"` parameter.
+
+### LB-10: `executeClosing` skips VOID/deleted bills silently
+- **Severity**: Medium
+- **Description**: `monthly-closing.ts` lines 619-621 — `if (existing && (existing.status === "VOID" || existing.deletedAt)) continue;`. The user is skipped entirely; no bill is generated. `billsGenerated` doesn't count them, but the user still appears in `activeUsers`.
+- **Impact**: A resident whose bill was voided (e.g., due to an error) won't get a new bill when the cycle is closed. They become invisible to billing.
+- **Recommendation**: Don't skip — either restore the voided bill or create a new one. Log the action in the audit trail.
+
+### LB-11: `getEffectiveBillingCycle` only treats CLOSED as terminal
+- **Severity**: Low
+- **Description**: `resident-fund.ts` line 65 — `if (currentCycle?.status === "CLOSED")`. If a cycle is in `FAILED` status (a previous closing attempt errored), payments approved during that window still apply to the current (failed) cycle, which is semantically wrong.
+- **Impact**: Failed cycles accumulate payments that should have gone to the next cycle.
+- **Recommendation**: Treat both `CLOSED` and `FAILED` as terminal — apply to next cycle.
+
+### LB-12: Dashboard counts today's meals inconsistently
+- **Severity**: Low
+- **Description**: `dashboard/route.ts` uses `countsAsOn` (requires `locked || overridden`) for the KPI `todayOnCount`. But `dashboard-view.tsx` (line 87) computes the resident's "Meals ON Today" KPI from `data.todayMeals.filter((m) => m.status === "ON")` — which counts unlocked, unconfirmed meals. The two numbers disagree.
+- **Impact**: Resident sees "Meals ON Today: 3" on the dashboard but the kitchen only counts 1 (the locked ones).
+- **Recommendation**: Use `data.kpis.todayOnCount` for the resident KPI too (it's already computed correctly server-side).
+
+### LB-13: `parseSessionToken` doesn't actually validate the token
+- **Severity**: Low
+- **Description**: `auth.ts` lines 29-33 — `parseSessionToken` only checks the `bos_` prefix and returns `{ valid: true }`. It doesn't decode or verify anything. The actual lookup happens in `db.userSession.findUnique({ where: { token } })`. This is fine for opaque tokens, but the function name implies parsing/verification.
+- **Impact**: No real impact (the DB lookup is the source of truth), but the abstraction is misleading.
+- **Recommendation**: Either remove `parseSessionToken` (just check the prefix inline) or rename it to `isSessionTokenFormat`.
+
+### LB-14: Meal override `UNLOCK` action is confusing
+- **Severity**: Low
+- **Description**: `meals/override/route.ts` line 93 — for `UNLOCK`, the new status is `entry?.status === "LOCKED" ? "ON" : (entry?.status || "ON")`. But `locked` is also set to `false` (line 151). The `LOCKED` status and the `locked` boolean are conflated. Setting `locked = false` while keeping `status = LOCKED` would be inconsistent, so the code converts LOCKED → ON. But if the meal's `originalState` was OFF (admin had forced it ON, then unlocked), the unlock would set status to ON, which may not be the user's intent.
+- **Impact**: Unlocking a meal produces a status the user didn't choose.
+- **Recommendation**: On UNLOCK, set `status = entry.originalState` (revert to the user's baseline) and `locked = false`.
+
+### LB-15: `restrictions/route.ts` POST doesn't validate `expiresAt` is in the future
+- **Severity**: Low
+- **Description**: Line 50 — `const expiresAt = data.expiresAt ? new Date(data.expiresAt) : undefined;`. No check that the date is in the future. An admin could accidentally set an expiry in the past, making the restriction instantly expired but still ACTIVE in the DB.
+- **Impact**: Stale restrictions linger with `status: ACTIVE` but `expiresAt` in the past.
+- **Recommendation**: Validate `expiresAt > now()` or auto-expire in `evaluateRestrictions`.
+
+### LB-16: `evaluateRestrictions` uses notification timestamps for grace period
+- **Severity**: Medium
+- **Description**: `restriction-engine.ts` lines 121-136 — the grace period start is derived from the first "Low Balance Warning" notification's `createdAt`. But notifications can be deleted, and the grace period logic depends on a notification existing. If the notification fails to send (notify.ts swallows errors), the grace period never starts, and the restriction is never applied.
+- **Impact**: Low-balance residents escape restrictions because the notification side-effect failed.
+- **Recommendation**: Store the grace-period start as a field on the user or in a dedicated `LowBalanceState` model. Don't derive it from notifications.
+
+### LB-17: `applyFinancialExemption` lifts existing restrictions without audit
+- **Severity**: Low
+- **Description**: `restriction-engine.ts` lines 331-339 — `updateMany` to lift existing automatic financial restrictions, but doesn't call `logAudit` for the lift. Only the new exemption is audited.
+- **Impact**: Audit trail shows the exemption being applied but not the underlying restriction being lifted.
+- **Recommendation**: Call `logAudit` for each lifted restriction, or use `createMany` on AuditLog.
+
+### LB-18: `purgeExpiredUsers/Bills/Payments` are called from GET endpoints
+- **Severity**: Medium
+- **Description**: Side-effecting operations on GET requests violate HTTP semantics and can cause unexpected behavior with caching/CDNs/prefetching. `GET /api/users` calls `purgeExpiredUsers`, `GET /api/bills` calls `purgeExpiredBills`, etc.
+- **Impact**: A browser prefetch or CDN cache hit triggers permanent data deletion. If the request fails midway through the purge, data is lost.
+- **Recommendation**: Move purges to a dedicated `POST /api/admin/purge-expired` endpoint called by a cron job, or to the background task runner (MF-7).
+
+### LB-19: `purgeExpiredUsers` hard-deletes users, cascading to financial records
+- **Severity**: High
+- **Description**: `user-cleanup.ts` line 21 — `db.user.deleteMany`. The User schema has `onDelete: Cascade` on Bill, Payment, Expense, LedgerEntry, Refund, AuditLog (actor), etc. Hard-deleting a user destroys all their financial history.
+- **Impact**: Audit trail is broken. Financial reports lose data. Compliance/tax records are destroyed.
+- **Recommendation**: Either change cascade rules to `Restrict` for financial records (and archive instead of delete), or anonymize the user (null out PII, keep the financial records with a placeholder like "Deleted User").
+
+### LB-20: Login doesn't lowercase email before lookup
+- **Severity**: Low
+- **Description**: `auth/login/route.ts` line 18 — `db.user.findUnique({ where: { email } })`. Registration stores email as lowercase (line 70 of register route), but login doesn't normalize. A user who types `FOO@BAR.COM` gets "Incorrect email or password" even though their account exists.
+- **Impact**: Login failures for users with caps-lock or autocorrect.
+- **Recommendation**: `const email = body.email.toLowerCase();` before the lookup.
+
+---
+
+## 3. BUSINESS LOGIC GAPS
+
+### BLG-1: No prorated billing for mid-month joiners
+- **Severity**: High
+- **Description**: `POST /api/bills` and `executeClosing` both apply the full `roomRent + cleaning` charges to every active user, regardless of when they joined. A resident who joins on the 25th pays the same room rent as one who was there all month.
+- **Impact**: New residents are overcharged. Common real-world scenario (admissions mid-month) is mishandled.
+- **Recommendation**: Calculate `daysInMonth = 30; daysResident = daysInMonth - user.createdAt.getDate() + 1; prorate = daysResident / daysInMonth; otherCharges = (roomRent + cleaning) * prorate`. Make this configurable via a Variable.
+
+### BLG-2: No carryover of `previousDue` into the current bill
+- **Severity**: Medium
+- **Description**: Schema has `previousDue` on Bill (DEC-027: tracked separately, not added to totalAmount). But there's no mechanism to ever collect it. `dueAmount = totalAmount - paidAmount` doesn't include previousDue. The resident sees "Previous Due: ₹500" but their `dueAmount` doesn't reflect it, and `paidAmount` doesn't reduce it.
+- **Impact**: Previous dues become informational only — they're never actually paid. Outstanding balances accumulate invisibly.
+- **Recommendation**: Either add `previousDue` to `totalAmount` (and reverse DEC-027), or create a separate "Previous Due" bill line item that payments are allocated to first.
+
+### BLG-3: No automatic overdue transition
+- **Severity**: High
+- **Description**: Bills have an `OVERDUE` status, but nothing transitions a bill from `GENERATED`/`PARTIALLY_PAID` to `OVERDUE` when `dueDate < now`. The status is only set if `recomputeBillPaidState` is called (which it isn't, on a schedule).
+- **Impact**: Overdue bills never display as overdue. Late-payment penalties (if any) can't be applied. The dashboard's `pendingBills` count is wrong.
+- **Recommendation**: Add a daily cron that marks bills `OVERDUE` when `dueDate < now AND dueAmount > 0 AND status IN (GENERATED, PARTIALLY_PAID)`.
+
+### BLG-4: No partial payment allocation strategy across multiple bills
+- **Severity**: Medium
+- **Description**: When a resident has multiple outstanding bills and submits a payment, the payment is linked to a single `billId`. If they don't specify, the refund endpoint picks the most-overpaid bill (irrelevant for new payments) or the most recent. There's no FIFO, LIFO, or user-choice allocation.
+- **Impact**: Residents can't direct their payment to a specific bill. Late fees (if implemented) would accrue on the wrong bill.
+- **Recommendation**: Add a "payment allocation" step in `POST /api/payments` that, if no `billId` is provided, allocates to the oldest bill first (FIFO).
+
+### BLG-5: No refund policy enforcement
+- **Severity**: Medium
+- **Description**: `POST /api/payments/refund` allows any refund amount up to the user's credit, with no business rules (max per month, cooling-off period, reason required for large refunds, two-admin approval).
+- **Impact**: A single admin can issue unlimited refunds. Fraud risk.
+- **Recommendation**: Add configurable thresholds via Variables: `policy.refund.maxAmount`, `policy.refund.requiresTwoAdminApprovalAbove`, `policy.refund.coolingOffHours`.
+
+### BLG-6: No meal plan / dietary preference tracking
+- **Severity**: Low
+- **Description**: No way to mark a resident as vegetarian, vegan, allergic to specific foods, etc. The `MealConfiguration` is global — all residents see the same meals.
+- **Impact**: Kitchen can't plan special meals. Residents with dietary restrictions can't be accommodated.
+- **Recommendation**: Add a `dietaryTags` field on User (JSON array) and let the kitchen view filter/group by dietary tag.
+
+### BLG-7: No kitchen capacity / overbooking check
+- **Severity**: Low
+- **Description**: Guest meals can be added without limit. If 300 residents + 50 guests order dinner but the kitchen seats 100, there's no warning.
+- **Impact**: Overcrowding, food shortage.
+- **Recommendation**: Add a `capacity` field on MealConfiguration. When counts exceed capacity, show a warning in the kitchen view (don't block — let the admin decide).
+
+### BLG-8: No expense categorization validation
+- **Severity**: Low
+- **Description**: `Expense.category` is a free-text string. No validation against a predefined list. Typos lead to fragmented categories in reports.
+- **Impact**: Expense reports are messy. "Vegetables", "Veg", "vegetable", "VEG" all appear separately.
+- **Recommendation**: Add a `Category` model or a Setting with a JSON list of allowed categories. Validate on creation.
+
+### BLG-9: No vendor management
+- **Severity**: Low
+- **Description**: `Purchase.vendor` is a free-text string. No vendor master with contact info, payment terms, GST number, etc.
+- **Impact**: Can't track per-vendor spending, can't generate vendor-wise 1099/GST reports.
+- **Recommendation**: Add a `Vendor` model and link Purchase.vendorId to it.
+
+### BLG-10: No staff attendance / payroll
+- **Severity**: Low
+- **Description**: `StaffRecord` model has `salary` but no attendance tracking, no payroll generation, no leave management for staff.
+- **Impact**: Staff module is a static directory. Payroll must be done manually outside the system.
+- **Recommendation**: Either expand the StaffRecord module or document that payroll is out of scope.
+
+### BLG-11: No resident checkout / final bill generation
+- **Severity**: Medium
+- **Description**: When a resident leaves, there's no flow to generate a final prorated bill, deduct from deposit, refund balance, and archive.
+- **Impact**: Residents leave with outstanding dues or unrefunded credits. Manual reconciliation is error-prone.
+- **Recommendation**: Build a checkout wizard (see MF-11).
+
+### BLG-12: No adjustment entries UI
+- **Severity**: Medium
+- **Description**: The `Adjustment` model exists (PRD DEC-033) for correcting historical financial records without editing/deleting them. But there's no `/api/adjustments` route and no admin UI.
+- **Impact**: The "corrections require adjustment entries" message in `getReadiness` is misleading — there's no way to actually create adjustments.
+- **Recommendation**: Build `POST /api/adjustments` and an admin UI in the billing/payments views.
+
+### BLG-13: No write-off / bad debt mechanism
+- **Severity**: Low
+- **Description**: If a resident leaves with outstanding dues, the bill stays as `OVERDUE` forever. There's no way to write it off as bad debt.
+- **Impact**: Outstanding totals are inflated permanently. Auditors see uncollectable debts as assets.
+- **Recommendation**: Add a `WRITTEN_OFF` bill status and a `WRITE_OFF` action in `/api/bills/[id]`.
+
+### BLG-14: No meal cancellation notification to kitchen
+- **Severity**: Low
+- **Description**: When an admin overrides a meal OFF (after cutoff), the kitchen should be alerted to reduce food prep. No such notification.
+- **Impact**: Food waste.
+- **Recommendation**: In `/api/meals/override`, when action is `TURN_OFF`, create a high-priority notification targeting admins (route: "kitchen").
+
+### BLG-15: No deposit tracking / wallet top-up flow
+- **Severity**: Medium
+- **Description**: The resident fund account (ledger) supports deposits, but there's no resident-facing "add funds" flow (e.g., UPI deep-link to top up wallet). Residents can only submit a payment (PENDING) and wait for admin approval.
+- **Impact**: Friction in adding funds. The system feels like a ledger, not a wallet.
+- **Recommendation**: Integrate a payment gateway (Razorpay, Stripe) for instant deposits. Auto-approve gateway-confirmed payments.
+
+---
+
+## 4. DATA INTEGRITY RISKS
+
+### DIR-1: No transactions in `executeClosing`
+- **Severity**: Critical
+- **Description**: `monthly-closing.ts` `executeClosing` performs ~5 DB operations (create snapshot, update cycle status, loop creating/updating bills, create refunds, lock expenses, update cycle to CLOSED) without wrapping them in `db.$transaction`. If any step fails, the cycle is left in an inconsistent state (e.g., snapshot created but no bills, or bills created but cycle still `PREPARING`).
+- **Impact**: Partial closing leaves orphaned records. Subsequent closing attempts may fail or duplicate data.
+- **Recommendation**: Wrap the entire workflow in `db.$transaction(async (tx) => { ... })`. Pass `tx` to all DB calls.
+
+### DIR-2: No transactions in `POST /api/bills`
+- **Severity**: High
+- **Description**: `bills/route.ts` POST loops over `activeUsers` and creates/updates each bill individually without a transaction. A failure midway leaves some users billed and others not.
+- **Impact**: Inconsistent billing across residents for the same period.
+- **Recommendation**: Wrap the loop in `db.$transaction`.
+
+### DIR-3: `runningBalance` drift if ledger entries are ever modified
+- **Severity**: High
+- **Description**: `LedgerEntry.runningBalance` is stored on each entry. If any entry is deleted (e.g., via a future "delete erroneous entry" feature) or its amount changes, all subsequent entries' running balances become wrong. There's no recomputation path.
+- **Impact**: `getResidentFundAccount.availableBalance` returns wrong values. Residents see incorrect balances.
+- **Recommendation**: Either (a) make ledger entries immutable (no delete/update — only reversing entries), or (b) compute the balance on read as `SUM(amount)` and don't store `runningBalance` (or store it as a cache that's recomputed periodically).
+
+### DIR-4: Bill unique constraint `(userId, periodMonth, periodYear)` collides with soft-deleted bills
+- **Severity**: Medium
+- **Description**: A soft-deleted bill (deletedAt set, status DELETED) still occupies its unique key. If the deletion grace period expires and the bill is hard-deleted, then a new bill is generated, then someone restores the soft-deleted bill from a backup — the unique constraint fails. More immediately: `POST /api/bills` skips soft-deleted bills (line 174: `if (existing && (existing.status === "VOID" || existing.deletedAt)) continue;`), so the user gets NO bill for that period.
+- **Impact**: Residents whose bills were soft-deleted never get re-billed. They become invisible to billing.
+- **Recommendation**: When soft-deleting a bill, also clear the unique constraint (e.g., move the periodMonth/periodYear into a `_archivedPeriodMonth` field and set periodMonth/periodYear to null). Or, change the unique constraint to a partial index (only enforced when `deletedAt IS NULL`).
+
+### DIR-5: `MealEntry` unique constraint and auto-generation race
+- **Severity**: Medium
+- **Description**: `@@unique([userId, mealId, serviceDate])` exists, but the auto-generation logic in `/api/meals/entries` GET uses try/catch on create, falling back to findFirst. Two concurrent GETs (e.g., user opens two tabs) could both attempt create, one fails, the fallback findFirst runs — but if the first tab's create committed between the failed create and the findFirst, the fallback succeeds. If not, the entry is missing from the map.
+- **Impact**: Race conditions lead to missing meal entries (user sees no toggle for a meal).
+- **Recommendation**: Use `upsert` instead of create-then-find.
+
+### DIR-6: No constraint that `paidAmount ≤ totalAmount + overpay` or `dueAmount = totalAmount - paidAmount`
+- **Severity**: Medium
+- **Description**: `Bill.paidAmount`, `Bill.dueAmount`, `Bill.totalAmount` are stored separately. `recomputeBillPaidState` keeps them in sync, but a manual DB edit or a future bug could break the invariant. There's no DB-level check constraint.
+- **Impact**: Inconsistent bill data could go undetected.
+- **Recommendation**: Add a Prisma `@check` equivalent (not natively supported, but you can add a SQLite trigger or a periodic consistency check job).
+
+### DIR-7: `Refund.remainingAmount` can drift from `amount - paidAmount`
+- **Severity**: Low
+- **Description**: `Refund` stores `amount`, `paidAmount`, and `remainingAmount` separately. `refunds/[id]/partial` updates them in a transaction (good), but a future code path that updates one without the other would create drift.
+- **Impact**: Refund balances become inconsistent.
+- **Recommendation**: Make `remainingAmount` a computed field in the API response (not stored).
+
+### DIR-8: JSON snapshots are schema-fragile
+- **Severity**: Medium
+- **Description**: `MonthlySnapshot.mealsData`, `expensesData`, `variablesData`, `formulaData` are JSON strings. If the schema of the underlying models changes (e.g., a new field is added to Expense), old snapshots can't be replayed. The snapshot is a frozen view, but the code that reads it (`executeClosing` bill generation, `monthly-closing-view`) assumes specific keys.
+- **Impact**: Old snapshots become unreadable after schema migrations.
+- **Recommendation**: Version the snapshot format (add a `schemaVersion: Int` field) and write migration logic for each version bump.
+
+### DIR-9: `entityType` and `action` in AuditLog are free-text
+- **Severity**: Low
+- **Description**: `AuditLog.entity` and `AuditLog.action` are plain strings. Typos (e.g., "Pyament" vs "Payment") make logs unsearchable. There's no enum validation.
+- **Impact**: Audit queries miss records due to typos.
+- **Recommendation**: Define an `AuditAction` enum and `AuditEntity` enum (as a TypeScript union type at minimum, validated in `logAudit`).
+
+### DIR-10: OTP stored as SHA-256 (fast hash) — brute-forceable
+- **Severity**: High
+- **Description**: `register/route.ts` line 29 — `createHash("sha256").update(otp).digest("hex")`. SHA-256 is a fast hash designed for integrity, not password storage. A 6-digit OTP has only 1M possibilities — a single modern GPU can compute millions of SHA-256 hashes per second.
+- **Impact**: If the DB is leaked, all OTPs (and reset OTPs) can be brute-forced in under a second.
+- **Recommendation**: Use `scryptSync` or `bcrypt` for OTP hashing, same as passwords. Or, since OTPs are short-lived (10 min), add rate limiting on the verify endpoint (MF-10) to make brute force infeasible.
+
+### DIR-11: `twoFactorSecret` stored in plaintext
+- **Severity**: High
+- **Description**: `User.twoFactorSecret String?` — TOTP secrets are stored without encryption. If the DB is compromised, all 2FA secrets are exposed, allowing attackers to generate valid TOTP codes for any account.
+- **Impact**: 2FA provides no protection against DB compromise.
+- **Recommendation**: Encrypt `twoFactorSecret` at rest using AES-256-GCM with a key from environment variables. Decrypt only when verifying a TOTP code.
+
+### DIR-12: Session tokens stored in plaintext
+- **Severity**: Medium
+- **Description**: `UserSession.token` is stored as the raw string (only the `bos_` prefix + hex). If the DB is leaked, all active sessions are immediately hijackable.
+- **Impact**: DB leak = mass account takeover.
+- **Recommendation**: Store a SHA-256 hash of the token; compare hashes on lookup. (Trade-off: can't query by token — need to also store a token ID or use the hash as the lookup key.)
+
+### DIR-13: `getEffectiveBillingCycle` race at month-end
+- **Severity**: Medium
+- **Description**: `resident-fund.ts` `getEffectiveBillingCycle` reads the current cycle's status. Two concurrent payment approvals at the moment of month-end could both determine the same effective cycle, even if one should have applied to the next month.
+- **Impact**: Payments are attributed to the wrong cycle.
+- **Recommendation**: Wrap the cycle-check-and-assign in a transaction with row locking.
+
+### DIR-14: `passwordHash` is stored but never rotated
+- **Severity**: Low
+- **Description**: No password rehash-on-login. If the scrypt parameters (cost, salt length) change, old hashes aren't upgraded.
+- **Impact**: Old passwords have weaker security than new ones.
+- **Recommendation**: On successful login, check if the hash uses the current parameters; if not, re-hash and update.
+
+### DIR-15: `AuditLog.actorId` is nullable but `entity` records can't link back
+- **Severity**: Low
+- **Description**: When an admin is hard-deleted (after 7-day grace — see LB-19), their AuditLog entries have `actorId: null` (because `onDelete: SetNull`). The audit log says "action by unknown" with no way to recover who did it.
+- **Impact**: Audit trail becomes useless for accountability after admin deletion.
+- **Recommendation**: Don't hard-delete admins. Archive them permanently (anonymize PII but keep the ID linkage).
+
+---
+
+## 5. SECURITY CONCERNS
+
+### SEC-1: `?dev=1` query param exposes OTP in API response
+- **Severity**: Critical
+- **Description**: `register/route.ts` lines 123-129 — `if (url.searchParams.get("dev") === "1") return { ..., devOtp: otp }`. Anyone hitting `/api/auth/register?dev=1` gets the OTP in the JSON response. The check is just a query parameter, not an environment check.
+- **Impact**: Account takeover — an attacker registers with a victim's email, requests `?dev=1`, gets the OTP, verifies the email, and waits for admin approval. Once approved, they have an account in the victim's name.
+- **Recommendation**: Gate dev OTP exposure behind `process.env.NODE_ENV !== "production" && process.env.ENABLE_DEV_OTP === "true"`. Remove the query-param check.
+
+### SEC-2: OTP logged to console in plaintext
+- **Severity**: High
+- **Description**: `register/route.ts` line 105 — `console.log([EMAIL OTP for ${user.email}]: ${otp})`. In production with log aggregation (Vercel, Datadog), these logs persist and are searchable.
+- **Impact**: Anyone with log access (including third-party log service staff) can read OTPs and take over accounts.
+- **Recommendation**: Remove the console.log entirely. If dev debugging is needed, gate behind `NODE_ENV !== "production"`.
+
+### SEC-3: No CSRF protection
+- **Severity**: High
+- **Description**: The API uses Bearer tokens in the `Authorization` header (not cookies), which mitigates traditional CSRF. But there's no `SameSite` cookie enforcement, no CSRF token, no Origin/Referer check. If any part of the app ever switches to cookie-based auth (e.g., for SSR), it's vulnerable.
+- **Impact**: Currently mitigated by Bearer tokens, but fragile.
+- **Recommendation**: Add Origin/Referer validation on all state-changing endpoints. Document the Bearer-token-only auth model.
+
+### SEC-4: Admin can delete other admins / SUPER_ADMIN
+- **Severity**: High
+- **Description**: `users/[id]/route.ts` DELETE line 270-272 — `if (user.role === "ADMIN" && admin.role === "ADMIN") return err("Admins cannot delete other admins", 403);`. This only blocks ADMIN→ADMIN deletion. A regular ADMIN can delete a SUPER_ADMIN (since `user.role === "ADMIN"` is false for SUPER_ADMIN). And a SUPER_ADMIN can delete any ADMIN.
+- **Impact**: Privilege escalation via deletion. A compromised admin account can delete the SUPER_ADMIN.
+- **Recommendation**: Block deletion of any user with `role IN ("ADMIN", "SUPER_ADMIN")` unless the actor is SUPER_ADMIN. Add a "two-admin confirmation" for admin deletions.
+
+### SEC-5: No re-authentication for sensitive operations
+- **Severity**: High
+- **Description**: Changing password, disabling 2FA, assigning roles, deleting users — all done with just the current session token. No requirement to re-enter password or complete 2FA.
+- **Impact**: A stolen session token (e.g., from XSS or device theft) allows full account takeover including password change.
+- **Recommendation**: For sensitive operations (password change, 2FA disable, role assignment, user deletion), require a fresh password entry and/or a TOTP code.
+
+### SEC-6: 30-day session token expiry with no rotation
+- **Severity**: Medium
+- **Description**: `auth.ts` `getTokenExpiry(30)` — sessions last 30 days. Tokens aren't rotated on activity. A stolen token is valid for up to 30 days.
+- **Impact**: Long window for token abuse.
+- **Recommendation**: Use sliding-window expiry (refresh on each request), or shorter absolute expiry (e.g., 8 hours) with a refresh token. Implement token rotation on privilege change (role change, password change).
+
+### SEC-7: Sessions not invalidated on role change
+- **Severity**: Medium
+- **Description**: When a user's role changes (USER → ADMIN or ADMIN → USER), their existing sessions remain valid. `getAuthUser` reads the role fresh from DB each time, so the cached session role is correct. But a stolen token from when the user was USER still works after they're promoted to ADMIN.
+- **Impact**: Stolen low-privilege tokens escalate automatically.
+- **Recommendation**: On role change, revoke all sessions for that user (`db.userSession.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } })`). Force re-login.
+
+### SEC-8: Sessions not invalidated on password change
+- **Severity**: Medium
+- **Description**: I didn't read `/api/auth/change-password` but the pattern suggests sessions persist. If a user suspects compromise and changes their password, the attacker's stolen session remains valid.
+- **Impact**: Password change doesn't revoke attackers.
+- **Recommendation**: On password change, revoke all sessions except the current one.
+
+### SEC-9: `getClientIp` trusts `x-forwarded-for` blindly
+- **Severity**: Medium
+- **Description**: `session.ts` line 75 — `h.get("x-forwarded-for")?.split(",")[0]`. This header is trivially spoofable. Without a trusted-proxy configuration, the first IP is whatever the client sends.
+- **Impact**: Audit logs and login history contain fake IPs. Rate limiting by IP (if added) is bypassable.
+- **Recommendation**: Configure trusted proxies (Next.js + Caddy). Use `x-real-ip` set by Caddy, or validate that `x-forwarded-for` comes from a trusted source.
+
+### SEC-10: Email enumeration via registration error messages
+- **Severity**: Medium
+- **Description**: `register/route.ts` returns specific errors: "This email is already registered" (line 58), "This phone number is already registered" (line 59), "This Institution User ID is already taken" (line 60).
+- **Impact**: Attacker can enumerate registered emails/phones/IDs by attempting registration.
+- **Recommendation**: Return a generic message: "If this email is not already registered, we've sent a verification code." Always send an OTP (or pretend to) regardless of whether the account exists.
+
+### SEC-11: No max sessions per user
+- **Severity**: Low
+- **Description**: A user can have unlimited active sessions. No policy to limit to N devices.
+- **Impact**: Session proliferation increases attack surface.
+- **Recommendation**: Add a `policy.session.maxPerUser` Variable. On new session creation, if exceeded, revoke the oldest.
+
+### SEC-12: Error handler leaks internal error messages
+- **Severity**: Medium
+- **Description**: `api-response.ts` line 23 — `return err(e.message, 400)`. Any Error's message is returned to the client. Prisma errors include column names, table names, and SQL fragments.
+- **Impact**: Information disclosure to attackers probing the API.
+- **Recommendation**: In production, return a generic "Internal server error" for non-ZodError, non-known errors. Log the full error server-side.
+
+### SEC-13: Error handler treats all unknown errors as 400
+- **Severity**: Low
+- **Description**: `api-response.ts` line 23 — `return err(e.message, 400)`. A Prisma connection error (should be 503), a unique-constraint violation (should be 409), a not-found (should be 404) all become 400.
+- **Impact**: Clients can't distinguish error types for retry logic.
+- **Recommendation**: Map known Prisma error codes to HTTP statuses (P2002 → 409, P2025 → 404, P1001 → 503).
+
+### SEC-14: Avatar / receipt uploads not validated
+- **Severity**: Medium
+- **Description**: `/api/auth/avatar` and expense `receiptUrl` fields exist. Without reading the upload route, file type/size validation is unknown. Common issues: no MIME-type check, no size limit, no virus scan, stored in public folder (allowing direct access).
+- **Impact**: Malicious file upload (web shell, malware), storage abuse, XSS via SVG.
+- **Recommendation**: Validate MIME type via `file-type` library (not just the extension), enforce size limits, store outside `public/` and serve via a signed-URL endpoint.
+
+### SEC-15: No HTTPS enforcement in the app
+- **Severity**: Low
+- **Description**: Caddy is configured (Caddyfile exists) for TLS, but the Next.js app doesn't enforce HTTPS. If Caddy is bypassed (direct access to :3000), traffic is unencrypted.
+- **Impact**: Man-in-the-middle if direct access is possible.
+- **Recommendation**: Bind Next.js to localhost only, or add a middleware that redirects HTTP to HTTPS.
+
+### SEC-16: No Content-Security-Policy headers
+- **Severity**: Medium
+- **Description**: No CSP headers configured (not in `next.config.ts`, not in middleware). XSS protection relies on React's default escaping.
+- **Impact**: If any `dangerouslySetInnerHTML` is introduced, XSS is unmitigated.
+- **Recommendation**: Add a strict CSP via `next.config.ts` headers or middleware: `default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; ...`.
+
+### SEC-17: MANAGER role mentioned in schema but never enforced
+- **Severity**: Low
+- **Description**: `User.role` comment lists `SUPER_ADMIN | ADMIN | MANAGER | USER`, but `requireRole("ADMIN")` only checks for "ADMIN". A user with role "MANAGER" is treated as a non-admin (USER).
+- **Impact**: The MANAGER role is effectively useless.
+- **Recommendation**: Either remove MANAGER from the schema comment, or add it to the admin checks where appropriate (e.g., kitchen access).
+
+### SEC-18: `Setting.isPublic` flag — public settings endpoint may leak sensitive config
+- **Severity**: Low
+- **Description**: `Setting` has `isPublic: Boolean @default(false)`. The `/api/settings` route (not read in this audit) should filter public vs. private settings based on auth. If misconfigured, sensitive settings (e.g., payment gateway keys) could leak to residents.
+- **Impact**: Configuration leak.
+- **Recommendation**: Audit the settings route to ensure `isPublic: true` settings are the only ones returned to non-admins.
+
+### SEC-19: No signed URLs for uploaded receipts
+- **Severity**: Low
+- **Description**: Receipts are stored at `receiptUrl` (likely under `public/uploads/`). Anyone with the URL can access them indefinitely.
+- **Impact**: Receipts contain vendor info, amounts, signatures — sensitive financial data.
+- **Recommendation**: Store receipts outside `public/`, serve via a `/api/receipts/[id]` endpoint that requires auth and ownership/admin role.
+
+### SEC-20: No input sanitization for stored strings (notes, reasons, descriptions)
+- **Severity**: Low
+- **Description**: Free-text fields like `notes`, `reason`, `description` are stored as-is and rendered in the UI. React escapes by default, but if any field is ever rendered with `dangerouslySetInnerHTML` (e.g., rich-text announcements), it's an XSS vector.
+- **Impact**: Stored XSS if rendering changes.
+- **Recommendation**: Sanitize HTML on input (for rich-text fields) using DOMPurify. For plain-text fields, enforce length limits via Zod.
+
+---
+
+## 6. UX ISSUES
+
+### UX-1: Dashboard has significant dead data
+- **Severity**: Medium
+- **Description**: `dashboard-view.tsx` fetches `todayMeals`, `trend` (7-day), `expenseBreakdown`, and `recentActivity` from `/api/dashboard`. But the rendered UI only shows: greeting card, 4 KPI cards, recent activity list. The 7-day trend chart, expense breakdown chart, and today's meals grid (for admin) are NOT rendered. The data is fetched but unused.
+- **Impact**: Wasted bandwidth, missed opportunity for visual insights, admin sees a sparse dashboard.
+- **Recommendation**: Add a 7-day meal trend area chart (Recharts), an expense breakdown pie chart, and a "Today's Meals" card for admins showing the meal configurations with their on/off counts.
+
+### UX-2: Permission-denied page is shown but admin nav items remain visible
+- **Severity**: Medium
+- **Description**: `app/page.tsx` lines 60-85 — when a resident navigates to an admin-only view (e.g., via URL manipulation), they see "Access Restricted" with a "Back to Dashboard" button. But the desktop sidebar / mobile bottom nav still shows the admin-only items (the nav config likely doesn't filter by role — I didn't verify but `nav-config.ts` would need to be checked).
+- **Impact**: Residents see admin nav items they can't access, leading to confusion and repeated permission-denied screens.
+- **Recommendation**: Filter nav items by role in the sidebar/bottom-nav components.
+
+### UX-3: `LazyViewRouter` returns `null` for admin-only views when user is non-admin
+- **Severity**: Low
+- **Description**: `lazy-view-router.tsx` lines 143-154 — `case "meals": return isAdmin ? <LazyMealsConfig /> : null;`. If `isAdmin` is false, returns `null`, which renders nothing (blank page). The `page.tsx` permission guard catches this case, but only for views in the `adminOnlyViews` list. If a new admin view is added to the router but not to the list, residents see a blank page.
+- **Impact**: Brittle — easy to forget to update both lists.
+- **Recommendation**: Have `LazyViewRouter` itself render a "Permission Denied" fallback when `isAdmin` is required but false. Remove the duplicate check in `page.tsx`.
+
+### UX-4: No empty-state guidance for first-time admins
+- **Severity**: Medium
+- **Description**: A new admin logging in sees an empty dashboard with KPIs at 0. There's no "Getting Started" checklist or onboarding tour explaining what to do first (configure meals, add residents, set variables, etc.).
+- **Impact**: Admins don't know how to use the system. They may abandon it or set it up incorrectly.
+- **Recommendation**: Add a first-login onboarding checklist: "1. Configure your institution details, 2. Set up meal configurations, 3. Add billing variables, 4. Approve pending residents." Track completion in a Setting.
+
+### UX-5: Refund dialog doesn't show available credit
+- **Severity**: Medium
+- **Description**: When an admin initiates a refund (in payments-view.tsx, presumably), they must know the credit amount beforehand. The dialog doesn't display the user's current credit or available balance.
+- **Impact**: Admins may enter an amount exceeding the credit, get an error, and have to retry. Or they may under-refund.
+- **Recommendation**: In the refund dialog, fetch and display the user's `getUserCredit` or `getResidentFundAccount.availableBalance`, and disable the submit button if the entered amount exceeds it.
+
+### UX-6: Bill generation dialog doesn't show a preview
+- **Severity**: Medium
+- **Description**: Admin clicks "Generate Bills" → enters month/year → clicks "Generate." No preview of how much each resident will be charged. They only see the result after generation.
+- **Impact**: Admins can't catch errors before they affect residents. A wrong variable (e.g., roomRent set to ₹50000 instead of ₹5000) produces wrong bills that need to be regenerated.
+- **Recommendation**: Add a "Preview" button that calls the readiness endpoint and shows a sample bill (or the per-meal charge + total expenses) before the actual generation.
+
+### UX-7: Color-only status indicators in the meal calendar
+- **Severity**: Medium
+- **Description**: `user-meals-view.tsx` calendar view (lines 594-604) uses colored dots (green = ON, yellow = OFF, red = locked) with no text or icon. Colorblind users (8% of men) can't distinguish ON from OFF.
+- **Impact**: Accessibility failure. Colorblind residents can't use the calendar view.
+- **Recommendation**: Add icons (✓ for ON, ✗ for OFF, 🔒 for locked) in addition to colors. Or use patterns (solid dot vs. hollow ring).
+
+### UX-8: Long lists aren't virtualized
+- **Severity**: Medium
+- **Description**: `billing-view.tsx`, `payments-view.tsx`, `users-view.tsx` render every item in the list (no virtualization). With 1000+ bills/payments/users, the DOM becomes huge and the page lags.
+- **Impact**: Performance degradation as data grows.
+- **Recommendation**: Use `react-virtual` or `@tanstack/react-virtual` for lists that could exceed 100 items. Alternatively, paginate the API and UI.
+
+### UX-9: No undo for destructive actions (beyond 7-day restore)
+- **Severity**: Low
+- **Description**: Soft-delete has a 7-day restore window, but the UI doesn't make this clear. After clicking "Delete," the toast says "scheduled for deletion in 7 days" but doesn't link to the deletion queue.
+- **Impact**: Users panic, not knowing they can restore.
+- **Recommendation**: In the delete-success toast, add an action button: "View deletion queue" that navigates to the deleted-items filter.
+
+### UX-10: No bulk payment approval
+- **Severity**: Medium
+- **Description**: Admins must approve payments one at a time. With 50 pending payments after a weekend, this is tedious.
+- **Impact**: Admin fatigue, delayed payment processing.
+- **Recommendation**: Add a checkbox column to the payments list and a "Approve Selected" bulk action.
+
+### UX-11: No filter persistence across navigations
+- **Severity**: Low
+- **Description**: When you set a filter (e.g., status = "Pending") on the users view, navigate away, and come back, the filter resets to default.
+- **Impact**: Users re-apply filters repeatedly.
+- **Recommendation**: Persist filter state in the URL query string or in a Zustand store with localStorage persistence.
+
+### UX-12: Date pickers don't support manual entry
+- **Severity**: Low
+- **Description**: The month/year pickers require clicking prev/next arrows. To select a date 6 months ago, you click 6 times.
+- **Impact**: Frustrating for admins reviewing historical data.
+- **Recommendation**: Add a "jump to date" popover with a month/year dropdown.
+
+### UX-13: No print-friendly bill view
+- **Severity**: Low
+- **Description**: Residents can view their bill on screen but can't print a clean, formatted bill for offline records or to submit to sponsors/parents.
+- **Impact**: Residents screenshot bills, which is unprofessional.
+- **Recommendation**: Add a "Print Bill" button that opens a print-optimized layout (institution letterhead, itemized charges, signature line).
+
+### UX-14: No notification grouping
+- **Severity**: Low
+- **Description**: If an admin overrides 5 meals for a resident in quick succession, 5 separate notifications appear. No grouping.
+- **Impact**: Notification fatigue.
+- **Recommendation**: Group notifications by type+actor within a time window (e.g., "Admin modified 5 meals — click to view").
+
+### UX-15: No "mark all as read" confirmation
+- **Severity**: Low
+- **Description**: One click marks all notifications as read. No undo. If a user accidentally clicks, all notifications are marked read.
+- **Impact**: Lost notification state.
+- **Recommendation**: Add an undo toast: "Marked N as read — Undo" that reverts within 5 seconds.
+
+### UX-16: Error messages are technical
+- **Severity**: Low
+- **Description**: API errors are surfaced raw to the user (e.g., "Cannot close: Billing Period: Cannot generate bills for June 2026 — this month has not ended yet..."). No translation to user-friendly language.
+- **Impact**: Users don't understand what went wrong.
+- **Recommendation**: Map known error patterns to friendly messages. Show the technical detail in a collapsible "Details" section for debugging.
+
+### UX-17: No accessible form labels for screen readers
+- **Severity**: Medium
+- **Description**: Glass inputs likely use placeholder text as the label. Screen readers may not announce them properly. The `htmlFor`/`id` association may be missing.
+- **Impact**: Accessibility failure — visually impaired users can't use forms.
+- **Recommendation**: Audit all GlassInput usages for proper `<label htmlFor>` associations. Test with a screen reader (VoiceOver/NVDA).
+
+### UX-18: No keyboard shortcuts (except command palette)
+- **Severity**: Low
+- **Description**: A command palette exists (`command-palette.tsx`), which is good. But common actions (toggle meal, approve payment, generate bill) don't have keyboard shortcuts.
+- **Impact**: Power users can't work efficiently.
+- **Recommendation**: Add shortcuts: `t` to toggle selected meal, `a` to approve selected payment, `g` to generate bills. Document in the command palette.
+
+### UX-19: No offline indicator
+- **Severity**: Low
+- **Description**: If the network drops, the UI silently fails. TanStack Query retries in the background, but there's no "You're offline" banner.
+- **Impact**: Users don't know why nothing is loading.
+- **Recommendation**: Add an offline banner using the `navigator.onLine` API and TanStack Query's `isOnline` state.
+
+### UX-20: No loading indicator on mutating buttons
+- **Severity**: Low
+- **Description**: Some mutations show a toast on success but the button doesn't enter a loading state. Users can click multiple times, triggering duplicate requests.
+- **Impact**: Duplicate submissions, confused users.
+- **Recommendation**: Disable the button and show a spinner while `mutation.isPending`.
+
+### UX-21: Mobile bottom nav likely hides important views
+- **Severity**: Medium
+- **Description**: The mobile bottom nav has 5 items (per worklog). With ~14 views in the app, many are 2 taps away (open menu → tap view). Common resident actions (view meals, view bill, submit payment) should all be 1 tap.
+- **Impact**: Mobile UX friction.
+- **Recommendation**: Customize the bottom nav by role. For residents: Home, Meals, Billing, Payments, Profile. For admins: Home, Kitchen, Billing, Users, More.
+
+### UX-22: No breadcrumbs in deep views
+- **Severity**: Low
+- **Description**: Navigating to the Resident 360 dialog from the users view, then to a specific bill, leaves the user with no breadcrumb trail. The only way back is the browser back button.
+- **Impact**: Users get lost in deep hierarchies.
+- **Recommendation**: Add a breadcrumb component at the top of deep views.
+
+### UX-23: `recentActivity` in dashboard uses `any` type
+- **Severity**: Low
+- **Description**: `dashboard-view.tsx` line 43 — `recentActivity: Array<any>`. No type safety. If the API changes the shape, the UI breaks silently.
+- **Impact**: Type-safety regression.
+- **Recommendation**: Define a `RecentActivity` type matching the API response.
+
+### UX-24: Settings page is a raw key-value editor
+- **Severity**: Medium
+- **Description**: Settings are displayed as a flat list of key-value pairs. No grouping by category, no descriptions, no validation, no "danger zone" warnings for sensitive settings.
+- **Impact**: Admins don't know what each setting does. Typos in keys create orphan settings.
+- **Recommendation**: Group settings by category with descriptions. Add validation per setting type (TEXT, NUMBER, BOOLEAN, JSON). Mark sensitive settings (e.g., payment gateway keys) as "danger zone."
+
+### UX-25: No tour / contextual help
+- **Severity**: Low
+- **Description**: No first-time tour, no tooltips on unfamiliar concepts (e.g., "What is a billing cycle?", "What is the formula engine?").
+- **Impact**: Steep learning curve.
+- **Recommendation**: Add a one-time tour using a library like `driver.js`. Add info-popovers on technical terms.
+
+---
+
+## Summary
+
+| Category | Critical | High | Medium | Low | Total |
+|----------|----------|------|--------|-----|-------|
+| Missing Features | 2 | 4 | 4 | 5 | 15 |
+| Logical Problems / Bugs | 2 | 3 | 7 | 8 | 20 |
+| Business Logic Gaps | 0 | 3 | 6 | 6 | 15 |
+| Data Integrity Risks | 1 | 4 | 6 | 4 | 15 |
+| Security Concerns | 1 | 5 | 6 | 8 | 20 |
+| UX Issues | 0 | 0 | 8 | 17 | 25 |
+| **TOTAL** | **6** | **19** | **37** | **48** | **110** |
+
+### Top 6 Critical Issues to Fix First
+1. **MF-1**: Monthly Closing Workflow is unreachable from the UI — the entire PRD Module 13 is dead code.
+2. **MF-2**: No Bill Settlement in the Resident Ledger — bills don't debit the resident's fund account.
+3. **LB-1**: Two divergent bill-generation paths produce different charges — admin choosing the wrong path gets wrong numbers.
+4. **LB-2**: `executeClosing` skips the actual settlement step — SETTLED → CLOSED with no work in between.
+5. **DIR-1**: No transactions in `executeClosing` — partial failures leave inconsistent state.
+6. **SEC-1**: `?dev=1` query param exposes OTP in API response — account takeover vector.
+
+### Recommended Next Actions
+1. **Immediate (this week)**: Remove `?dev=1` OTP exposure (SEC-1), wrap `executeClosing` in a transaction (DIR-1), unify bill generation paths (LB-1).
+2. **Short-term (2-4 weeks)**: Register `MonthlyClosingView` in the router (MF-1), implement bill settlement ledger entries (MF-2), add rate limiting (MF-10), add automatic overdue transitions (BLG-3).
+3. **Medium-term (1-2 months)**: Build leave application workflow (MF-3), integrate holidays with meal engine (MF-4), build adjustment entries UI (BLG-12), add background task runner (MF-7).
+4. **Long-term (3+ months)**: Implement proper RBAC with Role/Permission tables (MF-8), build resident checkout wizard (MF-11, BLG-11), add security deposit tracking (MF-12), integrate payment gateway (BLG-15).
+
+No code was modified during this audit. All findings are read-only observations based on the current state of the codebase.
